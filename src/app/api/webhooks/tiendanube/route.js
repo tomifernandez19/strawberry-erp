@@ -4,38 +4,47 @@ import { recordOnlineOrder } from '@/lib/actions';
 export async function POST(req) {
     try {
         const body = await req.json();
-        console.log('Tiendanube Webhook received:', body);
+        const headers = Object.fromEntries(req.headers);
+
+        console.log('--- Tiendanube Webhook Received ---');
+        const event = body.event || headers['x-linkedstore-event'];
+        console.log('Event:', event);
+        console.log('Body:', JSON.stringify(body, null, 2));
 
         // 1. Verify it's an order creation event
-        if (body.event === 'order/created') {
+        if (event === 'order/created') {
             const orderId = body.id;
             const storeId = body.store_id;
-
-            // 2. Fetch full order details from Tiendanube
-            // Note: In production, these should be environment variables
             const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
 
+            if (!accessToken) {
+                console.error('TIENDANUBE_ACCESS_TOKEN is not set');
+                return NextResponse.json({ error: 'Config error' }, { status: 500 });
+            }
+
+            // 2. Fetch full order details from Tiendanube
             const response = await fetch(`https://api.tiendanube.com/v1/${storeId}/orders/${orderId}`, {
                 headers: {
                     'Authentication': `bearer ${accessToken}`,
-                    'User-Agent': 'Strawberry ERP (tomas@example.com)' // Replace with real email
+                    'User-Agent': 'Strawberry ERP (fernandezdemaussiontomas@gmail.com)'
                 }
             });
 
             if (!response.ok) {
-                throw new Error(`Failed to fetch order from Tiendanube: ${response.statusText}`);
+                const errText = await response.text();
+                console.error('Tiendanube API Error:', errText);
+                throw new Error(`Failed to fetch order: ${response.statusText}`);
             }
 
             const orderData = await response.json();
 
             // 3. Process the order in our ERP
-            // We map Tiendanube structure to our internal structure
             const internalOrder = {
                 id: orderData.id,
                 number: orderData.number,
                 customer: {
-                    name: `${orderData.customer.name}`,
-                    email: orderData.customer.email
+                    name: orderData.customer?.name || 'Cliente Online',
+                    email: orderData.customer?.email
                 },
                 products: orderData.products.map(p => ({
                     name: p.name,

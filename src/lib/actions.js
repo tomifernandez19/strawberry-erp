@@ -683,10 +683,70 @@ export async function updateProfile(updates) {
     return true;
 }
 
+// --- INTEGRACIÓN TIENDANUBE ---
+
+export async function registerTiendanubeWebhooks() {
+    const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
+    const storeId = process.env.TIENDANUBE_STORE_ID; // Necesitaremos este dato
+    const appUrl = 'https://strawberry-erp.vercel.app'; // Tu URL de Vercel
+
+    const response = await fetch(`https://api.tiendanube.com/v1/${storeId}/webhooks`, {
+        method: 'POST',
+        headers: {
+            'Authentication': `bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            event: 'order/created',
+            url: `${appUrl}/api/webhooks/tiendanube`
+        })
+    });
+
+    return response.ok;
+}
+
+export async function syncProductToTiendanube(modeloId) {
+    // Esta función tomará un modelo y sus variantes del ERP y las creará/actualizará en TN
+    const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
+    const storeId = process.env.TIENDANUBE_STORE_ID;
+
+    // 1. Obtener datos del modelo y variantes
+    const { data: modelo } = await supabase
+        .from('modelos')
+        .select('*, variantes(*, unidades(*))')
+        .eq('id', modeloId)
+        .single();
+
+    // 2. Mapear a formato Tiendanube
+    const tnProduct = {
+        name: { es: modelo.descripcion },
+        description: { es: `Calzado de alta calidad - Modelo ${modelo.descripcion}` },
+        variants: modelo.variantes.map(v => ({
+            price: v.precio_lista,
+            stock: v.unidades.filter(u => u.estado === 'DISPONIBLE').length,
+            values: [{ es: v.color }, { es: 'Curva' }] // Ajustar según talle si es necesario
+        }))
+    };
+
+    // 3. Enviar a TN
+    const response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products`, {
+        method: 'POST',
+        headers: {
+            'Authentication': `bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(tnProduct)
+    });
+
+    return response.ok;
+}
+
 export async function recordOnlineOrder(orderData) {
     const { id: tnId, customer, products, number } = orderData;
 
-    // 1. Create the order record
+    console.log("Recording Online Order:", number);
+
+    // 1. Crear el registro del pedido
     const { data: pedido, error: pError } = await supabase
         .from('pedidos_online')
         .insert([{
@@ -699,19 +759,25 @@ export async function recordOnlineOrder(orderData) {
         .select()
         .single();
 
-    if (pError) throw pError;
+    if (pError) {
+        console.error("Error inserting order into DB:", pError);
+        throw pError;
+    }
 
-    // 2. Try to reserve units for each product (simplified for now: one product per order logic or just the first)
-    // In a real scenario, we'd loop through all products.
+    // 2. Intentar reservar unidades
     for (const prod of products) {
         try {
-            const qrCode = await findUnitBySpecs(prod.name, prod.variant_values[0], prod.variant_values[1]); // Assuming order of variants
+            // Buscamos el talle y color en la descripción o variantes de TN
+            const colorRaw = prod.variant_values?.[0] || '';
+            const talleRaw = prod.variant_values?.[1] || '';
+
+            const qrCode = await findUnitBySpecs(prod.name, colorRaw, talleRaw);
             if (qrCode) {
-                // Find the ID for that QR
                 const { data: unit } = await supabase.from('unidades').select('id').eq('codigo_qr', qrCode).single();
 
                 await supabase.from('unidades').update({ estado: 'RESERVADO_ONLINE' }).eq('id', unit.id);
                 await supabase.from('pedidos_online').update({ unidad_reservada_id: unit.id }).eq('id', pedido.id);
+                console.log(`Unit ${qrCode} reserved for order ${number}`);
             }
         } catch (e) {
             console.log("Could not auto-reserve unit:", e.message);

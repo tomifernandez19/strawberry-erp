@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getDailySummary } from '@/lib/actions'
+import { getDailySummary, registerTiendanubeWebhooks } from '@/lib/actions'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -181,6 +181,33 @@ export default function HomePage() {
                                 <span style={{ fontSize: '1.5rem' }}>🏦</span>
                             </section>
                         </Link>
+
+                        <button
+                            onClick={async () => {
+                                if (confirm('¿Activar conexión automática con Tiendanube?')) {
+                                    const ok = await registerTiendanubeWebhooks();
+                                    alert(ok ? 'Conexión activada con éxito' : 'Error al activar. Verifique las variables en Vercel.');
+                                }
+                            }}
+                            className="card"
+                            style={{
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                background: 'rgba(16, 185, 129, 0.05)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '15px 20px',
+                                width: '100%',
+                                textAlign: 'left',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <div>
+                                <h4 style={{ fontSize: '0.8rem', opacity: 0.8, color: 'white' }}>Activar Conexión Tiendanube</h4>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.5, color: 'white' }}>Registrar avisos automáticos</p>
+                            </div>
+                            <span style={{ fontSize: '1.5rem' }}>🔌</span>
+                        </button>
                     </div>
                 )}
             </div>
