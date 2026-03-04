@@ -1,10 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { syncProductToTiendanube } from '@/lib/actions'
 
 export default function InventarioPage() {
     const [stock, setStock] = useState([])
     const [loading, setLoading] = useState(true)
+    const [syncing, setSyncing] = useState(null)
 
     useEffect(() => {
         fetchStock()
@@ -15,7 +17,7 @@ export default function InventarioPage() {
             .from('unidades')
             .select(`
                 id, talle_especifico,
-                variantes (id, color, precio_efectivo, precio_lista, modelos (descripcion, marca)),
+                variantes (id, color, precio_efectivo, precio_lista, modelos (id, descripcion, marca)),
                 compras (propietario)
             `)
             .eq('estado', 'DISPONIBLE')
@@ -23,7 +25,6 @@ export default function InventarioPage() {
         if (error) {
             console.error(error)
         } else {
-            // Group by variant AND owner
             const grouped = data.reduce((acc, unit) => {
                 const key = `${unit.variantes.id}-${unit.compras?.propietario || 'Propia'}`;
                 if (!acc[key]) {
@@ -46,6 +47,19 @@ export default function InventarioPage() {
             setStock(Object.values(grouped))
         }
         setLoading(false)
+    }
+
+    const handleSync = async (modeloId) => {
+        setSyncing(modeloId)
+        try {
+            const ok = await syncProductToTiendanube(modeloId)
+            if (ok) alert('✅ Modelo sincronizado con éxito en Tiendanube')
+            else alert('❌ Error al sincronizar. Verifique la conexión.')
+        } catch (e) {
+            alert('❌ Error: ' + e.message)
+        } finally {
+            setSyncing(null)
+        }
     }
 
     return (
@@ -102,6 +116,17 @@ export default function InventarioPage() {
                                             <p style={{ opacity: 0.6 }}>Li: ${item.precio_lista?.toLocaleString()}</p>
                                         </div>
                                     </div>
+                                </div>
+
+                                <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
+                                    <button
+                                        className="btn-secondary"
+                                        style={{ width: '100%', fontSize: '0.75rem', padding: '8px' }}
+                                        onClick={() => handleSync(item.modelo.id)}
+                                        disabled={syncing === item.modelo.id}
+                                    >
+                                        {syncing === item.modelo.id ? '⏳ Sincronizando...' : '🔄 Sincronizar con Tiendanube'}
+                                    </button>
                                 </div>
                             </div>
                         ))

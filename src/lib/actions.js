@@ -594,7 +594,7 @@ export async function findUnitBySpecs(modelDescription, color, talle) {
             modelos!inner(descripcion)
         `)
         .eq('modelos.descripcion', modelDescription)
-        .eq('color', color);
+        .ilike('color', color);
 
     if (vError || !variants || variants.length === 0) {
         throw new Error("No se encontró el modelo o color especificado");
@@ -716,37 +716,70 @@ export async function registerTiendanubeWebhooks() {
 }
 
 export async function syncProductToTiendanube(modeloId) {
-    // Esta función tomará un modelo y sus variantes del ERP y las creará/actualizará en TN
     const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
     const storeId = process.env.TIENDANUBE_STORE_ID;
 
-    // 1. Obtener datos del modelo y variantes
+    // 1. Obtener datos completos del modelo, sus variantes (colores) y unidades (talles)
     const { data: modelo } = await supabase
         .from('modelos')
         .select('*, variantes(*, unidades(*))')
         .eq('id', modeloId)
         .single();
 
-    // 2. Mapear a formato Tiendanube
+    if (!modelo) throw new Error("Modelo no encontrado");
+
+    // 2. Preparar las variantes para Tiendanube (Combinación Color + Talle)
+    const tnVariants = [];
+    modelo.variantes.forEach(variante => {
+        // Agrupamos unidades por talle para sacar el stock de cada uno
+        const stockPorTalle = variante.unidades.reduce((acc, u) => {
+            if (u.estado === 'DISPONIBLE') {
+                acc[u.talle_especifico] = (acc[u.talle_especifico] || 0) + 1;
+            }
+            return acc;
+        }, {});
+
+        // Creamos una variante en TN para cada talle que tenga este color
+        Object.entries(stockPorTalle).forEach(([talle, stock]) => {
+            tnVariants.push({
+                price: variante.precio_lista,
+                stock: stock,
+                options: [variante.color, talle],
+                sku: `${modelo.codigo_proveedor}-${variante.color.substring(0, 3)}-${talle}`
+            });
+        });
+    });
+
     const tnProduct = {
         name: { es: modelo.descripcion },
-        description: { es: `Calzado de alta calidad - Modelo ${modelo.descripcion}` },
-        variants: modelo.variantes.map(v => ({
-            price: v.precio_lista,
-            stock: v.unidades.filter(u => u.estado === 'DISPONIBLE').length,
-            values: [{ es: v.color }, { es: 'Curva' }] // Ajustar según talle si es necesario
-        }))
+        description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` },
+        attributes: [{ es: 'Color' }, { es: 'Talle' }],
+        variants: tnVariants
     };
 
-    // 3. Enviar a TN
-    const response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products`, {
-        method: 'POST',
-        headers: {
-            'Authentication': `bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(tnProduct)
+    // 3. Primero buscamos si el producto ya existe (por nombre simplificado)
+    const searchRes = await fetch(`https://api.tiendanube.com/v1/${storeId}/products?q=${encodeURIComponent(modelo.descripcion)}`, {
+        headers: { 'Authentication': `bearer ${accessToken}` }
     });
+    const existingProducts = await searchRes.json();
+    const existing = existingProducts.find(p => p.name.es === modelo.descripcion);
+
+    let response;
+    if (existing) {
+        // Si existe, lo actualizamos (esto es más complejo en TN, pero por ahora lo recreamos o actualizamos stock)
+        response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${existing.id}`, {
+            method: 'PUT',
+            headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(tnProduct)
+        });
+    } else {
+        // Si no existe, lo creamos
+        response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products`, {
+            method: 'POST',
+            headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(tnProduct)
+        });
+    }
 
     return response.ok;
 }
@@ -757,11 +790,14 @@ export async function recordOnlineOrder(orderData) {
     console.log("Recording Online Order:", number);
 
     // 1. Crear el registro del pedido
+    // Extraemos el nombre del cliente con más cuidado
+    const clienteNombre = customer?.name || orderData.shipping_address?.first_name || 'Cliente Online';
+
     const { data: pedido, error: pError } = await supabase
         .from('pedidos_online')
         .insert([{
             tiendanube_id: String(tnId),
-            cliente_nombre: customer?.name || 'Cliente Online',
+            cliente_nombre: clienteNombre,
             nro_pedido: String(number),
             items_raw: products,
             estado: 'PENDIENTE_DESPACHO'
