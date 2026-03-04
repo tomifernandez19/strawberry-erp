@@ -1,0 +1,382 @@
+'use client'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+import { createPurchase } from '@/lib/actions'
+import { useRouter } from 'next/navigation'
+import Tesseract from 'tesseract.js';
+
+export default function NuevaCompraPage() {
+    const router = useRouter()
+    const [variantes, setVariantes] = useState([])
+    const [ocrStep, setOcrStep] = useState('')
+    const [isScanning, setIsScanning] = useState(false)
+    const [formData, setFormData] = useState({
+        proveedor: '',
+        nro_remito: '',
+        propietario: 'Propia'
+    })
+    const [items, setItems] = useState([
+        { variante_id: '', cantidad: 1, costo_unitario: 0 }
+    ])
+    const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        fetchVariantes()
+    }, [])
+
+    async function fetchVariantes() {
+        const { data } = await supabase
+            .from('variantes')
+            .select('*, modelos(descripcion, codigo_proveedor)')
+        setVariantes(data || [])
+    }
+
+    const handleOCR = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsScanning(true);
+        setOcrStep('Analizando remito con IA...');
+        try {
+            // Reverting to 'spa' as it might help with Spanish descriptions
+            const { data: { text } } = await Tesseract.recognize(file, 'spa');
+            console.log("OCR Raw Text:", text);
+            setOcrStep('Extrayendo productos...');
+            parseInvoiceText(text);
+        } catch (error) {
+            console.error("OCR Error:", error);
+            setOcrStep('Error en el proceso');
+            alert("Error al procesar la imagen. Asegúrate de que el remito esté bien iluminado.");
+        } finally {
+            setIsScanning(false);
+            setOcrStep('');
+        }
+    };
+
+    const parseInvoiceText = (text) => {
+        const allLines = text.split('\n').map(l => l.trim().toUpperCase());
+        let nro_remito = '';
+        const detectedItems = [];
+        const knownColors = ['NEGRO', 'CAMEL', 'BLANCO', 'AZUL', 'ROJO', 'GRIS', 'MARRON', 'BEIGE', 'ORO', 'PLATA', 'COBRE'];
+
+        // 1. Find the Table Region
+        let tableStartIdx = -1;
+        let tableEndIdx = -1;
+
+        for (let i = 0; i < allLines.length; i++) {
+            const line = allLines[i];
+
+            // Extract Remito from top area (usually before table)
+            const remitoMatch = line.match(/\d{3,}-\d{8}/);
+            if (remitoMatch && !nro_remito) nro_remito = remitoMatch[0];
+
+            // Look for Table Header Header (words like CODIGO, CANTIDAD, DESCRIPCION)
+            if (tableStartIdx === -1 && (line.includes('CODIGO') && line.includes('DESC'))) {
+                // Usually the content starts after the next line of ===
+                tableStartIdx = i + 1;
+            }
+
+            // If we found the start, look for the end (the next long line of ==== or SUBTOTAL)
+            if (tableStartIdx !== -1 && i > tableStartIdx) {
+                if (line.includes('===') || line.includes('SUBTOTAL') || line.includes('TOTAL')) {
+                    tableEndIdx = i;
+                    break;
+                }
+                // Also break if we reach the end and didn't find a clear end marker
+            }
+        }
+
+        // 2. Parse only the table region
+        if (tableStartIdx !== -1) {
+            const tableLines = allLines.slice(tableStartIdx, tableEndIdx !== -1 ? tableEndIdx : allLines.length);
+
+            tableLines.forEach(line => {
+                if (line.length < 15 || line.includes('===')) return; // Skip separators
+
+                const words = line.split(/\s+/).filter(w => w.length >= 2);
+                const codeCandidate = words[0]; // In a table, code is almost always the first column
+
+                if (codeCandidate && codeCandidate.length >= 4 && /^[A-Z]{2}/.test(codeCandidate)) {
+                    // Extract Numbers
+                    const numbers = line.match(/[\d.,]+/g) || [];
+                    const cleanMoney = numbers
+                        .map(n => parseFloat(n.replace(/\./g, '').replace(',', '.')))
+                        .filter(v => v > 500);
+
+                    const unitPrice = cleanMoney.length > 0 ? Math.min(...cleanMoney) : 0;
+
+                    // Cantidad (number between 1 and 20)
+                    const cantCandidate = numbers.find(n => {
+                        const v = parseInt(n);
+                        return v > 0 && v <= 24 && !n.includes('.') && !n.includes(',');
+                    });
+                    const cantidad = cantCandidate ? parseInt(cantCandidate) : 6;
+
+                    // Color & Desc
+                    const color = knownColors.find(c => line.includes(c)) || 'S/D';
+                    let description = line
+                        .replace(codeCandidate, '')
+                        .replace(color, '')
+                        .replace(/[\d.,]+/g, '')
+                        .trim();
+
+                    detectedItems.push({
+                        codigo_proveedor: codeCandidate,
+                        descripcion: description || 'Calzado',
+                        color: color,
+                        cantidad,
+                        costo_unitario: unitPrice,
+                        curva: cantidad === 6 ? '35-39(37)' : 'manual'
+                    });
+                }
+            });
+        }
+
+        if (nro_remito) setFormData(prev => ({ ...prev, nro_remito }));
+
+        if (detectedItems.length > 0) {
+            setItems(detectedItems);
+        } else {
+            console.log("No table detected. Found Remito:", nro_remito);
+            alert("No pude detectar la tabla de productos. Asegúrate de que los títulos (CODIGO, CANTIDAD) se vean en la foto.");
+            if (items.length === 0) addItem();
+        }
+    };
+
+    const addItem = () => {
+        setItems([...items, { variante_id: '', cantidad: 1, costo_unitario: 0, curva: '35-40' }])
+    }
+
+    const updateItem = (index, field, value) => {
+        const newItems = [...items]
+        newItems[index][field] = value
+
+        // Auto-set quantity to 6 ONLY for full curves
+        const curves = ['35-39(37)', '36-40(38)', '35-39(38)', '36-40(37)'];
+        if (field === 'curva' && curves.includes(value)) {
+            newItems[index].cantidad = 6
+        }
+
+        setItems(newItems)
+    }
+
+    const handleSubmit = async (e) => {
+        e.preventDefault()
+        setLoading(true)
+        try {
+            const formattedItems = items.map(item => {
+                let talles = [];
+                if (item.curva === '35-39(37)') {
+                    talles = ['35', '36', '37', '37', '38', '39'];
+                } else if (item.curva === '36-40(38)') {
+                    talles = ['36', '37', '38', '38', '39', '40'];
+                } else if (item.curva === '35-39(38)') {
+                    talles = ['35', '36', '37', '38', '38', '39'];
+                } else if (item.curva === '36-40(37)') {
+                    talles = ['36', '37', '37', '38', '39', '40'];
+                } else if (['35', '36', '37', '38', '39', '40'].includes(item.curva)) {
+                    talles = Array(item.cantidad || 1).fill(item.curva);
+                } else {
+                    talles = Array(item.cantidad || 1).fill('U');
+                }
+                return {
+                    codigo_proveedor: item.codigo_proveedor,
+                    descripcion: item.descripcion,
+                    color: item.color,
+                    costo_unitario: item.costo_unitario,
+                    cantidad: talles.length,
+                    talles
+                };
+            });
+
+            await createPurchase({
+                nro_remito: formData.nro_remito,
+                items: formattedItems.filter(i => i.codigo_proveedor),
+                propietario: formData.propietario
+            })
+            router.push('/asignar')
+        } catch (error) {
+            alert(error.message)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <div className="grid mt-lg">
+            <header className="text-center">
+                <h1>Alta Stock</h1>
+                <p style={{ opacity: 0.7 }}>Ingreso automático por Foto</p>
+            </header>
+
+            <section className="card" style={{ border: '2px dashed var(--primary)', textAlign: 'center' }}>
+                <label style={{ cursor: 'pointer', display: 'block', padding: 'var(--spacing-md)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '1.2rem' }}>{isScanning ? '⌛' : '📷'}</span>
+                        <span>{isScanning ? ocrStep || 'Procesando...' : 'Escanear o Subir Remito'}</span>
+                    </div>
+                    <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleOCR}
+                        style={{ display: 'none' }}
+                        disabled={isScanning}
+                    />
+                </label>
+            </section>
+
+            <form onSubmit={handleSubmit} className="grid mt-lg">
+                <div className="card grid">
+                    <input
+                        type="text"
+                        placeholder="Proveedor"
+                        required
+                        value={formData.proveedor}
+                        onChange={e => setFormData({ ...formData, proveedor: e.target.value })}
+                        style={inputStyle}
+                    />
+                    <input
+                        type="text"
+                        placeholder="Nro Remito"
+                        required
+                        value={formData.nro_remito}
+                        onChange={e => setFormData({ ...formData, nro_remito: e.target.value })}
+                        style={inputStyle}
+                    />
+                    <div style={{ marginTop: '10px' }}>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '8px' }}>Origen de Mercadería:</p>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            {['Propia', 'Carolina'].map(opt => (
+                                <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, propietario: opt })}
+                                    style={{
+                                        flex: 1,
+                                        padding: '10px',
+                                        borderRadius: '12px',
+                                        border: '1px solid',
+                                        borderColor: formData.propietario === opt ? 'var(--accent)' : 'var(--card-border)',
+                                        backgroundColor: formData.propietario === opt ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                        color: formData.propietario === opt ? 'var(--accent)' : 'white',
+                                        cursor: 'pointer',
+                                        fontWeight: formData.propietario === opt ? 'bold' : 'normal'
+                                    }}
+                                >
+                                    {opt}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Detalle de productos</h3>
+                {items.map((item, index) => (
+                    <div key={index} className="card grid">
+                        <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+                            <input
+                                type="text"
+                                placeholder="Código"
+                                value={item.codigo_proveedor}
+                                onChange={e => updateItem(index, 'codigo_proveedor', e.target.value)}
+                                style={{ ...inputStyle, flex: 1, fontWeight: 'bold', color: 'var(--primary)' }}
+                            />
+                            <div style={{
+                                flex: 0.5,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'rgba(255,255,255,0.05)',
+                                borderRadius: 'var(--radius)',
+                                fontSize: '0.8rem'
+                            }}>
+                                Prov: {item.codigo_proveedor?.substring(0, 2) || '--'}
+                            </div>
+                        </div>
+
+                        <input
+                            type="text"
+                            placeholder="Descripción (Nombre)"
+                            value={item.descripcion}
+                            onChange={e => updateItem(index, 'descripcion', e.target.value)}
+                            style={inputStyle}
+                        />
+
+                        <input
+                            type="text"
+                            placeholder="Color"
+                            value={item.color}
+                            onChange={e => updateItem(index, 'color', e.target.value)}
+                            style={inputStyle}
+                        />
+
+                        <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+                            <select
+                                value={item.curva}
+                                onChange={e => updateItem(index, 'curva', e.target.value)}
+                                style={{ ...inputStyle, flex: 2 }}
+                            >
+                                <option value="35-39(37)">35 al 39 (doble 37)</option>
+                                <option value="36-40(38)">36 al 40 (doble 38)</option>
+                                <option value="35-39(38)">35 al 39 (doble 38)</option>
+                                <option value="36-40(37)">36 al 40 (doble 37)</option>
+                                <option value="35">Solo Talle 35</option>
+                                <option value="36">Solo Talle 36</option>
+                                <option value="37">Solo Talle 37</option>
+                                <option value="38">Solo Talle 38</option>
+                                <option value="39">Solo Talle 39</option>
+                                <option value="40">Solo Talle 40</option>
+                                <option value="manual">Manual (Talle U)</option>
+                            </select>
+
+                            {(item.curva === 'manual' || ['35', '36', '37', '38', '39', '40'].includes(item.curva)) && (
+                                <input
+                                    type="number"
+                                    placeholder="Cant"
+                                    value={item.cantidad}
+                                    onChange={e => updateItem(index, 'cantidad', parseInt(e.target.value))}
+                                    style={{ ...inputStyle, flex: 1 }}
+                                />
+                            )}
+                        </div>
+
+                        <input
+                            type="number"
+                            placeholder="Costo Unitario"
+                            value={item.costo_unitario}
+                            onChange={e => updateItem(index, 'costo_unitario', parseFloat(e.target.value))}
+                            style={inputStyle}
+                        />
+                    </div>
+                ))}
+
+                <div className="card text-center" style={{ marginTop: 'var(--spacing-lg)', backgroundColor: 'var(--secondary)' }}>
+                    <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>TOTAL COMPRA</p>
+                    <h2 style={{ color: 'var(--accent)' }}>
+                        $ {items.reduce((acc, curr) => acc + (curr.cantidad * curr.costo_unitario), 0).toLocaleString()}
+                    </h2>
+                </div>
+
+                <button type="button" className="btn-secondary" onClick={addItem} style={{ width: '100%', marginTop: 'var(--spacing-md)' }}>
+                    + Agregar Producto
+                </button>
+
+                <button type="submit" className="btn-primary btn-large" disabled={loading} style={{ marginTop: 'var(--spacing-lg)', marginBottom: 'var(--spacing-xl)' }}>
+                    {loading ? 'Guardando...' : 'Confirmar y Generar Unidades'}
+                </button>
+            </form>
+            <div style={{ height: '80px' }}></div> {/* Spacer for mobile nav */}
+        </div>
+    )
+}
+
+const inputStyle = {
+    width: '100%',
+    padding: 'var(--spacing-md)',
+    borderRadius: 'var(--radius)',
+    backgroundColor: 'var(--secondary)',
+    color: 'white',
+    border: '1px solid var(--card-border)',
+    fontSize: '1rem'
+}
