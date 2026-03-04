@@ -1,3 +1,4 @@
+'use server'
 import { supabase } from './supabase'
 
 /**
@@ -690,6 +691,12 @@ export async function registerTiendanubeWebhooks() {
     const storeId = process.env.TIENDANUBE_STORE_ID; // Necesitaremos este dato
     const appUrl = 'https://strawberry-erp.vercel.app'; // Tu URL de Vercel
 
+    console.log('Registering Webhook for Store:', storeId);
+    if (!accessToken || !storeId) {
+        console.error('Missing Tiendanube credentials in environment variables');
+        return false;
+    }
+
     const response = await fetch(`https://api.tiendanube.com/v1/${storeId}/webhooks`, {
         method: 'POST',
         headers: {
@@ -701,6 +708,9 @@ export async function registerTiendanubeWebhooks() {
             url: `${appUrl}/api/webhooks/tiendanube`
         })
     });
+
+    const data = await response.json();
+    console.log('Tiendanube Webhook Response:', data);
 
     return response.ok;
 }
