@@ -719,7 +719,6 @@ export async function syncProductToTiendanube(modeloId) {
     const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
     const storeId = process.env.TIENDANUBE_STORE_ID;
 
-    // 1. Obtener datos completos del modelo, sus variantes (colores) y unidades (talles)
     const { data: modelo } = await supabase
         .from('modelos')
         .select('*, variantes(*, unidades(*))')
@@ -728,18 +727,15 @@ export async function syncProductToTiendanube(modeloId) {
 
     if (!modelo) throw new Error("Modelo no encontrado");
 
-    // 2. Preparar las variantes para Tiendanube (Combinación Color + Talle)
     const tnVariants = [];
     modelo.variantes.forEach(variante => {
-        // Agrupamos unidades por talle para sacar el stock de cada uno
-        const stockPorTalle = variante.unidades.reduce((acc, u) => {
+        const stockPorTalle = (variante.unidades || []).reduce((acc, u) => {
             if (u.estado === 'DISPONIBLE') {
                 acc[u.talle_especifico] = (acc[u.talle_especifico] || 0) + 1;
             }
             return acc;
         }, {});
 
-        // Creamos una variante en TN para cada talle que tenga este color
         Object.entries(stockPorTalle).forEach(([talle, stock]) => {
             tnVariants.push({
                 price: variante.precio_lista,
@@ -757,31 +753,51 @@ export async function syncProductToTiendanube(modeloId) {
         variants: tnVariants
     };
 
-    // 3. Primero buscamos si el producto ya existe (por nombre simplificado)
-    const searchRes = await fetch(`https://api.tiendanube.com/v1/${storeId}/products?q=${encodeURIComponent(modelo.descripcion)}`, {
-        headers: { 'Authentication': `bearer ${accessToken}` }
-    });
-    const existingProducts = await searchRes.json();
-    const existing = existingProducts.find(p => p.name.es === modelo.descripcion);
+    try {
+        let response;
+        if (modelo.tiendanube_id) {
+            response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${modelo.tiendanube_id}`, {
+                method: 'PUT',
+                headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(tnProduct)
+            });
+        } else {
+            const searchRes = await fetch(`https://api.tiendanube.com/v1/${storeId}/products?q=${encodeURIComponent(modelo.descripcion)}`, {
+                headers: { 'Authentication': `bearer ${accessToken}` }
+            });
+            const searchData = await searchRes.json();
+            const existing = Array.isArray(searchData) ? searchData.find(p => p.name.es === modelo.descripcion) : null;
 
-    let response;
-    if (existing) {
-        // Si existe, lo actualizamos (esto es más complejo en TN, pero por ahora lo recreamos o actualizamos stock)
-        response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${existing.id}`, {
-            method: 'PUT',
-            headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(tnProduct)
-        });
-    } else {
-        // Si no existe, lo creamos
-        response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products`, {
-            method: 'POST',
-            headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(tnProduct)
-        });
+            if (existing) {
+                await supabase.from('modelos').update({ tiendanube_id: String(existing.id) }).eq('id', modelo.id);
+                response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${existing.id}`, {
+                    method: 'PUT',
+                    headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(tnProduct)
+                });
+            } else {
+                response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products`, {
+                    method: 'POST',
+                    headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(tnProduct)
+                });
+                const newProd = await response.json();
+                if (newProd.id) {
+                    await supabase.from('modelos').update({ tiendanube_id: String(newProd.id) }).eq('id', modelo.id);
+                }
+            }
+        }
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Tiendanube Sync Detail:', errorText);
+            return false;
+        }
+        return true;
+    } catch (err) {
+        console.error('Sync Exception:', err);
+        return false;
     }
-
-    return response.ok;
 }
 
 export async function recordOnlineOrder(orderData) {
