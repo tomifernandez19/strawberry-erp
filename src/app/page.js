@@ -183,10 +183,24 @@ export default function HomePage() {
                         </Link>
 
                         <button
-                            onClick={async () => {
+                            onClick={async (e) => {
+                                const btn = e.currentTarget;
                                 if (confirm('¿Activar conexión automática con Tiendanube?')) {
-                                    const ok = await registerTiendanubeWebhooks();
-                                    alert(ok ? 'Conexión activada con éxito' : 'Error al activar. Verifique las variables en Vercel.');
+                                    btn.disabled = true;
+                                    btn.innerText = '⏳ Conectando...';
+                                    try {
+                                        const ok = await registerTiendanubeWebhooks();
+                                        if (ok) {
+                                            alert('✅ ¡Conexión activada con éxito! Tiendanube ahora enviará los pedidos automáticamente.');
+                                        } else {
+                                            alert('❌ Error al activar. Verifique que TIENDANUBE_STORE_ID y ACCESS_TOKEN estén bien cargados en Vercel.');
+                                        }
+                                    } catch (err) {
+                                        alert('❌ Error de conexión: ' + err.message);
+                                    } finally {
+                                        btn.disabled = false;
+                                        btn.innerHTML = '<div><h4 style="font-size:0.8rem;opacity:0.8;color:white;">Activar Conexión Tiendanube</h4><p style="font-size:0.7rem;opacity:0.5;color:white;">Registrar avisos automáticos</p></div><span style="font-size:1.5rem;">🔌</span>';
+                                    }
                                 }
                             }}
                             className="card"
