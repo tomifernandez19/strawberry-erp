@@ -12,8 +12,7 @@ export default function NuevaCompraPage() {
     const [isScanning, setIsScanning] = useState(false)
     const [formData, setFormData] = useState({
         proveedor: '',
-        nro_remito: '',
-        propietario: 'Propia'
+        nro_remito: ''
     })
     const [items, setItems] = useState([
         { variante_id: '', cantidad: 1, costo_unitario: 0 }
@@ -191,8 +190,7 @@ export default function NuevaCompraPage() {
 
             await createPurchase({
                 nro_remito: formData.nro_remito,
-                items: formattedItems.filter(i => i.codigo_proveedor),
-                propietario: formData.propietario
+                items: formattedItems.filter(i => i.codigo_proveedor)
             })
             router.push('/asignar')
         } catch (error) {
@@ -244,31 +242,6 @@ export default function NuevaCompraPage() {
                         onChange={e => setFormData({ ...formData, nro_remito: e.target.value })}
                         style={inputStyle}
                     />
-                    <div style={{ marginTop: '10px' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '8px' }}>Origen de Mercadería:</p>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            {['Propia', 'Carolina'].map(opt => (
-                                <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => setFormData({ ...formData, propietario: opt })}
-                                    style={{
-                                        flex: 1,
-                                        padding: '10px',
-                                        borderRadius: '12px',
-                                        border: '1px solid',
-                                        borderColor: formData.propietario === opt ? 'var(--accent)' : 'var(--card-border)',
-                                        backgroundColor: formData.propietario === opt ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                                        color: formData.propietario === opt ? 'var(--accent)' : 'white',
-                                        cursor: 'pointer',
-                                        fontWeight: formData.propietario === opt ? 'bold' : 'normal'
-                                    }}
-                                >
-                                    {opt}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
                 </div>
 
                 <h3>Detalle de productos</h3>

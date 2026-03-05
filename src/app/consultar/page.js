@@ -49,9 +49,6 @@ export default function ConsultarPage() {
                                 <span className="badge" style={{ backgroundColor: scannedData.unit.estado === 'DISPONIBLE' ? 'var(--accent)' : 'var(--secondary)' }}>
                                     {scannedData.unit.estado}
                                 </span>
-                                <span className="badge" style={{ backgroundColor: scannedData.unit.compras?.propietario === 'Carolina' ? '#8b5cf6' : '#ec4899' }}>
-                                    {scannedData.unit.compras?.propietario || 'Propia'}
-                                </span>
                             </div>
                             <h2 style={{ color: 'var(--primary)', margin: '10px 0' }}>{scannedData.model.descripcion}</h2>
                             <p style={{ fontSize: '1.2rem', opacity: 0.8 }}>Color: <strong>{scannedData.variant.color}</strong></p>

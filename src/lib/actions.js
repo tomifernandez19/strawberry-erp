@@ -5,7 +5,7 @@ import { createClient } from './supabase/server'
  * Creates a new purchase, creates models/variants if they don't exist,
  * and generates the units ready for QR assignment.
  */
-export async function createPurchase({ nro_remito, items, propietario = 'Propia' }) {
+export async function createPurchase({ nro_remito, items }) {
     const supabase = createClient();
     // 1. Process items to ensure models and variants exist
     const processedItems = []
@@ -75,7 +75,6 @@ export async function createPurchase({ nro_remito, items, propietario = 'Propia'
         .insert([{
             proveedor: overallSupplier,
             nro_remito,
-            propietario,
             user_id: user?.id || null
         }])
         .select()
@@ -272,7 +271,7 @@ export async function getProductDetailsByQR(qrCode) {
     // 1. Find the specific unit
     const { data: unidad, error: unitError } = await supabase
         .from('unidades')
-        .select('*, variantes(*, modelos(*)), compras(propietario)')
+        .select('*, variantes(*, modelos(*))')
         .eq('codigo_qr', qrCode)
         .maybeSingle()
 
@@ -309,8 +308,7 @@ export async function getExtendedStats() {
     const initStats = () => ({
         count: 0,
         total: 0,
-        carolina: { count: 0, total: 0, items: [] },
-        propia: { count: 0, total: 0, items: [] }
+        items: []
     });
 
     const now = new Date();
@@ -324,16 +322,15 @@ export async function getExtendedStats() {
     const startOfMonth = new Date(now);
     startOfMonth.setDate(now.getDate() - 30);
 
-    // Join with unidades, compras, variantes and modelos to get all details
+    // Join with unidades, ventas, variantes and modelos to get all details
     const { data: unitsSold, error } = await supabase
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
             ventas (total, medio_pago, user_id, profiles (nombre)),
-            compras (propietario),
             variantes (color, modelos (descripcion, codigo_proveedor))
         `)
-        .eq('estado', 'VENDIDO')
+        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
         .gte('fecha_venta', startOfMonth.toISOString())
         .order('fecha_venta', { ascending: false });
 
@@ -357,7 +354,6 @@ export async function getExtendedStats() {
     unitsSold.forEach(unit => {
         const saleDate = new Date(unit.fecha_venta);
         const total = parseFloat(unit.ventas?.total) || 0;
-        const ownerKey = unit.compras?.propietario === 'Carolina' ? 'carolina' : 'propia';
 
         const detailedItem = {
             id: unit.id,
@@ -374,9 +370,7 @@ export async function getExtendedStats() {
         const update = (obj) => {
             obj.count++;
             obj.total += total;
-            obj[ownerKey].count++;
-            obj[ownerKey].total += total;
-            obj[ownerKey].items.push(detailedItem);
+            obj.items.push(detailedItem);
         };
 
         if (saleDate >= startOfDay) update(stats.today);
@@ -403,10 +397,9 @@ export async function getCustomRangeStats(startDate, endDate) {
         .select(`
             id, fecha_venta, talle_especifico,
             ventas (total, medio_pago, user_id, profiles (nombre)),
-            compras (propietario),
             variantes (color, modelos (descripcion, codigo_proveedor))
         `)
-        .eq('estado', 'VENDIDO')
+        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
         .gte('fecha_venta', start.toISOString())
         .lte('fecha_venta', end.toISOString())
         .order('fecha_venta', { ascending: false });
@@ -416,8 +409,7 @@ export async function getCustomRangeStats(startDate, endDate) {
         return {
             count: 0,
             total: 0,
-            carolina: { count: 0, total: 0, items: [] },
-            propia: { count: 0, total: 0, items: [] },
+            items: [],
             error: true
         };
     }
@@ -425,13 +417,11 @@ export async function getCustomRangeStats(startDate, endDate) {
     const stats = {
         count: 0,
         total: 0,
-        carolina: { count: 0, total: 0, items: [] },
-        propia: { count: 0, total: 0, items: [] }
+        items: []
     };
 
     unitsSold.forEach(unit => {
         const total = parseFloat(unit.ventas?.total) || 0;
-        const ownerKey = unit.compras?.propietario === 'Carolina' ? 'carolina' : 'propia';
 
         const detailedItem = {
             id: unit.id,
@@ -442,15 +432,12 @@ export async function getCustomRangeStats(startDate, endDate) {
             talle: unit.talle_especifico,
             precio: total,
             medio_pago: unit.ventas?.medio_pago,
-            vendedor: unit.ventas?.profiles?.nombre || unit.ventas?.user_id,
-            fecha: unit.fecha_venta
+            vendedor: unit.ventas?.profiles?.nombre || unit.ventas?.user_id
         };
 
         stats.count++;
         stats.total += total;
-        stats[ownerKey].count++;
-        stats[ownerKey].total += total;
-        stats[ownerKey].items.push(detailedItem);
+        stats.items.push(detailedItem);
     });
 
     return stats;
@@ -513,16 +500,15 @@ export async function getDailySummary(onlyUserId = null) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Fetch units sold today
+    // Fetch units sold today (VENDIDO or VENDIDO_ONLINE)
     const { data: unitsSold, error: uError } = await supabase
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
             ventas (total, medio_pago, user_id, profiles (nombre)),
-            compras (propietario),
             variantes (color, modelos (descripcion, codigo_proveedor))
         `)
-        .eq('estado', 'VENDIDO')
+        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
         .gte('fecha_venta', today.toISOString())
         .order('fecha_venta', { ascending: false });
 

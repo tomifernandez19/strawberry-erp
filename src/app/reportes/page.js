@@ -32,22 +32,21 @@ export default function ReportesPage() {
 
     if (loading) return <div className="text-center mt-lg">Cargando reportes...</div>
 
-    const DetailView = ({ period, owner }) => {
+    const DetailView = ({ period }) => {
         const periodLabel = period === 'today' ? 'Hoy' : period === 'week' ? 'Semana' : period === 'month' ? 'Mes' : 'Personalizado';
-        const ownerLabel = owner === 'propia' ? 'Propia' : 'Carolina';
 
         if (!stats) return <p>Cargando datos...</p>;
         if (stats.error) return <p style={{ color: 'var(--error)' }}>Error al cargar datos. Verifique los permisos de vendedor.</p>;
 
         const periodData = period === 'custom' ? customStats : stats[period];
-        if (!periodData || !periodData[owner]) return <p>No hay datos disponibles.</p>;
+        if (!periodData) return <p>No hay datos disponibles.</p>;
 
-        const items = periodData[owner].items || [];
+        const items = periodData.items || [];
 
         return (
             <div className="grid mt-md">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3>Detalle {ownerLabel} - {periodLabel}</h3>
+                    <h3>Detalle de Ventas - {periodLabel}</h3>
                     <button onClick={() => setViewDetail(null)} className="btn-secondary" style={{ padding: '4px 12px', fontSize: '0.8rem' }}>Cerrar</button>
                 </div>
 
@@ -83,7 +82,7 @@ export default function ReportesPage() {
                     </button>
                     <h1>Detalle de Ventas</h1>
                 </header>
-                <DetailView period={viewDetail.period} owner={viewDetail.owner} />
+                <DetailView period={viewDetail.period} />
                 <div style={{ height: '80px' }}></div>
             </div>
         )
@@ -130,18 +129,14 @@ export default function ReportesPage() {
                 {customStats && (
                     <div className="mt-lg" style={{ borderTop: '1px solid var(--card-border)', paddingTop: '15px' }}>
                         <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Resultado del Rango:</p>
-                        <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {customStats.total.toLocaleString()}</h2>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '10px' }}>{customStats.count} pares vendidos</p>
-
-                        <div style={{ display: 'flex', gap: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                            <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'custom', owner: 'propia' })}>
-                                <p style={{ fontSize: '0.65rem', color: '#ec4899' }}>Propia 🗂️</p>
-                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>$ {customStats.propia.total.toLocaleString()}</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {customStats.total.toLocaleString()}</h2>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{customStats.count} pares vendidos</p>
                             </div>
-                            <div style={{ flex: 1, borderLeft: '1px solid rgba(255,255,255,0.05)', paddingLeft: '10px', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'custom', owner: 'carolina' })}>
-                                <p style={{ fontSize: '0.65rem', color: '#8b5cf6' }}>Carolina 🗂️</p>
-                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>$ {customStats.carolina.total.toLocaleString()}</p>
-                            </div>
+                            <button className="btn-secondary" style={{ padding: '8px 15px' }} onClick={() => setViewDetail({ period: 'custom' })}>
+                                Ver Listado 📋
+                            </button>
                         </div>
                     </div>
                 )}
@@ -149,56 +144,32 @@ export default function ReportesPage() {
 
             <section className="grid mt-lg">
                 {/* Hoy */}
-                <div className="card" style={{ borderLeft: '4px solid var(--accent)' }}>
+                <div className="card" style={{ borderLeft: '4px solid var(--accent)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today' })}>
                     <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Ventas de Hoy</p>
                     <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {stats?.today.total.toLocaleString()}</h2>
-                    <p style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '10px' }}>{stats?.today.count} pares vendidos</p>
-
-                    <div style={{ display: 'flex', gap: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today', owner: 'propia' })}>
-                            <p style={{ fontSize: '0.65rem', color: '#ec4899' }}>Propia 🗂️</p>
-                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>$ {stats?.today.propia.total.toLocaleString()}</p>
-                        </div>
-                        <div style={{ flex: 1, borderLeft: '1px solid rgba(255,255,255,0.05)', paddingLeft: '10px', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today', owner: 'carolina' })}>
-                            <p style={{ fontSize: '0.65rem', color: '#8b5cf6' }}>Carolina 🗂️</p>
-                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>$ {stats?.today.carolina.total.toLocaleString()}</p>
-                        </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.today.count} pares vendidos</p>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>Ver detalle →</span>
                     </div>
                 </div>
 
                 {/* Semana */}
-                <div className="card" style={{ borderLeft: '4px solid var(--primary)' }}>
+                <div className="card" style={{ borderLeft: '4px solid var(--primary)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week' })}>
                     <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Últimos 7 días</p>
                     <h2 style={{ color: 'var(--primary)', margin: '5px 0' }}>$ {stats?.week.total.toLocaleString()}</h2>
-                    <p style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '10px' }}>{stats?.week.count} pares vendidos</p>
-
-                    <div style={{ display: 'flex', gap: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week', owner: 'propia' })}>
-                            <p style={{ fontSize: '0.65rem', color: '#ec4899' }}>Propia 🗂️</p>
-                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>$ {stats?.week.propia.total.toLocaleString()}</p>
-                        </div>
-                        <div style={{ flex: 1, borderLeft: '1px solid rgba(255,255,255,0.05)', paddingLeft: '10px', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week', owner: 'carolina' })}>
-                            <p style={{ fontSize: '0.65rem', color: '#8b5cf6' }}>Carolina 🗂️</p>
-                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>$ {stats?.week.carolina.total.toLocaleString()}</p>
-                        </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.week.count} pares vendidos</p>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Ver detalle →</span>
                     </div>
                 </div>
 
                 {/* Mes */}
-                <div className="card" style={{ borderLeft: '4px solid #8b5cf6' }}>
+                <div className="card" style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month' })}>
                     <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Últimos 30 días</p>
                     <h2 style={{ color: '#8b5cf6', margin: '5px 0' }}>$ {stats?.month.total.toLocaleString()}</h2>
-                    <p style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '10px' }}>{stats?.month.count} pares vendidos</p>
-
-                    <div style={{ display: 'flex', gap: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month', owner: 'propia' })}>
-                            <p style={{ fontSize: '0.65rem', color: '#ec4899' }}>Propia 🗂️</p>
-                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>$ {stats?.month.propia.total.toLocaleString()}</p>
-                        </div>
-                        <div style={{ flex: 1, borderLeft: '1px solid rgba(255,255,255,0.05)', paddingLeft: '10px', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month', owner: 'carolina' })}>
-                            <p style={{ fontSize: '0.65rem', color: '#8b5cf6' }}>Carolina 🗂️</p>
-                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>$ {stats?.month.carolina.total.toLocaleString()}</p>
-                        </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.month.count} pares vendidos</p>
+                        <span style={{ fontSize: '0.75rem', color: '#8b5cf6' }}>Ver detalle →</span>
                     </div>
                 </div>
             </section>

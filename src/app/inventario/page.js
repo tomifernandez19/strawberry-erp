@@ -26,7 +26,7 @@ export default function InventarioPage() {
             console.error(error)
         } else {
             const grouped = data.reduce((acc, unit) => {
-                const key = `${unit.variantes.id}-${unit.compras?.propietario || 'Propia'}`;
+                const key = unit.variantes.id;
                 if (!acc[key]) {
                     acc[key] = {
                         id: key,
@@ -34,7 +34,6 @@ export default function InventarioPage() {
                         color: unit.variantes.color,
                         precio_efectivo: unit.variantes.precio_efectivo,
                         precio_lista: unit.variantes.precio_lista,
-                        propietario: unit.compras?.propietario || 'Propia',
                         count: 0,
                         talles: {}
                     }
@@ -69,7 +68,7 @@ export default function InventarioPage() {
         <div className="grid mt-lg">
             <header className="text-center">
                 <h1>Inventario</h1>
-                <p style={{ opacity: 0.7 }}>Stock disponible por modelo y dueño</p>
+                <p style={{ opacity: 0.7 }}>Stock disponible por modelo</p>
             </header>
 
             {loading ? (
@@ -80,13 +79,10 @@ export default function InventarioPage() {
                         <p className="text-center mt-lg">No hay stock disponible.</p>
                     ) : (
                         stock.map(item => (
-                            <div key={item.id} className="card" style={{ borderLeft: `5px solid ${item.propietario === 'Carolina' ? '#8b5cf6' : '#ec4899'}` }}>
+                            <div key={item.id} className="card">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <div>
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                                            <span className="badge" style={{ fontSize: '0.6rem', backgroundColor: item.propietario === 'Carolina' ? '#8b5cf6' : '#ec4899' }}>
-                                                {item.propietario}
-                                            </span>
                                             <h4 style={{ color: 'var(--primary)', margin: 0 }}>{item.modelo.descripcion}</h4>
                                         </div>
                                         <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>{item.modelo.marca} • {item.color}</p>
