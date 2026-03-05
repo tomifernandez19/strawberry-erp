@@ -652,43 +652,68 @@ export async function signOutAction() {
     await supabase.auth.signOut();
 }
 
-export async function findUnitBySpecs(modelDescription, color, talle) {
+export async function findUnitBySpecs(modelDescription, color, talle, sku = null) {
     const supabase = createClient();
 
-    // Tiendanube sometimes sends "Product - Variant". We need the base name.
-    const baseModelName = modelDescription.split(' - ')[0].trim();
+    // Clean up inputs
+    const baseModelName = (modelDescription || '').split(' - ')[0].trim();
+    const cleanColor = (color || '').trim();
+    const cleanTalle = String(talle || '').trim();
 
-    // 1. Get the variant through a join
+    console.log(`[Matching] Target: ${baseModelName} | ${cleanColor} | T${cleanTalle} | SKU: ${sku}`);
+
+    // 1. Get variants for this model
     const { data: variants, error: vError } = await supabase
         .from('variantes')
         .select(`
             id, color,
-            modelos!inner(descripcion)
+            modelos!inner(id, descripcion, codigo_proveedor)
         `)
-        .eq('modelos.descripcion', baseModelName)
-        // Try exact match or ilike for flexibility
-        .or(`color.ilike.${color},color.ilike.%${color}%`);
+        .eq('modelos.descripcion', baseModelName);
 
     if (vError || !variants || variants.length === 0) {
-        console.error(`No variant found for ${baseModelName} / ${color}`);
-        throw new Error(`No se encontró el modelo ${baseModelName} o color ${color}`);
+        throw new Error(`No se encontró el modelo "${baseModelName}" en el ERP`);
     }
 
-    // Among matching variants, pick the one that has stock in that size
-    for (const variant of variants) {
-        const { data: unit, error: uError } = await supabase
-            .from('unidades')
-            .select('codigo_qr')
-            .eq('variante_id', variant.id)
-            .eq('talle_especifico', String(talle))
-            .eq('estado', 'DISPONIBLE')
-            .limit(1)
-            .maybeSingle();
+    // 2. Try to find the best matching variant
+    let matchingVariant = null;
 
-        if (unit) return unit.codigo_qr;
+    // A. Priority: Match by SKU if provided
+    if (sku) {
+        matchingVariant = variants.find(v => {
+            const expectedSku = `${v.modelos.codigo_proveedor}-${v.color.substring(0, 3)}-${cleanTalle}`.toUpperCase();
+            return sku.toUpperCase() === expectedSku;
+        });
     }
 
-    throw new Error(`No hay stock disponible para ${baseModelName} (${color}) en talle ${talle}`);
+    // B. Secondary: Match by Color Name
+    if (!matchingVariant) {
+        matchingVariant = variants.find(v =>
+            v.color.toLowerCase() === cleanColor.toLowerCase() ||
+            v.color.toLowerCase().includes(cleanColor.toLowerCase()) ||
+            cleanColor.toLowerCase().includes(v.color.toLowerCase())
+        );
+    }
+
+    if (!matchingVariant) {
+        throw new Error(`No se encontró la variante "${cleanColor}" para el modelo "${baseModelName}"`);
+    }
+
+    // 3. Find available unit
+    const { data: unit, error: uError } = await supabase
+        .from('unidades')
+        .select('codigo_qr')
+        .eq('variante_id', matchingVariant.id)
+        .eq('talle_especifico', cleanTalle)
+        .eq('estado', 'DISPONIBLE')
+        .limit(1)
+        .maybeSingle();
+
+    if (uError || !unit) {
+        throw new Error(`STOCK AGOTADO: No hay ${baseModelName} (${matchingVariant.color}) talle ${cleanTalle} disponible`);
+    }
+
+    return unit.codigo_qr;
 }
 
 export async function getSearchSpecs() {
@@ -981,9 +1006,9 @@ export async function recordOnlineOrder(orderData) {
             const colorRaw = (prod.variant_values?.[0] || '').trim();
             const talleRaw = (prod.variant_values?.[1] || '').trim();
 
-            console.log(`[Webhook] Searching unit for: ${prod.name} | ${colorRaw} | ${talleRaw}`);
+            console.log(`[Webhook] Searching unit for: ${prod.name} | ${colorRaw} | ${talleRaw} | SKU: ${prod.sku}`);
 
-            const qrCode = await findUnitBySpecs(prod.name, colorRaw, talleRaw);
+            const qrCode = await findUnitBySpecs(prod.name, colorRaw, talleRaw, prod.sku);
 
             if (qrCode) {
                 // Find unit ID
