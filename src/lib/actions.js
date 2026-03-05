@@ -872,7 +872,8 @@ export async function syncProductToTiendanube(modeloId) {
                 name: { es: modelo.descripcion },
                 description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` },
                 attributes: [{ es: 'Color' }, { es: 'Talle' }],
-                variants: tnVariants
+                variants: tnVariants,
+                stock_control: true // IMPORTANTE: Para que Tiendanube acepte el stock
             };
 
             const response = await fetch(`${baseUrl}/products`, {
@@ -888,16 +889,17 @@ export async function syncProductToTiendanube(modeloId) {
 
             const newProd = await response.json();
             await supabase.from('modelos').update({ tiendanube_id: String(newProd.id) }).eq('id', modelo.id);
-            return { success: true, message: "Producto creado y sincronizado con éxito" };
+            return { success: true, message: "Producto creado con stock y precios con éxito" };
         } else {
             // MODO ACTUALIZACIÓN (PUT)
-            // 1. Actualizar datos base (Sin el campo 'variants')
+            // 1. Actualizar datos base (Aseguramos stock_control: true)
             const updateProdRes = await fetch(`${baseUrl}/products/${tnProductId}`, {
                 method: 'PUT',
                 headers,
                 body: JSON.stringify({
                     name: { es: modelo.descripcion },
-                    description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` }
+                    description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` },
+                    stock_control: true
                 })
             });
 
@@ -908,7 +910,6 @@ export async function syncProductToTiendanube(modeloId) {
 
             // 2. Sincronizar variantes una por una
             for (const localV of tnVariants) {
-                // Buscamos si la variante ya existe en TN (por SKU o por valores)
                 const tnV = existingProduct.variants.find(v =>
                     v.sku === localV.sku ||
                     (v.values[0]?.es === localV.values[0].es && v.values[1]?.es === localV.values[1].es)
@@ -926,7 +927,7 @@ export async function syncProductToTiendanube(modeloId) {
                         })
                     });
                 } else {
-                    // Crear variante nueva
+                    // Crear variante nueva si no existía en TN
                     await fetch(`${baseUrl}/products/${tnProductId}/variants`, {
                         method: 'POST',
                         headers,
@@ -935,7 +936,7 @@ export async function syncProductToTiendanube(modeloId) {
                 }
             }
 
-            return { success: true, message: "Producto y stock actualizados correctamente" };
+            return { success: true, message: "Producto, precios y stock actualizados correctamente" };
         }
     } catch (err) {
         console.error('Sync Exception:', err);
