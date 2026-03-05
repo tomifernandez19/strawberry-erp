@@ -1,11 +1,12 @@
 'use server'
-import { supabase } from './supabase'
+import { createClient } from './supabase/server'
 
 /**
  * Creates a new purchase, creates models/variants if they don't exist,
  * and generates the units ready for QR assignment.
  */
 export async function createPurchase({ nro_remito, items, propietario = 'Propia' }) {
+    const supabase = createClient();
     // 1. Process items to ensure models and variants exist
     const processedItems = []
 
@@ -107,10 +108,43 @@ export async function createPurchase({ nro_remito, items, propietario = 'Propia'
     return compra
 }
 
+export async function addStock(variantId, talles) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // 1. Create a "Virtual Compra" to maintain the schema
+    const { data: compra, error: cErr } = await supabase
+        .from('compras')
+        .insert([{
+            proveedor: 'AJS',
+            nro_remito: 'REPOSICION-' + Date.now(),
+            propietario: 'Propia',
+            user_id: user?.id || null
+        }])
+        .select()
+        .single()
+
+    if (cErr) throw cErr;
+
+    // 2. Create units
+    const unitsToCreate = talles.map(talle => ({
+        variante_id: variantId,
+        compra_id: compra.id,
+        estado: 'PENDIENTE_QR',
+        talle_especifico: talle
+    }));
+
+    const { error: unitsError } = await supabase.from('unidades').insert(unitsToCreate);
+    if (unitsError) throw unitsError;
+
+    return true;
+}
+
 /**
  * Assigns a physical QR code to a specific unit.
  */
 export async function assignQRToUnit(unitId, qrCode) {
+    const supabase = createClient();
     // 1. Validate Format (ST-000000)
     const qrPattern = /^ST-\d{6}$/
     if (!qrPattern.test(qrCode)) {
@@ -147,13 +181,14 @@ export async function assignQRToUnit(unitId, qrCode) {
  * Fetches unit details for preview before confirming a sale.
  */
 export async function getUnitForSale(qrCode) {
+    const supabase = createClient();
     // 0. Validate Format
     const qrPattern = /^ST-\d{6}$/
     if (!qrPattern.test(qrCode)) {
         throw new Error('Formato de QR inválido. Debe ser ST- seguido de 6 números.')
     }
 
-    // 1. Find the unit (MUST be available)
+    // 1. Find the unit
     const { data: unidad, error: fetchError } = await supabase
         .from('unidades')
         .select('*, variantes(*, modelos(*))')
@@ -172,6 +207,7 @@ export async function getUnitForSale(qrCode) {
  * Records a sale for a unit scanned via QR.
  */
 export async function recordSale(qrCode, medio_pago) {
+    const supabase = createClient();
     // Re-verify unit availability at the moment of sale
     const unidad = await getUnitForSale(qrCode)
 
@@ -212,6 +248,7 @@ export async function recordSale(qrCode, medio_pago) {
  * Fetches full product details and stock status for a model based on a single unit's QR.
  */
 export async function getProductDetailsByQR(qrCode) {
+    const supabase = createClient();
     // 1. Find the specific unit
     const { data: unidad, error: unitError } = await supabase
         .from('unidades')
@@ -248,6 +285,7 @@ export async function getProductDetailsByQR(qrCode) {
  * Fetches the daily, weekly and monthly sales stats.
  */
 export async function getExtendedStats() {
+    const supabase = createClient();
     const initStats = () => ({
         count: 0,
         total: 0,
@@ -333,6 +371,7 @@ export async function getExtendedStats() {
  * Fetches sales stats for a custom date range.
  */
 export async function getCustomRangeStats(startDate, endDate) {
+    const supabase = createClient();
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
 
@@ -401,6 +440,7 @@ export async function getCustomRangeStats(startDate, endDate) {
  * Fetches the sales summary for the current day.
  */
 export async function recordCashMovement({ monto, tipo, motivo, persona }) {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     const { data, error } = await supabase
@@ -420,6 +460,7 @@ export async function recordCashMovement({ monto, tipo, motivo, persona }) {
 }
 
 export async function getRecentPersonas() {
+    const supabase = createClient();
     const { data, error } = await supabase
         .from('movimientos_caja')
         .select('persona')
@@ -433,6 +474,7 @@ export async function getRecentPersonas() {
 }
 
 export async function getCashMovements() {
+    const supabase = createClient();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -447,6 +489,7 @@ export async function getCashMovements() {
 }
 
 export async function getDailySummary(onlyUserId = null) {
+    const supabase = createClient();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -517,6 +560,7 @@ export async function getDailySummary(onlyUserId = null) {
  * Deletes a sale and reverts the associated unit to 'DISPONIBLE'.
  */
 export async function deleteSale(saleId) {
+    const supabase = createClient();
     // 1. Find the unit associated with this sale
     const { data: unit, error: unitError } = await supabase
         .from('unidades')
@@ -550,6 +594,7 @@ export async function deleteSale(saleId) {
  * Deletes a specific unit from stock.
  */
 export async function deleteUnit(unitId) {
+    const supabase = createClient();
     const { error } = await supabase
         .from('unidades')
         .delete()
@@ -563,6 +608,7 @@ export async function deleteUnit(unitId) {
  * Updates variant details (prices, color).
  */
 export async function updateVariant(variantId, updates) {
+    const supabase = createClient();
     const { error } = await supabase
         .from('variantes')
         .update(updates)
@@ -573,19 +619,41 @@ export async function updateVariant(variantId, updates) {
 }
 
 /**
+ * Updates variant details (prices, color).
+ */
+export async function updatePrice(variantId, newPriceEfectivo) {
+    const supabase = createClient();
+    const newPriceLista = Math.round(newPriceEfectivo * 1.21);
+
+    const { error } = await supabase
+        .from('variantes')
+        .update({
+            precio_efectivo: newPriceEfectivo,
+            precio_lista: newPriceLista
+        })
+        .eq('id', variantId);
+
+    if (error) throw error;
+    return true;
+}
+
+/**
  * Auth Helpers
  */
 export async function signIn(email, password) {
+    const supabase = createClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw (error.message === 'Invalid login credentials' ? 'Credenciales incorrectas' : error.message);
     return data;
 }
 
 export async function signOutAction() {
+    const supabase = createClient();
     await supabase.auth.signOut();
 }
 
 export async function findUnitBySpecs(modelDescription, color, talle) {
+    const supabase = createClient();
     // 1. Get the variant through a join
     const { data: variants, error: vError } = await supabase
         .from('variantes')
@@ -620,6 +688,7 @@ export async function findUnitBySpecs(modelDescription, color, talle) {
 }
 
 export async function getSearchSpecs() {
+    const supabase = createClient();
     const { data, error } = await supabase
         .from('unidades')
         .select(`
@@ -658,6 +727,7 @@ export async function getSearchSpecs() {
 }
 
 export async function getCurrentUser() {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
@@ -672,6 +742,7 @@ export async function getCurrentUser() {
 
 
 export async function updateProfile(updates) {
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("No hay sesión activa");
 
@@ -684,9 +755,22 @@ export async function updateProfile(updates) {
     return true;
 }
 
+export async function searchModels(term) {
+    const supabase = createClient();
+    const { data, error } = await supabase
+        .from('modelos')
+        .select('*, variantes(*)')
+        .ilike('descripcion', `%${term}%`)
+        .limit(10)
+
+    if (error) throw error;
+    return data;
+}
+
 // --- INTEGRACIÓN TIENDANUBE ---
 
 export async function registerTiendanubeWebhooks() {
+    const supabase = createClient();
     const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
     const storeId = process.env.TIENDANUBE_STORE_ID; // Necesitaremos este dato
     const appUrl = 'https://strawberry-erp.vercel.app'; // Tu URL de Vercel
@@ -716,6 +800,7 @@ export async function registerTiendanubeWebhooks() {
 }
 
 export async function syncProductToTiendanube(modeloId) {
+    const supabase = createClient();
     const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
     const storeId = process.env.TIENDANUBE_STORE_ID;
 
@@ -762,6 +847,7 @@ export async function syncProductToTiendanube(modeloId) {
                 body: JSON.stringify(tnProduct)
             });
         } else {
+            console.log('Searching for existing product in TN:', modelo.descripcion);
             const searchRes = await fetch(`https://api.tiendanube.com/v1/${storeId}/products?q=${encodeURIComponent(modelo.descripcion)}`, {
                 headers: { 'Authentication': `bearer ${accessToken}` }
             });
@@ -769,6 +855,7 @@ export async function syncProductToTiendanube(modeloId) {
             const existing = Array.isArray(searchData) ? searchData.find(p => p.name.es === modelo.descripcion) : null;
 
             if (existing) {
+                console.log('Found existing product by name, updating tiendanube_id');
                 await supabase.from('modelos').update({ tiendanube_id: String(existing.id) }).eq('id', modelo.id);
                 response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${existing.id}`, {
                     method: 'PUT',
@@ -776,6 +863,7 @@ export async function syncProductToTiendanube(modeloId) {
                     body: JSON.stringify(tnProduct)
                 });
             } else {
+                console.log('Product not found, creating new one in TN');
                 response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products`, {
                     method: 'POST',
                     headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -784,23 +872,26 @@ export async function syncProductToTiendanube(modeloId) {
                 const newProd = await response.json();
                 if (newProd.id) {
                     await supabase.from('modelos').update({ tiendanube_id: String(newProd.id) }).eq('id', modelo.id);
+                } else {
+                    console.error('Failed to get ID from Tiendanube response:', newProd);
                 }
             }
         }
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Tiendanube Sync Detail:', errorText);
-            return false;
+            console.error('Tiendanube API Error:', response.status, errorText);
+            throw new Error(`Tiendanube error: ${response.status}`);
         }
         return true;
     } catch (err) {
-        console.error('Sync Exception:', err);
-        return false;
+        console.error('Sync Exception:', err.message);
+        throw err; // Throwing so the UI can catch it
     }
 }
 
 export async function recordOnlineOrder(orderData) {
+    const supabase = createClient();
     const { id: tnId, customer, products, number } = orderData;
 
     console.log("Recording Online Order:", number);
@@ -850,46 +941,46 @@ export async function recordOnlineOrder(orderData) {
 }
 
 export async function getPendingDispatches() {
+    const supabase = createClient();
     const { data, error } = await supabase
         .from('pedidos_online')
         .select('*')
         .eq('estado', 'PENDIENTE_DESPACHO')
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false });
 
-    if (error) return [];
+    if (error) throw error;
     return data;
 }
 
 export async function completeDispatch(pedidoId, qrCode) {
-    // 1. Verify the unit matches and is either DISPONIBLE or RESERVADO_ONLINE
-    const { data: unit, error: uError } = await supabase
-        .from('unidades')
-        .select('*, variantes(*, modelos(*))')
-        .eq('codigo_qr', qrCode)
-        .single();
+    const supabase = createClient();
+    // 1. Confirm unit
+    const unidad = await getUnitForSale(qrCode);
 
-    if (uError || !unit) throw new Error("Código QR no encontrado");
-
-    // 2. Record as a sale
-    const { data: venta } = await supabase
+    // 2. Record as sale
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: venta, error: vErr } = await supabase
         .from('ventas')
         .insert([{
+            unidad_id: unidad.id,
+            monto: unidad.variantes.precio_lista,
             medio_pago: 'TIENDANUBE',
-            total: unit.variantes.precio_lista, // Or get from order items_raw
-            user_id: null // System/Online
+            user_id: user?.id || null
         }])
         .select()
         .single();
 
-    // 3. Update Unit & Order
-    await supabase.from('unidades').update({
-        estado: 'VENDIDO',
-        venta_id: venta.id,
-        fecha_venta: new Date().toISOString()
-    }).eq('id', unit.id);
+    if (vErr) throw vErr;
 
+    // 3. Update unit to sold
+    await supabase.from('unidades').update({
+        estado: 'VENDIDO'
+    }).eq('id', unidad.id);
+
+    // 4. Update order
     await supabase.from('pedidos_online').update({
-        estado: 'DESPACHADO'
+        estado: 'DESPACHADO',
+        unidad_reservada_id: unidad.id
     }).eq('id', pedidoId);
 
     return true;
