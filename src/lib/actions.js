@@ -804,89 +804,103 @@ export async function syncProductToTiendanube(modeloId) {
     const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
     const storeId = process.env.TIENDANUBE_STORE_ID;
 
-    const { data: modelo } = await supabase
-        .from('modelos')
-        .select('*, variantes(*, unidades(*))')
-        .eq('id', modeloId)
-        .single();
-
-    if (!modelo) throw new Error("Modelo no encontrado");
-
-    const tnVariants = [];
-    modelo.variantes.forEach(variante => {
-        const stockPorTalle = (variante.unidades || []).reduce((acc, u) => {
-            if (u.estado === 'DISPONIBLE') {
-                acc[u.talle_especifico] = (acc[u.talle_especifico] || 0) + 1;
-            }
-            return acc;
-        }, {});
-
-        Object.entries(stockPorTalle).forEach(([talle, stock]) => {
-            tnVariants.push({
-                price: variante.precio_lista,
-                stock: stock,
-                options: [variante.color, talle],
-                sku: `${modelo.codigo_proveedor}-${variante.color.substring(0, 3)}-${talle}`
-            });
-        });
-    });
-
-    const tnProduct = {
-        name: { es: modelo.descripcion },
-        description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` },
-        attributes: [{ es: 'Color' }, { es: 'Talle' }],
-        variants: tnVariants
-    };
+    if (!accessToken || !storeId) {
+        return { success: false, message: "Faltan las credenciales de Tiendanube en .env.local" };
+    }
 
     try {
+        const { data: modelo, error: mErr } = await supabase
+            .from('modelos')
+            .select('*, variantes(*, unidades(*))')
+            .eq('id', modeloId)
+            .single();
+
+        if (mErr || !modelo) return { success: false, message: "Modelo no encontrado en el ERP" };
+
+        const tnVariants = [];
+        modelo.variantes?.forEach(variante => {
+            const stockPorTalle = (variante.unidades || []).reduce((acc, u) => {
+                if (u.estado === 'DISPONIBLE') {
+                    acc[u.talle_especifico] = (acc[u.talle_especifico] || 0) + 1;
+                }
+                return acc;
+            }, {});
+
+            Object.entries(stockPorTalle).forEach(([talle, stock]) => {
+                tnVariants.push({
+                    price: variante.precio_lista,
+                    stock: stock,
+                    options: [variante.color, talle],
+                    // SKU basado en modelo + color + talle para vinculación automática
+                    sku: `${modelo.codigo_proveedor}-${variante.color.substring(0, 3)}-${talle}`.toUpperCase()
+                });
+            });
+        });
+
+        if (tnVariants.length === 0) {
+            return { success: false, message: "No hay stock disponible para sincronizar" };
+        }
+
+        const tnProduct = {
+            name: { es: modelo.descripcion },
+            description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` },
+            attributes: [{ es: 'Color' }, { es: 'Talle' }],
+            variants: tnVariants
+        };
+
         let response;
+        let method = 'POST';
+        let url = `https://api.tiendanube.com/v1/${storeId}/products`;
+
         if (modelo.tiendanube_id) {
-            response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${modelo.tiendanube_id}`, {
-                method: 'PUT',
+            url = `${url}/${modelo.tiendanube_id}`;
+            method = 'PUT';
+            response = await fetch(url, {
+                method,
                 headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(tnProduct)
             });
         } else {
-            console.log('Searching for existing product in TN:', modelo.descripcion);
-            const searchRes = await fetch(`https://api.tiendanube.com/v1/${storeId}/products?q=${encodeURIComponent(modelo.descripcion)}`, {
+            // Buscar por nombre si no tenemos ID
+            const searchRes = await fetch(`${url}?q=${encodeURIComponent(modelo.descripcion)}`, {
                 headers: { 'Authentication': `bearer ${accessToken}` }
             });
             const searchData = await searchRes.json();
             const existing = Array.isArray(searchData) ? searchData.find(p => p.name.es === modelo.descripcion) : null;
 
             if (existing) {
-                console.log('Found existing product by name, updating tiendanube_id');
+                url = `${url}/${existing.id}`;
+                method = 'PUT';
                 await supabase.from('modelos').update({ tiendanube_id: String(existing.id) }).eq('id', modelo.id);
-                response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${existing.id}`, {
-                    method: 'PUT',
-                    headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(tnProduct)
-                });
-            } else {
-                console.log('Product not found, creating new one in TN');
-                response = await fetch(`https://api.tiendanube.com/v1/${storeId}/products`, {
-                    method: 'POST',
-                    headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(tnProduct)
-                });
-                const newProd = await response.json();
-                if (newProd.id) {
-                    await supabase.from('modelos').update({ tiendanube_id: String(newProd.id) }).eq('id', modelo.id);
-                } else {
-                    console.error('Failed to get ID from Tiendanube response:', newProd);
-                }
             }
+
+            response = await fetch(url, {
+                method,
+                headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(tnProduct)
+            });
         }
 
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Tiendanube API Error:', response.status, errorText);
-            throw new Error(`Tiendanube error: ${response.status}`);
+            return {
+                success: false,
+                message: `Error de Tiendanube (${response.status})`,
+                details: errorText
+            };
         }
-        return true;
+
+        const responseData = await response.json();
+        // Guardar ID si es nuevo
+        if (method === 'POST' && responseData.id) {
+            await supabase.from('modelos').update({ tiendanube_id: String(responseData.id) }).eq('id', modelo.id);
+        }
+
+        return { success: true, message: "Sincronización exitosa" };
     } catch (err) {
-        console.error('Sync Exception:', err.message);
-        throw err; // Throwing so the UI can catch it
+        console.error('Sync Exception:', err);
+        return { success: false, message: "Error interno: " + err.message };
     }
 }
 

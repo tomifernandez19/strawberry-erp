@@ -52,11 +52,14 @@ export default function InventarioPage() {
     const handleSync = async (modeloId) => {
         setSyncing(modeloId)
         try {
-            const ok = await syncProductToTiendanube(modeloId)
-            if (ok) alert('✅ Modelo sincronizado con éxito en Tiendanube')
-            else alert('❌ Error al sincronizar. Verifique la conexión.')
+            const result = await syncProductToTiendanube(modeloId)
+            if (result.success) {
+                alert('✅ ' + result.message)
+            } else {
+                alert('❌ ' + result.message + (result.details ? '\n\nDetalles: ' + result.details : ''))
+            }
         } catch (e) {
-            alert('❌ Error: ' + e.message)
+            alert('❌ Error inesperado: ' + e.message)
         } finally {
             setSyncing(null)
         }
