@@ -1148,8 +1148,7 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
         const { data: venta, error: vErr } = await supabase
             .from('ventas')
             .insert([{
-                unidad_id: unidad.id,
-                monto: montoVenta,
+                total: montoVenta,
                 medio_pago: 'TIENDANUBE',
                 user_id: user?.id || null
             }])
@@ -1161,9 +1160,10 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
             throw new Error(`Error al registrar la venta: ${vErr.message}`);
         }
 
-        // 4. Update unit to VENDIDO_ONLINE
+        // 4. Update unit to VENDIDO_ONLINE and link to sale
         const { error: uErr } = await supabase.from('unidades').update({
             estado: 'VENDIDO_ONLINE',
+            venta_id: venta.id,
             fecha_venta: new Date().toISOString()
         }).eq('id', unidad.id);
 
