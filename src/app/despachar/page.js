@@ -27,8 +27,8 @@ export default function DespacharPage() {
         setScanning(false)
         setError('')
         try {
-            // 1. Show preview of unit scanned
-            const result = await getUnitForSale(qrCode)
+            // 1. Show preview of unit scanned (Include Reserved ones!)
+            const result = await getUnitForSale(qrCode, true)
 
             if (!result.success) {
                 setError(result.message)
@@ -39,10 +39,23 @@ export default function DespacharPage() {
             const modelName = unit.variantes?.modelos?.descripcion || 'Modelo desconocido'
             const color = unit.variantes?.color || 'Color desconocido'
             const size = unit.talle_especifico || '?'
+            const listPrice = unit.variantes?.precio_lista || 0
 
             // 2. Confirm if user wants to use THIS unit for THIS order
-            if (confirm(`¿Desea despachar el pedido #${selectedOrder.nro_pedido} con el producto ${modelName} (${color} Talle ${size})?`)) {
-                const completeResult = await completeDispatch(selectedOrder.id, qrCode)
+            const confirmMsg = `¿Desea despachar el pedido #${selectedOrder.nro_pedido} con el producto ${modelName} (${color} Talle ${size})?`
+
+            if (confirm(confirmMsg)) {
+                // 3. Optional: Ask for Price
+                let finalPrice = listPrice
+                const priceInput = prompt(`Confirmar precio de venta (Precio de lista: $${listPrice}):`, listPrice)
+
+                if (priceInput !== null) {
+                    finalPrice = parseFloat(priceInput) || listPrice
+                } else {
+                    return // Cancel dispatch if prompt cancelled
+                }
+
+                const completeResult = await completeDispatch(selectedOrder.id, qrCode, finalPrice)
 
                 if (completeResult.success) {
                     alert('✅ Pedido despachado con éxito')

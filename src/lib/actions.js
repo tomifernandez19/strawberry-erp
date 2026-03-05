@@ -180,7 +180,7 @@ export async function assignQRToUnit(unitId, qrCode) {
 /**
  * Fetches unit details for preview before confirming a sale.
  */
-export async function getUnitForSale(qrCode) {
+export async function getUnitForSale(qrCode, includeReserved = false) {
     const supabase = createClient();
     try {
         // 0. Validate Format
@@ -190,12 +190,18 @@ export async function getUnitForSale(qrCode) {
         }
 
         // 1. Find the unit
-        const { data: unidad, error: fetchError } = await supabase
+        let query = supabase
             .from('unidades')
             .select('*, variantes(*, modelos(*))')
-            .eq('codigo_qr', qrCode)
-            .eq('estado', 'DISPONIBLE')
-            .maybeSingle()
+            .eq('codigo_qr', qrCode);
+
+        if (includeReserved) {
+            query = query.in('estado', ['DISPONIBLE', 'RESERVADO_ONLINE']);
+        } else {
+            query = query.eq('estado', 'DISPONIBLE');
+        }
+
+        const { data: unidad, error: fetchError } = await query.maybeSingle();
 
         if (fetchError) {
             console.error("[getUnitForSale] DB Error:", fetchError);
@@ -1111,16 +1117,17 @@ export async function getPendingDispatches() {
     }
 }
 
-export async function completeDispatch(pedidoId, qrCode) {
+export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
     const supabase = createClient();
     try {
         console.log(`[Dispatch] Starting completion for Pedido ID: ${pedidoId}, QR: ${qrCode}`);
 
-        // 1. Confirm unit exists and is available
-        const unidad = await getUnitForSale(qrCode);
-        if (!unidad) {
-            throw new Error("No se encontró la unidad o no está disponible.");
+        // 1. Confirm unit exists and is available (including reserved)
+        const result = await getUnitForSale(qrCode, true);
+        if (!result.success) {
+            throw new Error(result.message);
         }
+        const unidad = result.data;
 
         // 2. Fetch Order to see if there was a reserved unit
         const { data: order, error: oError } = await supabase
@@ -1136,11 +1143,7 @@ export async function completeDispatch(pedidoId, qrCode) {
         // 3. Record the sale
         const { data: { user } } = await supabase.auth.getUser();
 
-        // Defensive check for prices
-        const montoVenta = unidad.variantes?.precio_lista || 0;
-        if (montoVenta === 0) {
-            console.warn(`[Dispatch] Warning: Selling unit ${qrCode} with price 0`);
-        }
+        const montoVenta = customPrice !== null ? parseFloat(customPrice) : (unidad.variantes?.precio_lista || 0);
 
         const { data: venta, error: vErr } = await supabase
             .from('ventas')
@@ -1158,15 +1161,15 @@ export async function completeDispatch(pedidoId, qrCode) {
             throw new Error(`Error al registrar la venta: ${vErr.message}`);
         }
 
-        // 4. Update unit to sold
+        // 4. Update unit to VENDIDO_ONLINE
         const { error: uErr } = await supabase.from('unidades').update({
-            estado: 'VENDIDO',
+            estado: 'VENDIDO_ONLINE',
             fecha_venta: new Date().toISOString()
         }).eq('id', unidad.id);
 
         if (uErr) {
-            console.error("[Dispatch] Error updating unit to VENDIDO:", uErr);
-            throw new Error("No se pudo marcar la unidad como vendida.");
+            console.error("[Dispatch] Error updating unit to VENDIDO_ONLINE:", uErr);
+            throw new Error("No se pudo marcar la unidad como vendida online.");
         }
 
         // 5. If there was a PREVIOUSLY reserved unit and it's DIFFERENT from this one, release it
