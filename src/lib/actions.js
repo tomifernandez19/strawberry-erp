@@ -1217,3 +1217,26 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
         return { success: false, message: err.message };
     }
 }
+
+/**
+ * Fetches all available stock items for a detailed inventory list.
+ * This server action is used to avoid RLS limitations for non-admin users
+ * in the inventory summary view.
+ */
+export async function getAvailableStockDetailed() {
+    const supabase = createClient();
+    const { data, error } = await supabase
+        .from('unidades')
+        .select(`
+            id, talle_especifico,
+            variantes (id, color, precio_efectivo, precio_lista, modelos (id, descripcion, marca))
+        `)
+        .eq('estado', 'DISPONIBLE');
+
+    if (error) {
+        console.error("[Stock] Error fetching available stock:", error);
+        return [];
+    }
+
+    return data || [];
+}

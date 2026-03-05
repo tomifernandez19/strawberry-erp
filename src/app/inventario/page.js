@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { syncProductToTiendanube } from '@/lib/actions'
+import { syncProductToTiendanube, getAvailableStockDetailed } from '@/lib/actions'
+import { useAuth } from '@/lib/context/AuthContext'
 
 export default function InventarioPage() {
+    const { isAdmin } = useAuth()
     const [stock, setStock] = useState([])
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(null)
@@ -13,38 +14,31 @@ export default function InventarioPage() {
     }, [])
 
     async function fetchStock() {
-        const { data, error } = await supabase
-            .from('unidades')
-            .select(`
-                id, talle_especifico,
-                variantes (id, color, precio_efectivo, precio_lista, modelos (id, descripcion, marca)),
-                compras (propietario)
-            `)
-            .eq('estado', 'DISPONIBLE')
+        setLoading(true)
+        const data = await getAvailableStockDetailed()
 
-        if (error) {
-            console.error(error)
-        } else {
-            const grouped = data.reduce((acc, unit) => {
-                const key = unit.variantes.id;
-                if (!acc[key]) {
-                    acc[key] = {
-                        id: key,
-                        modelo: unit.variantes.modelos,
-                        color: unit.variantes.color,
-                        precio_efectivo: unit.variantes.precio_efectivo,
-                        precio_lista: unit.variantes.precio_lista,
-                        count: 0,
-                        talles: {}
-                    }
+        const grouped = data.reduce((acc, unit) => {
+            const key = unit.variantes?.id;
+            if (!key) return acc;
+
+            if (!acc[key]) {
+                acc[key] = {
+                    id: key,
+                    modelo: unit.variantes.modelos,
+                    color: unit.variantes.color,
+                    precio_efectivo: unit.variantes.precio_efectivo,
+                    precio_lista: unit.variantes.precio_lista,
+                    count: 0,
+                    talles: {}
                 }
-                acc[key].count++;
-                const talle = unit.talle_especifico;
-                acc[key].talles[talle] = (acc[key].talles[talle] || 0) + 1;
-                return acc;
-            }, {});
-            setStock(Object.values(grouped))
-        }
+            }
+            acc[key].count++;
+            const talle = unit.talle_especifico;
+            acc[key].talles[talle] = (acc[key].talles[talle] || 0) + 1;
+            return acc;
+        }, {});
+
+        setStock(Object.values(grouped))
         setLoading(false)
     }
 
@@ -117,16 +111,18 @@ export default function InventarioPage() {
                                     </div>
                                 </div>
 
-                                <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
-                                    <button
-                                        className="btn-secondary"
-                                        style={{ width: '100%', fontSize: '0.75rem', padding: '8px' }}
-                                        onClick={() => handleSync(item.modelo.id)}
-                                        disabled={syncing === item.modelo.id}
-                                    >
-                                        {syncing === item.modelo.id ? '⏳ Sincronizando...' : '🔄 Sincronizar con Tiendanube'}
-                                    </button>
-                                </div>
+                                {isAdmin && (
+                                    <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
+                                        <button
+                                            className="btn-secondary"
+                                            style={{ width: '100%', fontSize: '0.75rem', padding: '8px' }}
+                                            onClick={() => handleSync(item.modelo.id)}
+                                            disabled={syncing === item.modelo.id}
+                                        >
+                                            {syncing === item.modelo.id ? '⏳ Sincronizando...' : '🔄 Sincronizar con Tiendanube'}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))
                     )}
