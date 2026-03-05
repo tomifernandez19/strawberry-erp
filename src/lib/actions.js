@@ -655,30 +655,60 @@ export async function signOutAction() {
 export async function findUnitBySpecs(modelDescription, color, talle, sku = null) {
     const supabase = createClient();
 
-    // Clean up inputs
-    const baseModelName = (modelDescription || '').split(' - ')[0].trim();
+    // 0. Robust Model Name Extraction
+    // Tiendanube name examples: "JUSTI (NEGRO, 35)", "SABADELL - CAMEL", "SHARON"
+    let baseModelName = (modelDescription || '').split(' (')[0].split(' - ')[0].trim();
+
     const cleanColor = (color || '').trim();
     const cleanTalle = String(talle || '').trim();
 
-    console.log(`[Matching] Target: ${baseModelName} | ${cleanColor} | T${cleanTalle} | SKU: ${sku}`);
+    console.log(`[Matching] Attempting: ${baseModelName} | ${cleanColor} | T${cleanTalle} | SKU: ${sku}`);
 
-    // 1. Get variants for this model (using ilike for case-insensitivity)
-    const { data: variants, error: vError } = await supabase
-        .from('variantes')
-        .select(`
-            id, color,
-            modelos!inner(id, descripcion, codigo_proveedor)
-        `)
-        .ilike('modelos.descripcion', baseModelName);
+    // 1. Get variants
+    // Priority 1: Match model by SKU (Supplier Code part)
+    let variants = [];
+    if (sku) {
+        const skuParts = sku.split('-');
+        const supplierCodeFromSku = skuParts[0]; // "LE61JUSTI"
 
-    if (vError || !variants || variants.length === 0) {
-        throw new Error(`No se encontró el modelo "${baseModelName}" en el ERP`);
+        const { data: skuVariants } = await supabase
+            .from('variantes')
+            .select(`
+                id, color,
+                modelos!inner(id, descripcion, codigo_proveedor)
+            `)
+            .eq('modelos.codigo_proveedor', supplierCodeFromSku);
+
+        if (skuVariants && skuVariants.length > 0) {
+            variants = skuVariants;
+            console.log(`[Matching] Found ${variants.length} variants by SKU Supplier Code: ${supplierCodeFromSku}`);
+        }
     }
 
-    // 2. Try to find the best matching variant
+    // Priority 2: Match model by Name if SKU search failed
+    if (variants.length === 0) {
+        const { data: nameVariants } = await supabase
+            .from('variantes')
+            .select(`
+                id, color,
+                modelos!inner(id, descripcion, codigo_proveedor)
+            `)
+            .ilike('modelos.descripcion', baseModelName);
+
+        variants = nameVariants || [];
+        if (variants.length > 0) {
+            console.log(`[Matching] Found ${variants.length} variants by Model Name: ${baseModelName}`);
+        }
+    }
+
+    if (variants.length === 0) {
+        throw new Error(`No se encontró el modelo "${baseModelName}" o SKU "${sku}" en el ERP`);
+    }
+
+    // 2. Find the best matching variant among those found
     let matchingVariant = null;
 
-    // A. Priority: Match by SKU if provided
+    // A. Priority: Exact SKU match
     if (sku) {
         matchingVariant = variants.find(v => {
             const expectedSku = `${v.modelos.codigo_proveedor}-${v.color.substring(0, 3)}-${cleanTalle}`.toUpperCase();
@@ -686,7 +716,7 @@ export async function findUnitBySpecs(modelDescription, color, talle, sku = null
         });
     }
 
-    // B. Secondary: Match by Color Name
+    // B. Secondary: Color Name match
     if (!matchingVariant) {
         matchingVariant = variants.find(v =>
             v.color.toLowerCase() === cleanColor.toLowerCase() ||
@@ -696,7 +726,7 @@ export async function findUnitBySpecs(modelDescription, color, talle, sku = null
     }
 
     if (!matchingVariant) {
-        throw new Error(`No se encontró la variante "${cleanColor}" para el modelo "${baseModelName}"`);
+        throw new Error(`No se encontró la variante "${cleanColor}" para el modelo encontrado`);
     }
 
     // 3. Find available unit
@@ -710,7 +740,7 @@ export async function findUnitBySpecs(modelDescription, color, talle, sku = null
         .maybeSingle();
 
     if (uError || !unit) {
-        throw new Error(`STOCK AGOTADO: No hay ${baseModelName} (${matchingVariant.color}) talle ${cleanTalle} disponible`);
+        throw new Error(`STOCK AGOTADO: No hay stock disponible de ${baseModelName} talle ${cleanTalle}`);
     }
 
     return unit.codigo_qr;
