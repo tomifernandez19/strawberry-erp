@@ -182,25 +182,39 @@ export async function assignQRToUnit(unitId, qrCode) {
  */
 export async function getUnitForSale(qrCode) {
     const supabase = createClient();
-    // 0. Validate Format
-    const qrPattern = /^ST-\d{6}$/
-    if (!qrPattern.test(qrCode)) {
-        throw new Error('Formato de QR inválido. Debe ser ST- seguido de 6 números.')
+    try {
+        // 0. Validate Format
+        const qrPattern = /^ST-\d{6}$/
+        if (!qrPattern.test(qrCode)) {
+            return { success: false, message: 'Formato de QR inválido. Debe ser ST- seguido de 6 números.' };
+        }
+
+        // 1. Find the unit
+        const { data: unidad, error: fetchError } = await supabase
+            .from('unidades')
+            .select('*, variantes(*, modelos(*))')
+            .eq('codigo_qr', qrCode)
+            .eq('estado', 'DISPONIBLE')
+            .maybeSingle()
+
+        if (fetchError) {
+            console.error("[getUnitForSale] DB Error:", fetchError);
+            return { success: false, message: "Error al consultar la base de datos." };
+        }
+
+        if (!unidad) {
+            return { success: false, message: 'Este par no está disponible o ya fue vendido.' };
+        }
+
+        if (!unidad.variantes || !unidad.variantes.modelos) {
+            return { success: false, message: 'Datos del producto incompletos en la base de datos.' };
+        }
+
+        return { success: true, data: unidad };
+    } catch (err) {
+        console.error("[getUnitForSale] Fatal Error:", err.message);
+        return { success: false, message: "Error interno: " + err.message };
     }
-
-    // 1. Find the unit
-    const { data: unidad, error: fetchError } = await supabase
-        .from('unidades')
-        .select('*, variantes(*, modelos(*))')
-        .eq('codigo_qr', qrCode)
-        .eq('estado', 'DISPONIBLE')
-        .maybeSingle()
-
-    if (fetchError || !unidad) {
-        throw new Error('Este par no está disponible o ya fue vendido.')
-    }
-
-    return unidad
 }
 
 /**
