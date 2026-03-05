@@ -1180,7 +1180,7 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
             }).eq('id', order.unidad_reservada_id);
         }
 
-        // 6. Update order status
+        // 6. Update order status in Local DB
         const { error: pError } = await supabase.from('pedidos_online').update({
             estado: 'DESPACHADO',
             unidad_reservada_id: unidad.id
@@ -1189,6 +1189,36 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
         if (pError) {
             console.error("[Dispatch] Error updating order status:", pError);
             throw new Error("El pedido se vendió pero no pudimos actualizar su estado final.");
+        }
+
+        // 7. SYNC WITH TIENDANUBE: Mark as Paid
+        const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
+        const storeId = process.env.TIENDANUBE_STORE_ID;
+
+        if (accessToken && storeId && order.tiendanube_id) {
+            try {
+                console.log(`[Dispatch] Syncing payment status to Tiendanube for Order ID: ${order.tiendanube_id}`);
+                const tnResponse = await fetch(`https://api.tiendanube.com/v1/${storeId}/orders/${order.tiendanube_id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authentication': `bearer ${accessToken}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'Strawberry ERP (fernandezdemaussiontomas@gmail.com)'
+                    },
+                    body: JSON.stringify({
+                        payment_status: 'paid'
+                    })
+                });
+
+                if (tnResponse.ok) {
+                    console.log(`[Dispatch] Tiendanube order ${order.tiendanube_id} marked as PAID.`);
+                } else {
+                    const errTxt = await tnResponse.text();
+                    console.error(`[Dispatch] Failed to mark as paid in Tiendanube: ${errTxt}`);
+                }
+            } catch (syncErr) {
+                console.error("[Dispatch] Exception syncing with Tiendanube:", syncErr.message);
+            }
         }
 
         console.log(`[Dispatch] SUCCESS: Pedido #${order.nro_pedido} dispatched with unit ${qrCode}`);
