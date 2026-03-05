@@ -1079,46 +1079,105 @@ export async function recordOnlineOrder(orderData) {
 
 export async function getPendingDispatches() {
     const supabase = createClient();
-    const { data, error } = await supabase
-        .from('pedidos_online')
-        .select('*')
-        .eq('estado', 'PENDIENTE_DESPACHO')
-        .order('created_at', { ascending: false });
+    try {
+        const { data, error } = await supabase
+            .from('pedidos_online')
+            .select('*')
+            .eq('estado', 'PENDIENTE_DESPACHO')
+            .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return data;
+        if (error) {
+            console.error("[Dispatches] DB Error:", error.message);
+            return [];
+        }
+        return data || [];
+    } catch (err) {
+        console.error("[Dispatches] Fatal Error:", err.message);
+        return [];
+    }
 }
 
 export async function completeDispatch(pedidoId, qrCode) {
     const supabase = createClient();
-    // 1. Confirm unit
-    const unidad = await getUnitForSale(qrCode);
+    try {
+        console.log(`[Dispatch] Starting completion for Pedido ID: ${pedidoId}, QR: ${qrCode}`);
 
-    // 2. Record as sale
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data: venta, error: vErr } = await supabase
-        .from('ventas')
-        .insert([{
-            unidad_id: unidad.id,
-            monto: unidad.variantes.precio_lista,
-            medio_pago: 'TIENDANUBE',
-            user_id: user?.id || null
-        }])
-        .select()
-        .single();
+        // 1. Confirm unit exists and is available
+        const unidad = await getUnitForSale(qrCode);
+        if (!unidad) {
+            throw new Error("No se encontró la unidad o no está disponible.");
+        }
 
-    if (vErr) throw vErr;
+        // 2. Fetch Order to see if there was a reserved unit
+        const { data: order, error: oError } = await supabase
+            .from('pedidos_online')
+            .select('*')
+            .eq('id', pedidoId)
+            .single();
 
-    // 3. Update unit to sold
-    await supabase.from('unidades').update({
-        estado: 'VENDIDO'
-    }).eq('id', unidad.id);
+        if (oError || !order) {
+            throw new Error("No se pudo encontrar el pedido en la base de datos.");
+        }
 
-    // 4. Update order
-    await supabase.from('pedidos_online').update({
-        estado: 'DESPACHADO',
-        unidad_reservada_id: unidad.id
-    }).eq('id', pedidoId);
+        // 3. Record the sale
+        const { data: { user } } = await supabase.auth.getUser();
 
-    return true;
+        // Defensive check for prices
+        const montoVenta = unidad.variantes?.precio_lista || 0;
+        if (montoVenta === 0) {
+            console.warn(`[Dispatch] Warning: Selling unit ${qrCode} with price 0`);
+        }
+
+        const { data: venta, error: vErr } = await supabase
+            .from('ventas')
+            .insert([{
+                unidad_id: unidad.id,
+                monto: montoVenta,
+                medio_pago: 'TIENDANUBE',
+                user_id: user?.id || null
+            }])
+            .select()
+            .single();
+
+        if (vErr) {
+            console.error("[Dispatch] Error inserting sale:", vErr);
+            throw new Error(`Error al registrar la venta: ${vErr.message}`);
+        }
+
+        // 4. Update unit to sold
+        const { error: uErr } = await supabase.from('unidades').update({
+            estado: 'VENDIDO',
+            fecha_venta: new Date().toISOString()
+        }).eq('id', unidad.id);
+
+        if (uErr) {
+            console.error("[Dispatch] Error updating unit to VENDIDO:", uErr);
+            throw new Error("No se pudo marcar la unidad como vendida.");
+        }
+
+        // 5. If there was a PREVIOUSLY reserved unit and it's DIFFERENT from this one, release it
+        if (order.unidad_reservada_id && order.unidad_reservada_id !== unidad.id) {
+            console.log(`[Dispatch] Releasing previously reserved unit: ${order.unidad_reservada_id}`);
+            await supabase.from('unidades').update({
+                estado: 'DISPONIBLE'
+            }).eq('id', order.unidad_reservada_id);
+        }
+
+        // 6. Update order status
+        const { error: pError } = await supabase.from('pedidos_online').update({
+            estado: 'DESPACHADO',
+            unidad_reservada_id: unidad.id
+        }).eq('id', pedidoId);
+
+        if (pError) {
+            console.error("[Dispatch] Error updating order status:", pError);
+            throw new Error("El pedido se vendió pero no pudimos actualizar su estado final.");
+        }
+
+        console.log(`[Dispatch] SUCCESS: Pedido #${order.nro_pedido} dispatched with unit ${qrCode}`);
+        return { success: true };
+    } catch (err) {
+        console.error("[Dispatch] Fatal Error:", err.message);
+        return { success: false, message: err.message };
+    }
 }

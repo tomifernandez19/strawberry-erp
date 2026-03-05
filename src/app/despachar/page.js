@@ -29,16 +29,29 @@ export default function DespacharPage() {
         try {
             // 1. Show preview of unit scanned
             const unit = await getUnitForSale(qrCode)
+            if (!unit) {
+                throw new Error("No se pudo encontrar información de este QR.")
+            }
+
+            const modelName = unit.variantes?.modelos?.descripcion || 'Modelo desconocido'
+            const color = unit.variantes?.color || 'Color desconocido'
+            const size = unit.talle_especifico || '?'
 
             // 2. Confirm if user wants to use THIS unit for THIS order
-            if (confirm(`¿Desea despachar el pedido #${selectedOrder.nro_pedido} con el producto ${unit.variantes.modelos.descripcion} (${unit.variantes.color} Talle ${unit.talle_especifico})?`)) {
-                await completeDispatch(selectedOrder.id, qrCode)
-                alert('Pedido despachado con éxito')
-                setSelectedOrder(null)
-                loadOrders()
+            if (confirm(`¿Desea despachar el pedido #${selectedOrder.nro_pedido} con el producto ${modelName} (${color} Talle ${size})?`)) {
+                const result = await completeDispatch(selectedOrder.id, qrCode)
+
+                if (result.success) {
+                    alert('✅ Pedido despachado con éxito')
+                    setSelectedOrder(null)
+                    loadOrders()
+                } else {
+                    setError(result.message || 'Error desconocido al procesar el despacho.')
+                }
             }
         } catch (err) {
-            setError(err.message)
+            console.error(err)
+            setError(typeof err === 'string' ? err : (err.message || 'Error inesperado durante el despacho.'))
         }
     }
 
