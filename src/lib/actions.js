@@ -828,9 +828,9 @@ export async function syncProductToTiendanube(modeloId) {
 
             Object.entries(stockPorTalle).forEach(([talle, stock]) => {
                 tnVariants.push({
-                    price: variante.precio_lista,
+                    price: String(variante.precio_lista),
                     stock: stock,
-                    options: [variante.color, talle],
+                    values: [{ es: variante.color }, { es: String(talle) }],
                     // SKU basado en modelo + color + talle para vinculación automática
                     sku: `${modelo.codigo_proveedor}-${variante.color.substring(0, 3)}-${talle}`.toUpperCase()
                 });
