@@ -1031,6 +1031,7 @@ export async function recordOnlineOrder(orderData) {
 
     // 1. Create order record
     const clienteNombre = customer?.name || orderData.shipping_address?.first_name || 'Cliente Online';
+    const gateway = orderData.gateway || orderData.payment_details?.method || 'TIENDANUBE';
 
     const { data: pedido, error: pError } = await supabase
         .from('pedidos_online')
@@ -1039,7 +1040,8 @@ export async function recordOnlineOrder(orderData) {
             cliente_nombre: clienteNombre,
             nro_pedido: String(number),
             items_raw: products,
-            estado: 'PENDIENTE_DESPACHO'
+            estado: 'PENDIENTE_DESPACHO',
+            medio_pago: gateway
         }])
         .select()
         .single();
@@ -1144,12 +1146,13 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
         const { data: { user } } = await supabase.auth.getUser();
 
         const montoVenta = customPrice !== null ? parseFloat(customPrice) : (unidad.variantes?.precio_lista || 0);
+        const medioPagoFinal = order.medio_pago || 'TIENDANUBE';
 
         const { data: venta, error: vErr } = await supabase
             .from('ventas')
             .insert([{
                 total: montoVenta,
-                medio_pago: 'TIENDANUBE',
+                medio_pago: medioPagoFinal,
                 user_id: user?.id || null
             }])
             .select()

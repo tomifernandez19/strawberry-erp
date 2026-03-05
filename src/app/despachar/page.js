@@ -135,7 +135,12 @@ export default function DespacharPage() {
                                             )}
                                         </div>
                                         <p style={{ fontSize: '0.9rem', opacity: 0.8, marginTop: '4px' }}>👤 {order.cliente_nombre}</p>
-                                        <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>📅 {new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                                            <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>📅 {new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                            {order.medio_pago && (
+                                                <span style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 'bold', opacity: 0.8 }}>💰 {order.medio_pago}</span>
+                                            )}
+                                        </div>
                                     </div>
                                     <button className="btn-primary" style={{ padding: '10px 20px' }} onClick={() => setSelectedOrder(order)}>Despachar</button>
                                 </div>
