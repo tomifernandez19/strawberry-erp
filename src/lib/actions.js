@@ -654,6 +654,10 @@ export async function signOutAction() {
 
 export async function findUnitBySpecs(modelDescription, color, talle) {
     const supabase = createClient();
+
+    // Tiendanube sometimes sends "Product - Variant". We need the base name.
+    const baseModelName = modelDescription.split(' - ')[0].trim();
+
     // 1. Get the variant through a join
     const { data: variants, error: vError } = await supabase
         .from('variantes')
@@ -661,30 +665,30 @@ export async function findUnitBySpecs(modelDescription, color, talle) {
             id, color,
             modelos!inner(descripcion)
         `)
-        .eq('modelos.descripcion', modelDescription)
-        .ilike('color', color);
+        .eq('modelos.descripcion', baseModelName)
+        // Try exact match or ilike for flexibility
+        .or(`color.ilike.${color},color.ilike.%${color}%`);
 
     if (vError || !variants || variants.length === 0) {
-        throw new Error("No se encontró el modelo o color especificado");
+        console.error(`No variant found for ${baseModelName} / ${color}`);
+        throw new Error(`No se encontró el modelo ${baseModelName} o color ${color}`);
     }
 
-    const variantId = variants[0].id;
+    // Among matching variants, pick the one that has stock in that size
+    for (const variant of variants) {
+        const { data: unit, error: uError } = await supabase
+            .from('unidades')
+            .select('codigo_qr')
+            .eq('variante_id', variant.id)
+            .eq('talle_especifico', String(talle))
+            .eq('estado', 'DISPONIBLE')
+            .limit(1)
+            .maybeSingle();
 
-    // 2. Find one unit in stock
-    const { data: unit, error: uError } = await supabase
-        .from('unidades')
-        .select('codigo_qr')
-        .eq('variante_id', variantId)
-        .eq('talle_especifico', talle)
-        .eq('estado', 'DISPONIBLE')
-        .limit(1)
-        .maybeSingle();
-
-    if (uError || !unit) {
-        throw new Error(`No hay stock disponible para ${modelDescription} (${color}) en talle ${talle}`);
+        if (unit) return unit.codigo_qr;
     }
 
-    return unit.codigo_qr;
+    throw new Error(`No hay stock disponible para ${baseModelName} (${color}) en talle ${talle}`);
 }
 
 export async function getSearchSpecs() {
@@ -948,10 +952,9 @@ export async function recordOnlineOrder(orderData) {
     const supabase = createClient();
     const { id: tnId, customer, products, number } = orderData;
 
-    console.log("Recording Online Order:", number);
+    console.log(`[Webhook] Processing Order #${number} (${tnId})`);
 
-    // 1. Crear el registro del pedido
-    // Extraemos el nombre del cliente con más cuidado
+    // 1. Create order record
     const clienteNombre = customer?.name || orderData.shipping_address?.first_name || 'Cliente Online';
 
     const { data: pedido, error: pError } = await supabase
@@ -967,27 +970,52 @@ export async function recordOnlineOrder(orderData) {
         .single();
 
     if (pError) {
-        console.error("Error inserting order into DB:", pError);
+        console.error(`[Webhook] Error saving order #${number}:`, pError.message);
         throw pError;
     }
 
-    // 2. Intentar reservar unidades
+    // 2. Try to reserve units
     for (const prod of products) {
         try {
-            // Buscamos el talle y color en la descripción o variantes de TN
-            const colorRaw = prod.variant_values?.[0] || '';
-            const talleRaw = prod.variant_values?.[1] || '';
+            // Tiendanube sends variant values in order. We assume [Color, Talle]
+            const colorRaw = (prod.variant_values?.[0] || '').trim();
+            const talleRaw = (prod.variant_values?.[1] || '').trim();
+
+            console.log(`[Webhook] Searching unit for: ${prod.name} | ${colorRaw} | ${talleRaw}`);
 
             const qrCode = await findUnitBySpecs(prod.name, colorRaw, talleRaw);
-            if (qrCode) {
-                const { data: unit } = await supabase.from('unidades').select('id').eq('codigo_qr', qrCode).single();
 
-                await supabase.from('unidades').update({ estado: 'RESERVADO_ONLINE' }).eq('id', unit.id);
-                await supabase.from('pedidos_online').update({ unidad_reservada_id: unit.id }).eq('id', pedido.id);
-                console.log(`Unit ${qrCode} reserved for order ${number}`);
+            if (qrCode) {
+                // Find unit ID
+                const { data: unit } = await supabase
+                    .from('unidades')
+                    .select('id')
+                    .eq('codigo_qr', qrCode)
+                    .single();
+
+                if (unit) {
+                    // Update unit to RESERVADO_ONLINE
+                    const { error: uErr } = await supabase
+                        .from('unidades')
+                        .update({
+                            estado: 'RESERVADO_ONLINE',
+                            fecha_venta: new Date().toISOString() // Reserve date
+                        })
+                        .eq('id', unit.id);
+
+                    if (!uErr) {
+                        // Link unit to order
+                        await supabase
+                            .from('pedidos_online')
+                            .update({ unidad_reservada_id: unit.id })
+                            .eq('id', pedido.id);
+
+                        console.log(`[Webhook] SUCCESS: Unit ${qrCode} reserved for order #${number}`);
+                    }
+                }
             }
         } catch (e) {
-            console.log("Could not auto-reserve unit:", e.message);
+            console.warn(`[Webhook] Auto-reservation failed for item in #${number}:`, e.message);
         }
     }
 
