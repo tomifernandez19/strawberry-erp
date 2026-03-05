@@ -662,14 +662,14 @@ export async function findUnitBySpecs(modelDescription, color, talle, sku = null
 
     console.log(`[Matching] Target: ${baseModelName} | ${cleanColor} | T${cleanTalle} | SKU: ${sku}`);
 
-    // 1. Get variants for this model
+    // 1. Get variants for this model (using ilike for case-insensitivity)
     const { data: variants, error: vError } = await supabase
         .from('variantes')
         .select(`
             id, color,
             modelos!inner(id, descripcion, codigo_proveedor)
         `)
-        .eq('modelos.descripcion', baseModelName);
+        .ilike('modelos.descripcion', baseModelName);
 
     if (vError || !variants || variants.length === 0) {
         throw new Error(`No se encontró el modelo "${baseModelName}" en el ERP`);
