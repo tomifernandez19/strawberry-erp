@@ -808,6 +808,12 @@ export async function syncProductToTiendanube(modeloId) {
         return { success: false, message: "Faltan las credenciales de Tiendanube en .env.local" };
     }
 
+    const baseUrl = `https://api.tiendanube.com/v1/${storeId}`;
+    const headers = {
+        'Authentication': `bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+    };
+
     try {
         const { data: modelo, error: mErr } = await supabase
             .from('modelos')
@@ -831,7 +837,6 @@ export async function syncProductToTiendanube(modeloId) {
                     price: String(variante.precio_lista),
                     stock: stock,
                     values: [{ es: variante.color }, { es: String(talle) }],
-                    // SKU basado en modelo + color + talle para vinculación automática
                     sku: `${modelo.codigo_proveedor}-${variante.color.substring(0, 3)}-${talle}`.toUpperCase()
                 });
             });
@@ -841,63 +846,97 @@ export async function syncProductToTiendanube(modeloId) {
             return { success: false, message: "No hay stock disponible para sincronizar" };
         }
 
-        const tnProduct = {
-            name: { es: modelo.descripcion },
-            description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` },
-            attributes: [{ es: 'Color' }, { es: 'Talle' }],
-            variants: tnVariants
-        };
+        // 1. Verificar si el producto ya existe en Tiendanube
+        let tnProductId = modelo.tiendanube_id;
+        let existingProduct = null;
 
-        let response;
-        let method = 'POST';
-        let url = `https://api.tiendanube.com/v1/${storeId}/products`;
+        if (tnProductId) {
+            const res = await fetch(`${baseUrl}/products/${tnProductId}`, { headers });
+            if (res.ok) existingProduct = await res.json();
+        }
 
-        if (modelo.tiendanube_id) {
-            url = `${url}/${modelo.tiendanube_id}`;
-            method = 'PUT';
-            response = await fetch(url, {
-                method,
-                headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        if (!existingProduct) {
+            // Intentar buscar por nombre
+            const searchRes = await fetch(`${baseUrl}/products?q=${encodeURIComponent(modelo.descripcion)}`, { headers });
+            const searchData = await searchRes.json();
+            existingProduct = Array.isArray(searchData) ? searchData.find(p => p.name.es === modelo.descripcion) : null;
+            if (existingProduct) {
+                tnProductId = existingProduct.id;
+                await supabase.from('modelos').update({ tiendanube_id: String(tnProductId) }).eq('id', modelo.id);
+            }
+        }
+
+        if (!existingProduct) {
+            // MODO CREACIÓN (POST)
+            const tnProduct = {
+                name: { es: modelo.descripcion },
+                description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` },
+                attributes: [{ es: 'Color' }, { es: 'Talle' }],
+                variants: tnVariants
+            };
+
+            const response = await fetch(`${baseUrl}/products`, {
+                method: 'POST',
+                headers,
                 body: JSON.stringify(tnProduct)
             });
-        } else {
-            // Buscar por nombre si no tenemos ID
-            const searchRes = await fetch(`${url}?q=${encodeURIComponent(modelo.descripcion)}`, {
-                headers: { 'Authentication': `bearer ${accessToken}` }
-            });
-            const searchData = await searchRes.json();
-            const existing = Array.isArray(searchData) ? searchData.find(p => p.name.es === modelo.descripcion) : null;
 
-            if (existing) {
-                url = `${url}/${existing.id}`;
-                method = 'PUT';
-                await supabase.from('modelos').update({ tiendanube_id: String(existing.id) }).eq('id', modelo.id);
+            if (!response.ok) {
+                const err = await response.text();
+                return { success: false, message: `Error al crear: ${response.status}`, details: err };
             }
 
-            response = await fetch(url, {
-                method,
-                headers: { 'Authentication': `bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(tnProduct)
+            const newProd = await response.json();
+            await supabase.from('modelos').update({ tiendanube_id: String(newProd.id) }).eq('id', modelo.id);
+            return { success: true, message: "Producto creado y sincronizado con éxito" };
+        } else {
+            // MODO ACTUALIZACIÓN (PUT)
+            // 1. Actualizar datos base (Sin el campo 'variants')
+            const updateProdRes = await fetch(`${baseUrl}/products/${tnProductId}`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({
+                    name: { es: modelo.descripcion },
+                    description: { es: `Modelo ${modelo.descripcion} - ${modelo.marca}` }
+                })
             });
-        }
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Tiendanube API Error:', response.status, errorText);
-            return {
-                success: false,
-                message: `Error de Tiendanube (${response.status})`,
-                details: errorText
-            };
-        }
+            if (!updateProdRes.ok) {
+                const err = await updateProdRes.text();
+                return { success: false, message: "Error al actualizar info base", details: err };
+            }
 
-        const responseData = await response.json();
-        // Guardar ID si es nuevo
-        if (method === 'POST' && responseData.id) {
-            await supabase.from('modelos').update({ tiendanube_id: String(responseData.id) }).eq('id', modelo.id);
-        }
+            // 2. Sincronizar variantes una por una
+            for (const localV of tnVariants) {
+                // Buscamos si la variante ya existe en TN (por SKU o por valores)
+                const tnV = existingProduct.variants.find(v =>
+                    v.sku === localV.sku ||
+                    (v.values[0]?.es === localV.values[0].es && v.values[1]?.es === localV.values[1].es)
+                );
 
-        return { success: true, message: "Sincronización exitosa" };
+                if (tnV) {
+                    // Actualizar variante existente
+                    await fetch(`${baseUrl}/products/${tnProductId}/variants/${tnV.id}`, {
+                        method: 'PUT',
+                        headers,
+                        body: JSON.stringify({
+                            price: localV.price,
+                            stock: localV.stock,
+                            sku: localV.sku
+                        })
+                    });
+                } else {
+                    // Crear variante nueva
+                    await fetch(`${baseUrl}/products/${tnProductId}/variants`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify(localV)
+                    });
+                }
+            }
+
+            return { success: true, message: "Producto y stock actualizados correctamente" };
+        }
     } catch (err) {
         console.error('Sync Exception:', err);
         return { success: false, message: "Error interno: " + err.message };
