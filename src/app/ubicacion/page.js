@@ -1,6 +1,6 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
-import { Html5QrcodeScanner } from 'html5-qrcode'
+import { useState } from 'react'
+import QRScanner from '@/components/QRScanner'
 import { assignLocation } from '@/lib/actions'
 import Link from 'next/link'
 
@@ -9,29 +9,13 @@ export default function UbicacionPage() {
     const [zona, setZona] = useState('')
     const [status, setStatus] = useState(null) // { success, message, details }
     const [loading, setLoading] = useState(false)
-    const scannerRef = useRef(null)
 
-    useEffect(() => {
-        const scanner = new Html5QrcodeScanner('reader', {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            rememberLastUsedCamera: true,
-            supportedScanTypes: [0] // Camera only
-        })
-
-        scanner.render((decodedText) => {
-            setScannedQR(decodedText)
-            setStatus(null)
-            // Scroll to the zone input
-            document.getElementById('zona-input')?.focus()
-        }, (error) => {
-            // silent scan
-        })
-
-        return () => {
-            scanner.clear().catch(e => console.error(e))
-        }
-    }, [])
+    const handleScan = (decodedText) => {
+        setScannedQR(decodedText)
+        setStatus(null)
+        // Auto-focus on the zone input
+        document.getElementById('zona-input')?.focus()
+    }
 
     const handleAssign = async (e) => {
         e.preventDefault()
@@ -43,9 +27,8 @@ export default function UbicacionPage() {
             if (res.success) {
                 setStatus({ success: true, message: '¡Ubicación guardada!', details: res.details })
                 setScannedQR('')
-                // Don't clear zone if the user is assigning many items to the same zone
-                // but let's clear it if they want to be sure
-                // setZona('') 
+                // Clear the zone input after successfully assigning
+                // setZona('') // keeping it for batch processing
             } else {
                 setStatus({ success: false, message: res.message })
             }
@@ -66,11 +49,9 @@ export default function UbicacionPage() {
                 <p style={{ opacity: 0.7 }}>Asignar zona de guardado a cada par</p>
             </header>
 
-            <section className="card">
-                <div id="reader"></div>
-            </section>
+            <QRScanner onScanSuccess={handleScan} label="Escanear zapato" />
 
-            <form onSubmit={handleAssign} className="card grid" style={{ gap: '15px' }}>
+            <form onSubmit={handleAssign} className="card grid" style={{ gap: '15px', marginTop: '20px' }}>
                 <div>
                     <label style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '5px', display: 'block' }}>QR Escaneado:</label>
                     <input
@@ -79,7 +60,7 @@ export default function UbicacionPage() {
                         onChange={(e) => setScannedQR(e.target.value.toUpperCase())}
                         placeholder="Escaneá o escribí (ej: ST-000123)"
                         className="input-field"
-                        style={{ marginBottom: 0 }}
+                        style={{ marginBottom: 0, textTransform: 'uppercase' }}
                         required
                     />
                 </div>
@@ -112,7 +93,8 @@ export default function UbicacionPage() {
             {status && (
                 <div className="card" style={{
                     border: `1px solid ${status.success ? 'var(--accent)' : '#ef4444'}`,
-                    backgroundColor: status.success ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)'
+                    backgroundColor: status.success ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)',
+                    marginTop: '15px'
                 }}>
                     <p style={{ fontWeight: 'bold', color: status.success ? 'var(--accent)' : '#ef4444' }}>
                         {status.message}
