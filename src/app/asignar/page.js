@@ -31,23 +31,34 @@ export default function AsignarQRPage() {
         setLoading(false)
     }
 
+    const [isProcessing, setIsProcessing] = useState(false)
+
     const handleScanSuccess = async (qrCode) => {
-        if (!selectedUnit) return
+        if (!selectedUnit || isProcessing) return
+        setIsProcessing(true)
+        setMessage('')
 
         try {
             const res = await assignQRToUnit(selectedUnit.id, qrCode)
             if (res.success) {
                 setMessage(`✅ ${selectedUnit.variantes.modelos.descripcion} (Talle ${selectedUnit.talle_especifico}) asignado!`)
 
-                // Remove from local list and move to next
-                const remaining = pendingUnits.filter(u => u.id !== selectedUnit.id)
-                setPendingUnits(remaining)
-                setSelectedUnit(remaining.length > 0 ? remaining[0] : null)
+                // Advance automatically
+                setTimeout(() => {
+                    const remaining = pendingUnits.filter(u => u.id !== selectedUnit.id)
+                    setPendingUnits(remaining)
+                    const next = remaining.length > 0 ? remaining[0] : null
+                    setSelectedUnit(next)
+                    setIsProcessing(false)
+                    // Clear message after a while or leave it
+                }, 500)
             } else {
                 alert(res.message)
+                setIsProcessing(false)
             }
         } catch (err) {
             alert(err.message)
+            setIsProcessing(false)
         }
     }
 

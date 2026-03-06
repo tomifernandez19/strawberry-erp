@@ -175,6 +175,7 @@ export async function assignQRToUnit(unitId, qrCode) {
             .maybeSingle()
 
         if (existing) {
+            if (existing.id === unitId) return { success: true }; // All good, already assigned to this one
             throw new Error('Este código QR ya está asignado a otro par.')
         }
 
