@@ -1,0 +1,214 @@
+'use client'
+import { useState, useEffect } from 'react'
+import QRScanner from '@/components/QRScanner'
+import { getUnitForExchange, getUnitForSale, recordProductExchange } from '@/lib/actions'
+import Link from 'next/link'
+
+export default function CambiosPage() {
+    const [oldUnit, setOldUnit] = useState(null)
+    const [newUnit, setNewUnit] = useState(null)
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
+    const [success, setSuccess] = useState(false)
+
+    // Payment for difference
+    const [medioPago, setMedioPago] = useState('EFECTIVO')
+    const [montoEfectivo, setMontoEfectivo] = useState('')
+    const [montoOtro, setMontoOtro] = useState('')
+    const [otroMedioPago, setOtroMedioPago] = useState('TARJETA_DEBITO')
+
+    const handleScanOld = async (qr) => {
+        setLoading(true)
+        setError('')
+        try {
+            const res = await getUnitForExchange(qr)
+            if (res.success) {
+                setOldUnit(res.data)
+            } else {
+                setError(res.message)
+            }
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleScanNew = async (qr) => {
+        setLoading(true)
+        setError('')
+        try {
+            const res = await getUnitForSale(qr)
+            if (res.success) {
+                setNewUnit(res.data)
+            } else {
+                setError(res.message)
+            }
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const difference = (newUnit?.variantes.precio_lista || 0) - (oldUnit?.ventas?.total || 0)
+
+    // Pre-calculated prices for split payment calculation
+    const precioEfectivoDiff = Math.round(difference * (100 / 121))
+
+    const handleConfirmExchange = async () => {
+        setLoading(true)
+        try {
+            const options = medioPago === 'DIVIDIR_PAGOS' ? {
+                monto_efectivo: parseFloat(montoEfectivo),
+                monto_otro: parseFloat(montoOtro),
+                otro_medio_pago: otroMedioPago
+            } : {}
+
+            const res = await recordProductExchange(
+                oldUnit.id,
+                newUnit.codigo_qr,
+                difference > 0 ? difference : 0,
+                medioPago,
+                options
+            )
+
+            if (res.success) {
+                setSuccess(true)
+            } else {
+                setError(res.message)
+            }
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    if (success) {
+        return (
+            <div className="grid mt-lg text-center">
+                <div style={{ fontSize: '4rem' }}>🔄✅</div>
+                <h2>Cambio Realizado</h2>
+                <div className="card mt-lg">
+                    <p style={{ opacity: 0.6 }}>Nuevo par entregado:</p>
+                    <h4>{newUnit.variantes.modelos.descripcion}</h4>
+                    <p>{newUnit.variantes.color} • Talle {newUnit.talle_especifico}</p>
+                </div>
+                <Link href="/" className="btn-primary mt-lg">Volver al Inicio</Link>
+            </div>
+        )
+    }
+
+    return (
+        <div className="grid mt-lg">
+            <header className="text-center">
+                <h1>Procesar Cambio</h1>
+                <p style={{ opacity: 0.7 }}>Gestión de devoluciones y cambios</p>
+            </header>
+
+            {error && <div className="card text-center" style={{ background: 'rgba(239, 68, 68, 0.1)', borderColor: '#ef4444' }}>{error}</div>}
+
+            {/* STEP 1: SCAN OLD PRODUCT */}
+            {!oldUnit ? (
+                <div className="grid">
+                    <QRScanner onScanSuccess={handleScanOld} label="1. Escanee el producto que DEVUELVEN" />
+                </div>
+            ) : (
+                <div className="card" style={{ border: '1px solid var(--accent)', background: 'rgba(16, 185, 129, 0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>PRODUCTO DEVUELTO:</p>
+                            <h4 style={{ margin: 0 }}>{oldUnit.variantes.modelos.descripcion}</h4>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Talle {oldUnit.talle_especifico} • Vendido a: <strong>${oldUnit.ventas?.total.toLocaleString()}</strong></p>
+                        </div>
+                        <button className="btn-secondary" onClick={() => setOldUnit(null)} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>X Cambiar</button>
+                    </div>
+                </div>
+            )}
+
+            {/* STEP 2: SCAN NEW PRODUCT */}
+            {oldUnit && !newUnit && (
+                <div className="grid mt-md">
+                    <QRScanner onScanSuccess={handleScanNew} label="2. Escanee el producto que se LLEVAN" />
+                </div>
+            )}
+
+            {/* STEP 3: SHOW DIFFERENCE AND PAYMENT */}
+            {oldUnit && newUnit && (
+                <div className="grid mt-md">
+                    <div className="card" style={{ border: '1px solid var(--accent)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>PRODUCTO NUEVO:</p>
+                                <h4 style={{ margin: 0 }}>{newUnit.variantes.modelos.descripcion}</h4>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Talle {newUnit.talle_especifico} • Precio Lista: <strong>${newUnit.variantes.precio_lista.toLocaleString()}</strong></p>
+                            </div>
+                            <button className="btn-secondary" onClick={() => setNewUnit(null)} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>X Cambiar</button>
+                        </div>
+                    </div>
+
+                    <div className="card mt-md text-center" style={{ background: difference > 0 ? 'rgba(234, 179, 8, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>DIFERENCIA A COBRAR:</p>
+                        <h2 style={{ margin: 0, color: difference > 0 ? '#eab308' : 'var(--accent)' }}>
+                            $ {difference > 0 ? difference.toLocaleString() : '0 (Sin cargo)'}
+                        </h2>
+                        {difference < 0 && <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '5px' }}>Hay un saldo a favor del cliente de ${Math.abs(difference).toLocaleString()}</p>}
+                    </div>
+
+                    {difference > 0 && (
+                        <div className="grid mt-md">
+                            <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Medio de pago para la diferencia:</label>
+                            <select value={medioPago} onChange={(e) => setMedioPago(e.target.value)} className="input-field">
+                                <option value="EFECTIVO">Efectivo (Con Descuento) 💵</option>
+                                <option value="TRANSFERENCIA">Transferencia 📱</option>
+                                <option value="TARJETA_DEBITO">Tarjeta Débito 💳</option>
+                                <option value="TARJETA_CREDITO">Tarjeta Crédito 💳</option>
+                                <option value="DIVIDIR_PAGOS">Dividir Pago ⚖️</option>
+                            </select>
+
+                            {medioPago === 'EFECTIVO' && (
+                                <div className="card text-center" style={{ background: 'var(--secondary)' }}>
+                                    <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>Total con descuento Efectivo:</p>
+                                    <h3 style={{ margin: 0, color: 'var(--accent)' }}>$ {Math.round(difference * (100 / 121)).toLocaleString()}</h3>
+                                </div>
+                            )}
+
+                            {medioPago === 'DIVIDIR_PAGOS' && (
+                                <div className="card grid mt-sm" style={{ gap: '10px', background: 'rgba(255,255,255,0.03)' }}>
+                                    <input
+                                        type="number"
+                                        placeholder="Monto Efectivo"
+                                        className="input-field"
+                                        value={montoEfectivo}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setMontoEfectivo(val);
+                                            if (val) {
+                                                const portion = parseFloat(val) / precioEfectivoDiff;
+                                                const remaining = Math.round(difference * (1 - portion));
+                                                setMontoOtro(remaining > 0 ? remaining : 0);
+                                            }
+                                        }}
+                                    />
+                                    <select value={otroMedioPago} onChange={(e) => setOtroMedioPago(e.target.value)} className="input-field">
+                                        <option value="TARJETA_DEBITO">Tarjeta Débito 💳</option>
+                                        <option value="TARJETA_CREDITO">Tarjeta Crédito 💳</option>
+                                        <option value="TRANSFERENCIA">Transferencia 📱</option>
+                                    </select>
+                                    <input type="number" value={montoOtro} readOnly className="input-field" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--accent)' }} />
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <button className="btn-primary mt-lg" style={{ height: '60px' }} onClick={handleConfirmExchange} disabled={loading}>
+                        {loading ? 'Procesando...' : 'Confirmar Cambio ✅'}
+                    </button>
+                </div>
+            )}
+
+            <div style={{ height: '80px' }}></div>
+        </div>
+    )
+}

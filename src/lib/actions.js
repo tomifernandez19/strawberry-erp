@@ -1289,3 +1289,81 @@ export async function assignLocation(qrCode, location) {
         return { success: false, message: err.message };
     }
 }
+
+/**
+ * Fetches unit details for a previously sold item to process an exchange.
+ */
+export async function getUnitForExchange(qrCode) {
+    const supabase = createClient();
+    try {
+        const { data: unidad, error } = await supabase
+            .from('unidades')
+            .select('*, variantes(*, modelos(*, descripcion, marca)), ventas(*)')
+            .eq('codigo_qr', qrCode)
+            .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
+            .maybeSingle();
+
+        if (error || !unidad) {
+            return { success: false, message: 'Este QR no figura como vendido o no existe.' };
+        }
+
+        return { success: true, data: unidad };
+    } catch (err) {
+        return { success: false, message: err.message };
+    }
+}
+
+/**
+ * Records a product exchange, returning one to stock and selling another.
+ */
+export async function recordProductExchange(oldUnitId, newUnitQR, difference, medioPago, options = {}) {
+    const supabase = createClient();
+    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null } = options;
+
+    try {
+        // 1. Return old unit to stock
+        await supabase.from('unidades').update({
+            estado: 'DISPONIBLE',
+            venta_id: null,
+            fecha_venta: null
+        }).eq('id', oldUnitId);
+
+        // 2. Process new unit sale
+        const result = await getUnitForSale(newUnitQR);
+        if (!result.success) throw new Error(result.message);
+        const newUnit = result.data;
+
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // 3. Record difference sale if > 0
+        let ventaId = null;
+        if (difference > 0) {
+            const { data: venta, error: vErr } = await supabase
+                .from('ventas')
+                .insert([{
+                    medio_pago,
+                    total: difference,
+                    user_id: user?.id || null,
+                    monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? difference : 0),
+                    monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
+                    otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
+                    tipo: 'DIFERENCIA_CAMBIO'
+                }])
+                .select()
+                .single();
+            if (vErr) throw vErr;
+            ventaId = venta.id;
+        }
+
+        // 4. Update new unit status
+        await supabase.from('unidades').update({
+            estado: 'VENDIDO',
+            venta_id: ventaId,
+            fecha_venta: new Date().toISOString()
+        }).eq('id', newUnit.id);
+
+        return { success: true };
+    } catch (err) {
+        return { success: false, message: err.message };
+    }
+}
