@@ -8,6 +8,7 @@ import { createClient } from './supabase/server'
 export async function createPurchase({ nro_remito, items }) {
     const supabase = createClient();
     try {
+        console.log("Creating Purchase with items:", items?.length);
         // 1. Process items to ensure models and variants exist
         const processedItems = []
 
@@ -61,23 +62,25 @@ export async function createPurchase({ nro_remito, items }) {
                         costo_promedio: costo_unitario,
                         imagen_url: imagen_url
                     }])
-                    .select()
+                    .select('id')
                     .single()
-                if (vErr) throw vErr
+                if (vErr) throw new Error(vErr.message)
                 variante = newVar
             } else if (imagen_url && !variante.imagen_url) {
                 // Update image if existing variant doesn't have one
-                await supabase
+                const { error: updErr } = await supabase
                     .from('variantes')
                     .update({ imagen_url })
                     .eq('id', variante.id)
+                if (updErr) console.warn("Could not update image:", updErr.message)
             }
 
             processedItems.push({ ...item, variante_id: variante.id })
         }
 
         // 2. Insert the purchase (compra)
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
         const overallSupplier = processedItems[0]?.codigo_proveedor?.substring(0, 2) || 'ST'
         const { data: compra, error: compraError } = await supabase
             .from('compras')
@@ -86,10 +89,10 @@ export async function createPurchase({ nro_remito, items }) {
                 nro_remito,
                 user_id: user?.id || null
             }])
-            .select()
+            .select('id')
             .single()
 
-        if (compraError) throw compraError
+        if (compraError) throw new Error(compraError.message)
 
         // 3. Insert detail and units
         for (const item of processedItems) {
@@ -110,10 +113,10 @@ export async function createPurchase({ nro_remito, items }) {
             }))
 
             const { error: unitsError } = await supabase.from('unidades').insert(unitsToCreate)
-            if (unitsError) throw unitsError
+            if (unitsError) throw new Error(unitsError.message)
         }
 
-        return { success: true, data: compra };
+        return { success: true, id: compra.id };
     } catch (err) {
         console.error("CreatePurchase Error:", err);
         return { success: false, message: err.message };
@@ -1499,13 +1502,15 @@ export async function uploadProductImage(variantId, base64Data) {
                 upsert: true
             });
 
-        if (error) throw error;
+        if (error) throw new Error(error.message);
 
         // Get Public URL
-        const { data: { publicUrl } } = supabase
+        const { data: qUrl } = supabase
             .storage
             .from('productos')
             .getPublicUrl(fileName);
+
+        const publicUrl = qUrl.publicUrl;
 
         // Update variant if provided
         if (variantId) {
@@ -1514,7 +1519,7 @@ export async function uploadProductImage(variantId, base64Data) {
                 .update({ imagen_url: publicUrl })
                 .eq('id', variantId);
 
-            if (vErr) throw vErr;
+            if (vErr) throw new Error(vErr.message);
         }
 
         return { success: true, url: publicUrl };
