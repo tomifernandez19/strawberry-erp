@@ -163,10 +163,27 @@ export default function VenderPage() {
                                     <input
                                         type="number"
                                         value={montoEfectivo}
-                                        onChange={(e) => setMontoEfectivo(e.target.value)}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setMontoEfectivo(val);
+                                            // Auto-calculate the remaining amount
+                                            if (val && !isNaN(val)) {
+                                                const efeAmount = parseFloat(val);
+                                                // 1. How much of the "Cash Price" did they pay?
+                                                const portionOfCashPrice = efeAmount / precioEfectivo;
+                                                // 2. That same portion is subtracted from the List Price
+                                                const remainingListPrice = Math.round(precioLista * (1 - portionOfCashPrice));
+                                                setMontoOtro(remainingListPrice > 0 ? remainingListPrice : 0);
+                                            } else {
+                                                setMontoOtro('');
+                                            }
+                                        }}
                                         className="input-field"
-                                        placeholder="0.00"
+                                        placeholder={`Máx: $${precioEfectivo}`}
                                     />
+                                    <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '5px' }}>
+                                        Este monto tiene el 21% de descuento aplicado.
+                                    </p>
                                 </div>
                                 <div>
                                     <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Segundo Medio de Pago:</label>
@@ -182,14 +199,17 @@ export default function VenderPage() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Monto Restante:</label>
+                                    <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Monto Restante (Auto):</label>
                                     <input
                                         type="number"
                                         value={montoOtro}
-                                        onChange={(e) => setMontoOtro(e.target.value)}
+                                        readOnly
                                         className="input-field"
-                                        placeholder="0.00"
+                                        style={{ backgroundColor: 'rgba(255,255,255,0.05)', cursor: 'not-allowed', color: 'var(--accent)', fontWeight: 'bold' }}
                                     />
+                                    <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '5px' }}>
+                                        Calculado proporcionalmente al Precio Lista.
+                                    </p>
                                 </div>
                             </div>
                         )}
