@@ -7,6 +7,9 @@ import { getUnitForSale, recordSale } from '@/lib/actions'
 export default function VenderPage() {
     const [previewUnit, setPreviewUnit] = useState(null)
     const [saleResult, setSaleResult] = useState(null)
+    const [customerName, setCustomerName] = useState('')
+    const [customerPhone, setCustomerPhone] = useState('')
+    const [customerEmail, setCustomerEmail] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [medioPago, setMedioPago] = useState('EFECTIVO')
@@ -48,11 +51,18 @@ export default function VenderPage() {
         setLoading(true)
         setError('')
         try {
-            const options = medioPago === 'DIVIDIR_PAGOS' ? {
-                monto_efectivo: parseFloat(montoEfectivo),
-                monto_otro: parseFloat(montoOtro),
-                otro_medio_pago: otroMedioPago
-            } : {}
+            const options = {
+                ...(medioPago === 'DIVIDIR_PAGOS' ? {
+                    monto_efectivo: parseFloat(montoEfectivo),
+                    monto_otro: parseFloat(montoOtro),
+                    otro_medio_pago: otroMedioPago
+                } : {}),
+                customerData: {
+                    nombre: customerName,
+                    telefono: customerPhone,
+                    email: customerEmail
+                }
+            }
 
             const result = await recordSale(previewUnit.codigo_qr, medioPago, options)
             setSaleResult(result)
@@ -71,6 +81,9 @@ export default function VenderPage() {
         setMontoEfectivo('')
         setMontoOtro('')
         setMedioPago('EFECTIVO')
+        setCustomerName('')
+        setCustomerPhone('')
+        setCustomerEmail('')
     }
 
     // New calculated prices
@@ -222,12 +235,44 @@ export default function VenderPage() {
                             </h2>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '10px', marginTop: 'var(--spacing-lg)' }}>
-                            <button className="btn-primary" style={{ flex: 2 }} onClick={handleConfirmSale} disabled={loading}>
-                                {loading ? 'Procesando...' : 'Confirmar Venta'}
-                            </button>
-                            <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setPreviewUnit(null)}>
+                        <div className="mt-lg" style={{ borderTop: '1px solid var(--card-border)', paddingTop: '15px' }}>
+                            <p style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '10px' }}>DATOS DEL CLIENTE (OPCIONAL):</p>
+                            <div className="grid" style={{ gap: '10px' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Nombre completo"
+                                    className="input-field"
+                                    value={customerName}
+                                    onChange={(e) => setCustomerName(e.target.value)}
+                                    style={{ fontSize: '0.85rem' }}
+                                />
+                                <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <input
+                                        type="tel"
+                                        placeholder="Teléfono"
+                                        className="input-field"
+                                        value={customerPhone}
+                                        onChange={(e) => setCustomerPhone(e.target.value)}
+                                        style={{ fontSize: '0.85rem' }}
+                                    />
+                                    <input
+                                        type="email"
+                                        placeholder="Email"
+                                        className="input-field"
+                                        value={customerEmail}
+                                        onChange={(e) => setCustomerEmail(e.target.value)}
+                                        style={{ fontSize: '0.85rem' }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid mt-lg" style={{ gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                            <button className="btn-secondary" onClick={resetSale} disabled={loading}>
                                 Cancelar
+                            </button>
+                            <button className="btn-primary" onClick={handleConfirmSale} disabled={loading} style={{ background: 'var(--accent)' }}>
+                                {loading ? 'Procesando...' : 'Confirmar Venta'}
                             </button>
                         </div>
                     </section>

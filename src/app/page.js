@@ -85,75 +85,85 @@ export default function HomePage() {
         setLoadingMovements(false)
     }
 
-    const PendingCards = () => (
-        <div className="grid mt-md" style={{ gap: '15px' }}>
-            <Link href="/asignar" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px' }}>
-                    <div>
-                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Sin Etiquetar (QR)</h4>
-                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingQR} unidades pendientes</p>
-                    </div>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingQR > 0 ? '#ef4444' : 'var(--accent)' }}>
-                        {pendingQR}
-                    </span>
-                </section>
-            </Link>
+    const renderCard = (type, mode = 'TOP') => {
+        let count = 0;
+        let title = '';
+        let subtitle = '';
+        let href = '';
+        let borderColor = '';
+        let bg = '';
+        let accentColor = '';
+        let extra = null;
 
-            <Link href="/ubicacion" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <section className="card" style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px' }}>
-                    <div>
-                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Sin Ubicación (Depósito)</h4>
-                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingLocation} unidades pendientes</p>
-                    </div>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingLocation > 0 ? '#10b981' : 'var(--accent)' }}>
-                        {pendingLocation}
-                    </span>
-                </section>
-            </Link>
+        if (type === 'QR') {
+            count = pendingQR;
+            title = 'Sin Etiquetar (QR)';
+            subtitle = `${count} unidades pendientes`;
+            href = '/asignar';
+            borderColor = 'rgba(255,255,255,0.1)';
+            accentColor = '#ef4444';
+        } else if (type === 'LOC') {
+            count = pendingLocation;
+            title = 'Sin Ubicación (Depósito)';
+            subtitle = `${count} unidades pendientes`;
+            href = '/ubicacion';
+            borderColor = 'rgba(16, 185, 129, 0.3)';
+            bg = 'rgba(16, 185, 129, 0.05)';
+            accentColor = '#10b981';
+        } else if (type === 'DISPATCH') {
+            count = pendingDispatches;
+            title = 'Despachos Pendientes';
+            subtitle = `${count} pedidos Tiendanube`;
+            href = '/despachar';
+            borderColor = 'rgba(234, 179, 8, 0.3)';
+            bg = 'rgba(234, 179, 8, 0.05)';
+            accentColor = '#eab308';
+        } else if (type === 'INVOICE') {
+            count = invoiceCounts.total;
+            title = 'Facturación Pendiente';
+            subtitle = '';
+            href = '/facturacion';
+            borderColor = 'rgba(139, 92, 246, 0.3)';
+            bg = 'rgba(139, 92, 246, 0.05)';
+            accentColor = '#8b5cf6';
+            extra = (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Sofi: {invoiceCounts.sofi}</span>
+                    <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Tomi: {invoiceCounts.tomi}</span>
+                    <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Lucas: {invoiceCounts.lucas}</span>
+                </div>
+            )
+        }
 
-            <Link href="/despachar" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <section className="card" style={{
-                    border: '1px solid rgba(234, 179, 8, 0.3)',
-                    background: 'rgba(234, 179, 8, 0.05)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px 20px'
-                }}>
-                    <div>
-                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Despachos Pendientes</h4>
-                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingDispatches} pedidos Tiendanube</p>
-                    </div>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingDispatches > 0 ? '#eab308' : 'var(--accent)' }}>
-                        {pendingDispatches}
-                    </span>
-                </section>
-            </Link>
+        const isCounting = count > 0;
+        if (mode === 'TOP' && !isCounting) return null;
+        if (mode === 'BOTTOM' && isCounting) return null;
 
-            <Link href="/facturacion" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <section className="card" style={{
-                    border: '1px solid rgba(139, 92, 246, 0.3)',
-                    background: 'rgba(139, 92, 246, 0.05)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px 20px'
-                }}>
+        return (
+            <Link href={href} key={type} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <section className="card" style={{ border: borderColor, background: bg, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', marginBottom: 0 }}>
                     <div>
-                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Facturación Pendiente</h4>
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                            <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Sofi: {invoiceCounts.sofi}</span>
-                            <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Tomi: {invoiceCounts.tomi}</span>
-                            <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Lucas: {invoiceCounts.lucas}</span>
-                        </div>
+                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>{title}</h4>
+                        {subtitle && <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{subtitle}</p>}
+                        {extra}
                     </div>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: invoiceCounts.total > 0 ? '#8b5cf6' : 'var(--accent)' }}>
-                        {invoiceCounts.total}
+                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: count > 0 ? accentColor : 'var(--accent)' }}>
+                        {count}
                     </span>
                 </section>
             </Link>
-        </div>
-    )
+        )
+    }
+
+    const PendingGrid = ({ mode }) => {
+        const items = ['QR', 'LOC', 'DISPATCH', 'INVOICE'].map(t => renderCard(t, mode)).filter(Boolean)
+        if (items.length === 0) return null;
+        return (
+            <div className="grid mt-md" style={{ gap: '15px' }}>
+                {items}
+            </div>
+        )
+    }
 
     return (
         <div className="grid mt-lg">
@@ -182,8 +192,8 @@ export default function HomePage() {
                 </div>
             </header>
 
-            {/* Section 1: Top Pending (only if any task > 0) */}
-            {isAdmin && (pendingQR > 0 || pendingDispatches > 0 || pendingLocation > 0 || invoiceCounts.total > 0) && <PendingCards />}
+            {/* Section 1: Top Pending (only those > 0) */}
+            {isAdmin && <PendingGrid mode="TOP" />}
 
             <section className={`mt-lg grid ${isAdmin ? 'grid-cols-2 grid-mobile-stack' : ''}`} style={{ gap: '15px' }}>
                 <Link href="/consultar" className="btn-primary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
@@ -261,8 +271,8 @@ export default function HomePage() {
                     </Link>
                 </div>
 
-                {/* Section 2: Bottom Pending (only if all tasks are 0) */}
-                {isAdmin && (pendingQR === 0 && pendingDispatches === 0 && pendingLocation === 0 && invoiceCounts.total === 0) && <PendingCards />}
+                {/* Section 2: Bottom Pending (only those at 0) */}
+                {isAdmin && <PendingGrid mode="BOTTOM" />}
             </div>
 
             <div className="mt-lg">

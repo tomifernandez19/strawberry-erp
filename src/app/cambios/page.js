@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { getUnitForSale, recordProductExchange } from '@/lib/actions'
 import QRScanner from '@/components/QRScanner'
-import { getUnitForExchange, getUnitForSale, recordProductExchange } from '@/lib/actions'
 import Link from 'next/link'
 
 export default function CambiosPage() {
@@ -11,27 +11,37 @@ export default function CambiosPage() {
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
 
-    // Payment for difference
+    // Payment states for difference
     const [medioPago, setMedioPago] = useState('EFECTIVO')
     const [montoEfectivo, setMontoEfectivo] = useState('')
     const [montoOtro, setMontoOtro] = useState('')
     const [otroMedioPago, setOtroMedioPago] = useState('TARJETA_DEBITO')
+    const [customerName, setCustomerName] = useState('')
+    const [customerPhone, setCustomerPhone] = useState('')
+    const [customerEmail, setCustomerEmail] = useState('')
 
     const resetState = () => {
         setOldUnit(null)
         setNewUnit(null)
         setError('')
+        setLoading(false)
         setSuccess(false)
+        setMedioPago('EFECTIVO')
         setMontoEfectivo('')
         setMontoOtro('')
+        setCustomerName('')
+        setCustomerPhone('')
+        setCustomerEmail('')
     }
 
     const handleScanOld = async (qr) => {
         setLoading(true)
-        setError('')
         try {
-            const res = await getUnitForExchange(qr)
+            const res = await getUnitForSale(qr, false) // false means include sold units
             if (res.success) {
+                if (res.data.estado !== 'VENDIDO' && res.data.estado !== 'VENDIDO_ONLINE') {
+                    throw new Error('Esta unidad no está marcada como vendida.')
+                }
                 setOldUnit(res.data)
             } else {
                 setError(res.message)
@@ -45,7 +55,6 @@ export default function CambiosPage() {
 
     const handleScanNew = async (qr) => {
         setLoading(true)
-        setError('')
         try {
             const res = await getUnitForSale(qr)
             if (res.success) {
@@ -61,18 +70,24 @@ export default function CambiosPage() {
     }
 
     const difference = (newUnit?.variantes.precio_lista || 0) - (oldUnit?.ventas?.total || 0)
-
     // Pre-calculated prices for split payment calculation (rounded up to 1000)
     const precioEfectivoDiff = Math.ceil((difference * (100 / 121)) / 1000) * 1000
 
     const handleConfirmExchange = async () => {
         setLoading(true)
         try {
-            const options = medioPago === 'DIVIDIR_PAGOS' ? {
-                monto_efectivo: parseFloat(montoEfectivo),
-                monto_otro: parseFloat(montoOtro),
-                otro_medio_pago: otroMedioPago
-            } : {}
+            const options = {
+                ...(medioPago === 'DIVIDIR_PAGOS' ? {
+                    monto_efectivo: parseFloat(montoEfectivo),
+                    monto_otro: parseFloat(montoOtro),
+                    otro_medio_pago: otroMedioPago
+                } : {}),
+                customerData: {
+                    nombre: customerName,
+                    telefono: customerPhone,
+                    email: customerEmail
+                }
+            }
 
             const res = await recordProductExchange(
                 oldUnit.id,
@@ -112,15 +127,11 @@ export default function CambiosPage() {
     return (
         <div className="grid mt-lg">
             <header className="text-center">
-                <h1 style={{ marginBottom: '5px' }}>Procesar Cambio</h1>
-                <p style={{ opacity: 0.7 }}>Gestión de devoluciones y cambios</p>
+                <h1>Cambio de Producto</h1>
+                <p style={{ opacity: 0.7 }}>Siga los pasos para procesar el cambio</p>
             </header>
 
-            {error && (
-                <div className="card text-center" style={{ background: 'rgba(239, 68, 68, 0.1)', borderColor: '#ef4444', padding: '15px' }}>
-                    {error}
-                </div>
-            )}
+            {error && <div className="card text-center" style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)' }}>{error}</div>}
 
             {/* STEP 1: SCAN OLD PRODUCT */}
             {!oldUnit ? (
@@ -218,6 +229,7 @@ export default function CambiosPage() {
                                                 <option value="TARJETA_DEBITO">Débito</option>
                                                 <option value="TARJETA_CREDITO">Crédito</option>
                                                 <option value="TRANSFERENCIA">Transf.</option>
+                                                <option value="QR">QR</option>
                                             </select>
                                             <input type="number" value={montoOtro} readOnly className="input-field" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', color: 'var(--accent)', fontWeight: 'bold' }} />
                                         </div>
@@ -226,6 +238,38 @@ export default function CambiosPage() {
                             )}
                         </div>
                     )}
+
+                    <div className="mt-lg" style={{ borderTop: '1px solid var(--card-border)', paddingTop: '15px' }}>
+                        <p style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '10px' }}>DATOS DEL CLIENTE (OPCIONAL):</p>
+                        <div className="grid" style={{ gap: '10px' }}>
+                            <input
+                                type="text"
+                                placeholder="Nombre completo"
+                                className="input-field"
+                                value={customerName}
+                                onChange={(e) => setCustomerName(e.target.value)}
+                                style={{ fontSize: '0.85rem' }}
+                            />
+                            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <input
+                                    type="tel"
+                                    placeholder="Teléfono"
+                                    className="input-field"
+                                    value={customerPhone}
+                                    onChange={(e) => setCustomerPhone(e.target.value)}
+                                    style={{ fontSize: '0.85rem' }}
+                                />
+                                <input
+                                    type="email"
+                                    placeholder="Email"
+                                    className="input-field"
+                                    value={customerEmail}
+                                    onChange={(e) => setCustomerEmail(e.target.value)}
+                                    style={{ fontSize: '0.85rem' }}
+                                />
+                            </div>
+                        </div>
+                    </div>
 
                     <div style={{ display: 'flex', gap: '10px', marginTop: 'var(--spacing-lg)' }}>
                         <button className="btn-primary" style={{ flex: 2, height: '60px' }} onClick={handleConfirmExchange} disabled={loading}>

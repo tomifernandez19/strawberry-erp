@@ -228,7 +228,7 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
  */
 export async function recordSale(qrCode, medio_pago, options = {}) {
     const supabase = createClient();
-    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null } = options;
+    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null, customerData = {} } = options;
 
     // 1. Re-verify unit availability
     const result = await getUnitForSale(qrCode)
@@ -258,7 +258,10 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
             monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? finalPrice : 0),
             monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
             otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
-            facturado: medio_pago === 'EFECTIVO'
+            facturado: medio_pago === 'EFECTIVO',
+            nombre_cliente: customerData.nombre || null,
+            telefono_cliente: customerData.telefono || null,
+            email_cliente: customerData.email || null
         }])
         .select()
         .single()
@@ -1033,6 +1036,8 @@ export async function recordOnlineOrder(orderData) {
 
     // 1. Create order record
     const clienteNombre = customer?.name || orderData.shipping_address?.first_name || 'Cliente Online';
+    const clienteEmail = customer?.email || orderData.shipping_address?.email || null;
+    const clienteTelefono = customer?.phone || orderData.shipping_address?.phone || null;
     const gateway = orderData.gateway || orderData.payment_details?.method || 'TIENDANUBE';
 
     const { data: pedido, error: pError } = await supabase
@@ -1040,6 +1045,8 @@ export async function recordOnlineOrder(orderData) {
         .insert([{
             tiendanube_id: String(tnId),
             cliente_nombre: clienteNombre,
+            cliente_email: clienteEmail,
+            cliente_telefono: clienteTelefono,
             nro_pedido: String(number),
             items_raw: products,
             estado: 'PENDIENTE_DESPACHO',
@@ -1156,7 +1163,11 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
                 total: montoVenta,
                 medio_pago: medioPagoFinal,
                 user_id: user?.id || null,
-                facturado: false
+                facturado: false,
+                tipo: 'VENTA_ONLINE',
+                nombre_cliente: order.cliente_nombre || null,
+                email_cliente: order.cliente_email || null,
+                telefono_cliente: order.cliente_telefono || null
             }])
             .select()
             .single();
@@ -1322,7 +1333,7 @@ export async function getUnitForExchange(qrCode) {
  */
 export async function recordProductExchange(oldUnitId, newUnitQR, difference, medio_pago, options = {}) {
     const supabase = createClient();
-    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null } = options;
+    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null, customerData = {} } = options;
 
     try {
         // 1. Process new unit sale first (to ensure availability)
@@ -1352,7 +1363,10 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
                     monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
                     otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
                     tipo: 'DIFERENCIA_CAMBIO',
-                    facturado: medio_pago === 'EFECTIVO'
+                    facturado: medio_pago === 'EFECTIVO',
+                    nombre_cliente: customerData.nombre || null,
+                    telefono_cliente: customerData.telefono || null,
+                    email_cliente: customerData.email || null
                 }])
                 .select()
                 .single();
@@ -1443,7 +1457,7 @@ export async function getPendingInvoicesList() {
     try {
         const { data, error } = await supabase
             .from('ventas')
-            .select('*, profiles(nombre), variantes(*, modelos(*))')
+            .select('*, profiles(nombre), unidades(*, variantes(*, modelos(*)))')
             .eq('facturado', false)
             .order('created_at', { ascending: false });
 

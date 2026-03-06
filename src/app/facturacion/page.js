@@ -82,9 +82,23 @@ export default function FacturacionPage() {
                                                 {new Date(v.created_at).toLocaleDateString()} {new Date(v.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
-                                        <h4 style={{ margin: 0 }}>{v.variantes?.modelos?.descripcion || 'Venta Especial'}</h4>
-                                        <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>{v.variantes?.color} • {v.medio_pago.replace('_', ' ')}</p>
-                                        <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)', marginTop: '8px' }}>
+                                        <h4 style={{ margin: 0 }}>
+                                            {v.unidades?.[0]?.variantes?.modelos?.descripcion || 'Venta Especial'}
+                                        </h4>
+                                        <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>
+                                            {v.unidades?.[0]?.variantes?.color} • {v.medio_pago.replace(/_/g, ' ')}
+                                        </p>
+
+                                        {(v.nombre_cliente || v.telefono_cliente || v.email_cliente) && (
+                                            <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <p style={{ fontSize: '0.65rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '5px' }}>Datos Cliente:</p>
+                                                {v.nombre_cliente && <p style={{ fontSize: '0.75rem' }}>👤 {v.nombre_cliente}</p>}
+                                                {v.telefono_cliente && <p style={{ fontSize: '0.75rem' }}>📞 {v.telefono_cliente}</p>}
+                                                {v.email_cliente && <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>✉️ {v.email_cliente}</p>}
+                                            </div>
+                                        )}
+
+                                        <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)', marginTop: '10px' }}>
                                             $ {v.total.toLocaleString()}
                                         </p>
                                     </div>
