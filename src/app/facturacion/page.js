@@ -99,8 +99,13 @@ export default function FacturacionPage() {
                                         )}
 
                                         <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)', marginTop: '10px' }}>
-                                            $ {v.total.toLocaleString()}
+                                            $ {(v.medio_pago === 'DIVIDIR_PAGOS' ? v.monto_otro : v.total).toLocaleString()}
                                         </p>
+                                        {v.medio_pago === 'DIVIDIR_PAGOS' && (
+                                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>
+                                                (Monto total: ${v.total.toLocaleString()} - Solo se factura la parte no-efectivo)
+                                            </p>
+                                        )}
                                     </div>
                                     <button
                                         className="btn-primary"

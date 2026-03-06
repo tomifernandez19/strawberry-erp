@@ -258,7 +258,7 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
             monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? finalPrice : 0),
             monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
             otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
-            facturado: medio_pago === 'EFECTIVO',
+            facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
             nombre_cliente: customerData.nombre || null,
             telefono_cliente: customerData.telefono || null,
             email_cliente: customerData.email || null
@@ -1363,7 +1363,7 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
                     monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
                     otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
                     tipo: 'DIFERENCIA_CAMBIO',
-                    facturado: medio_pago === 'EFECTIVO',
+                    facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
                     nombre_cliente: customerData.nombre || null,
                     telefono_cliente: customerData.telefono || null,
                     email_cliente: customerData.email || null
