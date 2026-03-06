@@ -1,12 +1,14 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { getPendingInvoicesList, markAsInvoiced } from '@/lib/actions'
+import { createElectronicInvoice, generateInvoicePDF } from '@/lib/afip'
 import Link from 'next/link'
 
 export default function FacturacionPage() {
     const [invoices, setInvoices] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
+    const [generating, setGenerating] = useState(null) // ID of invoice being generated
 
     useEffect(() => {
         loadInvoices()
@@ -30,6 +32,30 @@ export default function FacturacionPage() {
             setInvoices(prev => prev.filter(v => v.id !== id))
         } else {
             alert(res.message)
+        }
+    }
+
+    async function handleAFIPInvoice(venta) {
+        if (!confirm('¿Generar Factura Electrónica C en ARCA (AFIP)?')) return
+        setGenerating(venta.id)
+        try {
+            const res = await createElectronicInvoice(venta, 'tomi')
+            if (res.success) {
+                const pdf = generateInvoicePDF(venta, res)
+                // Offer download/open
+                const win = window.open();
+                if (win) win.document.write(`<iframe src="${pdf}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`)
+
+                // Mark as invoiced in DB too
+                await markAsInvoiced(venta.id)
+                setInvoices(prev => prev.filter(v => v.id !== venta.id))
+            } else {
+                alert(`Error ARCA: ${res.message}\n\nNota: Verificá que el servidor tenga configurados los certificados de Tomi.`)
+            }
+        } catch (err) {
+            alert(err.message)
+        } finally {
+            setGenerating(null)
         }
     }
 
@@ -107,13 +133,26 @@ export default function FacturacionPage() {
                                             </p>
                                         )}
                                     </div>
-                                    <button
-                                        className="btn-primary"
-                                        style={{ padding: '8px 12px', fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#10b981' }}
-                                        onClick={() => handleMarkDone(v.id)}
-                                    >
-                                        Facturado ✅
-                                    </button>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {resp.name === 'Tomi' && (
+                                            <button
+                                                className="btn-primary"
+                                                style={{ padding: '12px', fontSize: '0.8rem', background: 'var(--accent)', fontWeight: 'bold' }}
+                                                onClick={() => handleAFIPInvoice(v)}
+                                                disabled={generating === v.id}
+                                            >
+                                                {generating === v.id ? 'Generando...' : 'Emitir ARCA 🏛️'}
+                                            </button>
+                                        )}
+                                        <button
+                                            className="btn-primary"
+                                            style={{ padding: '8px 12px', fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#10b981' }}
+                                            onClick={() => handleMarkDone(v.id)}
+                                            disabled={generating === v.id}
+                                        >
+                                            Facturado Manual ✅
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )
