@@ -13,7 +13,10 @@ export async function createPurchase({ nro_remito, items }) {
         const processedItems = []
 
         for (const item of items) {
-            const { codigo_proveedor, descripcion, color, costo_unitario, talles, imagen_url = null } = item
+            const codigo_proveedor = item.codigo_proveedor?.toUpperCase() || ''
+            const descripcion = item.descripcion?.toUpperCase() || ''
+            const color = item.color?.toUpperCase() || ''
+            const { costo_unitario, talles, imagen_url = null } = item
             const supplierCode = codigo_proveedor?.substring(0, 2) || 'ST'
 
             // a. Find or Create Modelo
@@ -277,9 +280,9 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
             monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
             otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
             facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
-            nombre_cliente: customerData.nombre || null,
+            nombre_cliente: customerData.nombre?.toUpperCase() || null,
             telefono_cliente: customerData.telefono || null,
-            email_cliente: customerData.email || null
+            email_cliente: customerData.email?.toUpperCase() || null
         }])
         .select()
         .single()
