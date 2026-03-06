@@ -228,7 +228,9 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
 export async function recordSale(qrCode, medio_pago) {
     const supabase = createClient();
     // Re-verify unit availability at the moment of sale
-    const unidad = await getUnitForSale(qrCode)
+    const result = await getUnitForSale(qrCode)
+    if (!result.success) throw new Error(result.message)
+    const unidad = result.data
 
     // 2. Select correct price based on payment method
     const isSpecialPrice = ['EFECTIVO', 'TRANSFERENCIA'].includes(medio_pago)

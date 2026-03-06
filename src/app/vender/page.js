@@ -14,9 +14,14 @@ export default function VenderPage() {
     const handleScanSuccess = async (qrCode) => {
         setLoading(true)
         setError('')
+        setPreviewUnit(null) // clear previous
         try {
-            const unit = await getUnitForSale(qrCode)
-            setPreviewUnit(unit)
+            const result = await getUnitForSale(qrCode)
+            if (result.success) {
+                setPreviewUnit(result.data)
+            } else {
+                setError(result.message)
+            }
         } catch (err) {
             setError(err.message)
         } finally {
