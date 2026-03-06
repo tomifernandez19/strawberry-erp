@@ -146,14 +146,33 @@ export default function NuevaCompraPage() {
         const file = e.target.files[0]
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-            setLoading(true)
-            // We don't have variant ID yet, so we just store base64 for now
-            updateItem(index, 'localImage', reader.result)
-            setLoading(false)
+        setLoading(true)
+        try {
+            // Client-side compression with Canvas
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 1000;
+                    const scaleSize = MAX_WIDTH / img.width;
+                    canvas.width = MAX_WIDTH;
+                    canvas.height = img.height * scaleSize;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                    updateItem(index, 'localImage', compressedBase64);
+                    setLoading(false);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        } catch (err) {
+            console.error("Compression error:", err);
+            setLoading(false);
         }
-        reader.readAsDataURL(file);
     }
 
     const addItem = () => {

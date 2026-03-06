@@ -1505,12 +1505,10 @@ export async function uploadProductImage(variantId, base64Data) {
         if (error) throw new Error(error.message);
 
         // Get Public URL
-        const { data: qUrl } = supabase
+        const { data: { publicUrl } } = supabase
             .storage
             .from('productos')
             .getPublicUrl(fileName);
-
-        const publicUrl = qUrl.publicUrl;
 
         // Update variant if provided
         if (variantId) {
