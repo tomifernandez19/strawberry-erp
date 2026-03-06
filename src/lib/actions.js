@@ -7,112 +7,117 @@ import { createClient } from './supabase/server'
  */
 export async function createPurchase({ nro_remito, items }) {
     const supabase = createClient();
-    // 1. Process items to ensure models and variants exist
-    const processedItems = []
+    try {
+        // 1. Process items to ensure models and variants exist
+        const processedItems = []
 
-    for (const item of items) {
-        const { codigo_proveedor, descripcion, color, costo_unitario, talles, imagen_url = null } = item
-        const supplierCode = codigo_proveedor.substring(0, 2)
+        for (const item of items) {
+            const { codigo_proveedor, descripcion, color, costo_unitario, talles, imagen_url = null } = item
+            const supplierCode = codigo_proveedor?.substring(0, 2) || 'ST'
 
-        // a. Find or Create Modelo
-        let { data: modelo } = await supabase
-            .from('modelos')
-            .select('id')
-            .eq('codigo_proveedor', codigo_proveedor)
-            .single()
-
-        if (!modelo) {
-            const { data: newModelo, error: mErr } = await supabase
+            // a. Find or Create Modelo
+            let { data: modelo } = await supabase
                 .from('modelos')
-                .insert([{
-                    codigo_proveedor,
-                    descripcion,
-                    marca: supplierCode, // First 2 digits as requested
-                    categoria: 'Calzado'
-                }])
-                .select()
+                .select('id')
+                .eq('codigo_proveedor', codigo_proveedor)
                 .single()
-            if (mErr) throw mErr
-            modelo = newModelo
+
+            if (!modelo) {
+                const { data: newModelo, error: mErr } = await supabase
+                    .from('modelos')
+                    .insert([{
+                        codigo_proveedor,
+                        descripcion,
+                        marca: supplierCode, // First 2 digits as requested
+                        categoria: 'Calzado'
+                    }])
+                    .select()
+                    .single()
+                if (mErr) throw mErr
+                modelo = newModelo
+            }
+
+            // b. Find or Create Variant (Generic Price for now, will be updated)
+            let { data: variante } = await supabase
+                .from('variantes')
+                .select('id, imagen_url')
+                .eq('modelo_id', modelo.id)
+                .eq('color', color)
+                .single()
+
+            if (!variante) {
+                const precioLista = Math.round(costo_unitario * 2.42);
+                // Cash price rounding: Ceiling to next 1000
+                const precioEfectivo = Math.ceil((precioLista * (100 / 121)) / 1000) * 1000;
+
+                const { data: newVar, error: vErr } = await supabase
+                    .from('variantes')
+                    .insert([{
+                        modelo_id: modelo.id,
+                        color,
+                        talle: 'CURVA',
+                        precio_efectivo: precioEfectivo,
+                        precio_lista: precioLista,
+                        costo_promedio: costo_unitario,
+                        imagen_url: imagen_url
+                    }])
+                    .select()
+                    .single()
+                if (vErr) throw vErr
+                variante = newVar
+            } else if (imagen_url && !variante.imagen_url) {
+                // Update image if existing variant doesn't have one
+                await supabase
+                    .from('variantes')
+                    .update({ imagen_url })
+                    .eq('id', variante.id)
+            }
+
+            processedItems.push({ ...item, variante_id: variante.id })
         }
 
-        // b. Find or Create Variant (Generic Price for now, will be updated)
-        let { data: variante } = await supabase
-            .from('variantes')
-            .select('id')
-            .eq('modelo_id', modelo.id)
-            .eq('color', color)
+        // 2. Insert the purchase (compra)
+        const { data: { user } } = await supabase.auth.getUser();
+        const overallSupplier = processedItems[0]?.codigo_proveedor?.substring(0, 2) || 'ST'
+        const { data: compra, error: compraError } = await supabase
+            .from('compras')
+            .insert([{
+                proveedor: overallSupplier,
+                nro_remito,
+                user_id: user?.id || null
+            }])
+            .select()
             .single()
 
-        if (!variante) {
-            const precioLista = Math.round(costo_unitario * 2.42);
-            // Cash price rounding: Ceiling to next 1000
-            const precioEfectivo = Math.ceil((precioLista * (100 / 121)) / 1000) * 1000;
+        if (compraError) throw compraError
 
-            const { data: newVar, error: vErr } = await supabase
-                .from('variantes')
-                .insert([{
-                    modelo_id: modelo.id,
-                    color,
-                    talle: 'CURVA',
-                    precio_efectivo: precioEfectivo,
-                    precio_lista: precioLista,
-                    costo_promedio: costo_unitario,
-                    imagen_url: imagen_url
-                }])
-                .select()
-                .single()
-            if (vErr) throw vErr
-            variante = newVar
-        } else if (imagen_url && !variante.imagen_url) {
-            // Update image if existing variant doesn't have one
-            await supabase
-                .from('variantes')
-                .update({ imagen_url })
-                .eq('id', variante.id)
+        // 3. Insert detail and units
+        for (const item of processedItems) {
+            const { variante_id, cantidad, costo_unitario, talles } = item
+
+            await supabase.from('detalle_compras').insert([{
+                compra_id: compra.id,
+                variante_id,
+                cantidad,
+                costo_unitario
+            }])
+
+            const unitsToCreate = talles.map(talle => ({
+                variante_id,
+                compra_id: compra.id,
+                estado: 'PENDIENTE_QR',
+                talle_especifico: talle
+            }))
+
+            const { error: unitsError } = await supabase.from('unidades').insert(unitsToCreate)
+            if (unitsError) throw unitsError
         }
 
-        processedItems.push({ ...item, variante_id: variante.id })
+        return { success: true, data: compra };
+    } catch (err) {
+        console.error("CreatePurchase Error:", err);
+        return { success: false, message: err.message };
     }
-
-    // 2. Insert the purchase (compra)
-    const { data: { user } } = await supabase.auth.getUser();
-    const overallSupplier = processedItems[0]?.codigo_proveedor.substring(0, 2) || 'Desconocido'
-    const { data: compra, error: compraError } = await supabase
-        .from('compras')
-        .insert([{
-            proveedor: overallSupplier,
-            nro_remito,
-            user_id: user?.id || null
-        }])
-        .select()
-        .single()
-
-    if (compraError) throw compraError
-
-    // 3. Insert detail and units
-    for (const item of processedItems) {
-        const { variante_id, cantidad, costo_unitario, talles } = item
-
-        await supabase.from('detalle_compras').insert([{
-            compra_id: compra.id,
-            variante_id,
-            cantidad,
-            costo_unitario
-        }])
-
-        const unitsToCreate = talles.map(talle => ({
-            variante_id,
-            compra_id: compra.id,
-            estado: 'PENDIENTE_QR',
-            talle_especifico: talle
-        }))
-
-        const { error: unitsError } = await supabase.from('unidades').insert(unitsToCreate)
-        if (unitsError) throw unitsError
-    }
-
-    return compra
 }
 
 export async function addStock(variantId, talles) {

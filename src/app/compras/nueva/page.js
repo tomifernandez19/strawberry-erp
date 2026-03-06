@@ -217,11 +217,15 @@ export default function NuevaCompraPage() {
                 });
             }
 
-            await createPurchase({
+            const resComp = await createPurchase({
                 nro_remito: formData.nro_remito,
                 items: formattedItems
             })
-            router.push('/asignar')
+            if (resComp.success) {
+                router.push('/asignar')
+            } else {
+                alert("Error al guardar: " + resComp.message)
+            }
         } catch (error) {
             alert(error.message)
         } finally {
@@ -257,8 +261,7 @@ export default function NuevaCompraPage() {
                 <div className="card grid">
                     <input
                         type="text"
-                        placeholder="Proveedor"
-                        required
+                        placeholder="Proveedor (Opcional)"
                         value={formData.proveedor}
                         onChange={e => setFormData({ ...formData, proveedor: e.target.value })}
                         style={inputStyle}
