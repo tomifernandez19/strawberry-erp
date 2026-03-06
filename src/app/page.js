@@ -73,7 +73,7 @@ export default function HomePage() {
     const PendingCards = () => (
         <div className="grid mt-md" style={{ gap: '15px' }}>
             <Link href="/asignar" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px' }}>
+                <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px' }}>
                     <div>
                         <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Sin Etiquetar (QR)</h4>
                         <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingQR} unidades pendientes</p>
@@ -91,7 +91,7 @@ export default function HomePage() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '15px 20px'
+                    padding: '12px 20px'
                 }}>
                     <div>
                         <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Despachos Pendientes</h4>
@@ -109,22 +109,22 @@ export default function HomePage() {
         <div className="grid mt-lg">
             <header className="text-center">
                 <h1>Strawberry Trejo</h1>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                    <p style={{ opacity: 0.7, margin: 0 }}>Gestión de Calzado</p>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', marginTop: '2px' }}>
+                    <p style={{ opacity: 0.7, margin: 0, fontSize: '0.85rem' }}>Gestión de Calzado</p>
                     {user && (
                         <div style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '6px',
                             backgroundColor: 'rgba(255,255,255,0.05)',
-                            padding: '4px 12px',
+                            padding: '2px 10px',
                             borderRadius: '20px',
                             border: '1px solid rgba(255,255,255,0.1)',
-                            marginTop: '8px'
+                            marginTop: '4px'
                         }}>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 'bold' }}>●</span>
-                            <span style={{ fontSize: '0.8rem', opacity: 0.9 }}>{user.email}</span>
-                            <span style={{ fontSize: '0.65rem', opacity: 0.5, backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--accent)', fontWeight: 'bold' }}>●</span>
+                            <span style={{ fontSize: '0.7rem', opacity: 0.9 }}>{user.email}</span>
+                            <span style={{ fontSize: '0.6rem', opacity: 0.5, backgroundColor: 'rgba(255,255,255,0.1)', padding: '1px 4px', borderRadius: '4px', textTransform: 'uppercase' }}>
                                 {user.role === 'PROPIETARIA' ? 'Admin' : 'Ventas'}
                             </span>
                         </div>
@@ -135,25 +135,25 @@ export default function HomePage() {
             {/* Section 1: Top Pending (only if > 0) */}
             {isAdmin && (pendingQR > 0 || pendingDispatches > 0) && <PendingCards />}
 
-            <section className="mt-lg grid" style={{ gridTemplateColumns: isAdmin ? '1fr 1fr' : '1fr', gap: '15px' }}>
-                <Link href="/consultar" className="btn-primary" style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '1.5rem' }}>🔍</span>
-                    <span>Consultar Stock</span>
+            <section className={`mt-lg grid ${isAdmin ? 'grid-cols-2 grid-mobile-stack' : ''}`} style={{ gap: '15px' }}>
+                <Link href="/consultar" className="btn-primary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>🔍</span>
+                    <span style={{ fontSize: '0.9rem' }}>Consultar Stock</span>
                 </Link>
-                <Link href="/vender" className="btn-primary" style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'var(--accent)' }}>
-                    <span style={{ fontSize: '1.5rem' }}>💰</span>
-                    <span>Nueva Venta</span>
+                <Link href="/vender" className="btn-primary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'var(--accent)' }}>
+                    <span style={{ fontSize: '1.2rem' }}>💰</span>
+                    <span style={{ fontSize: '0.9rem' }}>Nueva Venta</span>
                 </Link>
 
                 {isAdmin && (
                     <>
-                        <Link href="/compras/nueva" className="btn-secondary" style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.5rem' }}>📦</span>
-                            <span>Alta Stock</span>
+                        <Link href="/compras/nueva" className="btn-secondary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '1.2rem' }}>📦</span>
+                            <span style={{ fontSize: '0.9rem' }}>Alta Stock</span>
                         </Link>
-                        <Link href="/gestion" className="btn-secondary" style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
-                            <span style={{ fontSize: '1.5rem' }}>⚙️</span>
-                            <span>Gestionar / Corregir</span>
+                        <Link href="/gestion" className="btn-secondary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
+                            <span style={{ fontSize: '1.2rem' }}>⚙️</span>
+                            <span style={{ fontSize: '0.9rem' }}>Gestionar</span>
                         </Link>
                     </>
                 )}
@@ -167,41 +167,41 @@ export default function HomePage() {
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        padding: '15px 20px'
+                        padding: '12px 20px'
                     }}>
                         <div>
-                            <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Movimientos de Caja</h4>
+                            <h4 style={{ fontSize: '0.75rem', opacity: 0.8 }}>Movimientos de Caja</h4>
                             <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Retiros y depósitos manuales</p>
                         </div>
-                        <span style={{ fontSize: '1.5rem' }}>🏦</span>
+                        <span style={{ fontSize: '1.2rem' }}>🏦</span>
                     </section>
                 </Link>
             )}
 
             <div className="grid">
-                <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div className={`grid grid-cols-2 grid-mobile-stack`} style={{ gap: '15px', marginTop: '15px' }}>
                     <section
-                        className="card mt-lg"
-                        style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', cursor: 'pointer' }}
+                        className="card"
+                        style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', cursor: 'pointer', marginBottom: 0, padding: '15px' }}
                         onClick={fetchCashDetail}
                     >
-                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8, color: 'var(--accent)' }}>Efectivo en Caja</h4>
-                        <div style={{ marginTop: '10px' }}>
-                            <p style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--accent)' }}>
+                        <h4 style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--accent)' }}>Caja Hoy</h4>
+                        <div style={{ marginTop: '5px' }}>
+                            <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)' }}>
                                 $ {summary.cash.toLocaleString()}
                             </p>
-                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Pulsa para ver detalle 📊</p>
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>📊 Detalle</p>
                         </div>
                     </section>
 
                     <Link href={isAdmin ? "/reportes" : "#"} style={{ textDecoration: 'none', color: 'inherit', cursor: isAdmin ? 'pointer' : 'default' }}>
-                        <section className="card mt-lg" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-                            <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Total Ventas</h4>
-                            <div style={{ marginTop: '10px' }}>
-                                <p style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>
+                        <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', marginBottom: 0, padding: '15px' }}>
+                            <h4 style={{ fontSize: '0.7rem', opacity: 0.8 }}>Total Hoy</h4>
+                            <div style={{ marginTop: '5px' }}>
+                                <p style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
                                     $ {summary.total.toLocaleString()}
                                 </p>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{summary.count} ventas hoy</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>{summary.count} ventas</p>
                             </div>
                         </section>
                     </Link>
