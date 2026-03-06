@@ -7,10 +7,9 @@ import { useAuth } from '@/lib/context/AuthContext'
 
 export default function HomePage() {
     const { isAdmin, user } = useAuth()
-    const [summary, setSummary] = useState({ count: 0, total: 0, cash: 0, items: [] })
-    const [pendingQR, setPendingQR] = useState(0)
-
-    const [pendingDispatches, setPendingDispatches] = useState(0)
+    const [showCashDetail, setShowCashDetail] = useState(false)
+    const [recentMovements, setRecentMovements] = useState([])
+    const [loadingMovements, setLoadingMovements] = useState(false)
 
     useEffect(() => {
         if (!user) return
@@ -56,6 +55,53 @@ export default function HomePage() {
         }
     }, [isAdmin, user])
 
+    async function fetchCashDetail() {
+        setLoadingMovements(true)
+        setShowCashDetail(true)
+        const { data } = await supabase
+            .from('movimientos_caja')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(10)
+        setRecentMovements(data || [])
+        setLoadingMovements(false)
+    }
+
+    const PendingCards = () => (
+        <div className="grid mt-md" style={{ gap: '15px' }}>
+            <Link href="/asignar" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px' }}>
+                    <div>
+                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Sin Etiquetar (QR)</h4>
+                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingQR} unidades pendientes</p>
+                    </div>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingQR > 0 ? '#ef4444' : 'var(--accent)' }}>
+                        {pendingQR}
+                    </span>
+                </section>
+            </Link>
+
+            <Link href="/despachar" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <section className="card" style={{
+                    border: '1px solid rgba(234, 179, 8, 0.3)',
+                    background: 'rgba(234, 179, 8, 0.05)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '15px 20px'
+                }}>
+                    <div>
+                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Despachos Pendientes</h4>
+                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingDispatches} pedidos Tiendanube</p>
+                    </div>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingDispatches > 0 ? '#eab308' : 'var(--accent)' }}>
+                        {pendingDispatches}
+                    </span>
+                </section>
+            </Link>
+        </div>
+    )
+
     return (
         <div className="grid mt-lg">
             <header className="text-center">
@@ -83,6 +129,9 @@ export default function HomePage() {
                 </div>
             </header>
 
+            {/* Section 1: Top Pending (only if > 0) */}
+            {isAdmin && (pendingQR > 0 || pendingDispatches > 0) && <PendingCards />}
+
             <section className="mt-lg grid" style={{ gridTemplateColumns: isAdmin ? '1fr 1fr' : '1fr', gap: '15px' }}>
                 <Link href="/consultar" className="btn-primary" style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '1.5rem' }}>🔍</span>
@@ -107,15 +156,38 @@ export default function HomePage() {
                 )}
             </section>
 
+            {isAdmin && (
+                <Link href="/caja" style={{ textDecoration: 'none', color: 'inherit' }} className="mt-md">
+                    <section className="card" style={{
+                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        background: 'rgba(59, 130, 246, 0.05)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '15px 20px'
+                    }}>
+                        <div>
+                            <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Movimientos de Caja</h4>
+                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Retiros y depósitos manuales</p>
+                        </div>
+                        <span style={{ fontSize: '1.5rem' }}>🏦</span>
+                    </section>
+                </Link>
+            )}
+
             <div className="grid">
                 <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <section className="card mt-lg" style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)' }}>
+                    <section
+                        className="card mt-lg"
+                        style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', cursor: 'pointer' }}
+                        onClick={fetchCashDetail}
+                    >
                         <h4 style={{ fontSize: '0.8rem', opacity: 0.8, color: 'var(--accent)' }}>Efectivo en Caja</h4>
                         <div style={{ marginTop: '10px' }}>
                             <p style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--accent)' }}>
                                 $ {summary.cash.toLocaleString()}
                             </p>
-                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Saldo real disponible</p>
+                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Pulsa para ver detalle 📊</p>
                         </div>
                     </section>
 
@@ -132,98 +204,8 @@ export default function HomePage() {
                     </Link>
                 </div>
 
-                {isAdmin && (
-                    <div className="grid mt-md" style={{ gap: '15px' }}>
-                        <Link href="/asignar" style={{ textDecoration: 'none', color: 'inherit' }}>
-                            <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px' }}>
-                                <div>
-                                    <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Sin Etiquetar (QR)</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingQR} unidades pendientes</p>
-                                </div>
-                                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingQR > 0 ? '#ef4444' : 'var(--accent)' }}>
-                                    {pendingQR}
-                                </span>
-                            </section>
-                        </Link>
-
-                        <Link href="/despachar" style={{ textDecoration: 'none', color: 'inherit' }}>
-                            <section className="card" style={{
-                                border: '1px solid rgba(234, 179, 8, 0.3)',
-                                background: 'rgba(234, 179, 8, 0.05)',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '15px 20px'
-                            }}>
-                                <div>
-                                    <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Despachos Pendientes</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingDispatches} pedidos Tiendanube</p>
-                                </div>
-                                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingDispatches > 0 ? '#eab308' : 'var(--accent)' }}>
-                                    {pendingDispatches}
-                                </span>
-                            </section>
-                        </Link>
-
-                        <Link href="/caja" style={{ textDecoration: 'none', color: 'inherit' }}>
-                            <section className="card" style={{
-                                border: '1px solid rgba(59, 130, 246, 0.3)',
-                                background: 'rgba(59, 130, 246, 0.05)',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '15px 20px'
-                            }}>
-                                <div>
-                                    <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Movimientos de Caja</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Retiros y depósitos manuales</p>
-                                </div>
-                                <span style={{ fontSize: '1.5rem' }}>🏦</span>
-                            </section>
-                        </Link>
-
-                        <button
-                            onClick={async (e) => {
-                                const btn = e.currentTarget;
-                                if (confirm('¿Activar conexión automática con Tiendanube?')) {
-                                    btn.disabled = true;
-                                    btn.innerText = '⏳ Conectando...';
-                                    try {
-                                        const ok = await registerTiendanubeWebhooks();
-                                        if (ok) {
-                                            alert('✅ ¡Conexión activada con éxito! Tiendanube ahora enviará los pedidos automáticamente.');
-                                        } else {
-                                            alert('❌ Error al activar. Verifique que TIENDANUBE_STORE_ID y ACCESS_TOKEN estén bien cargados en Vercel.');
-                                        }
-                                    } catch (err) {
-                                        alert('❌ Error de conexión: ' + err.message);
-                                    } finally {
-                                        btn.disabled = false;
-                                        btn.innerHTML = '<div><h4 style="font-size:0.8rem;opacity:0.8;color:white;">Activar Conexión Tiendanube</h4><p style="font-size:0.7rem;opacity:0.5;color:white;">Registrar avisos automáticos</p></div><span style="font-size:1.5rem;">🔌</span>';
-                                    }
-                                }
-                            }}
-                            className="card"
-                            style={{
-                                border: '1px solid rgba(16, 185, 129, 0.3)',
-                                background: 'rgba(16, 185, 129, 0.05)',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '15px 20px',
-                                width: '100%',
-                                textAlign: 'left',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            <div>
-                                <h4 style={{ fontSize: '0.8rem', opacity: 0.8, color: 'white' }}>Activar Conexión Tiendanube</h4>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5, color: 'white' }}>Registrar avisos automáticos</p>
-                            </div>
-                            <span style={{ fontSize: '1.5rem' }}>🔌</span>
-                        </button>
-                    </div>
-                )}
+                {/* Section 2: Bottom Pending (only if 0) */}
+                {isAdmin && (pendingQR === 0 && pendingDispatches === 0) && <PendingCards />}
             </div>
 
             <div className="mt-lg">
@@ -263,6 +245,54 @@ export default function HomePage() {
                     )}
                 </div>
             </div>
+
+            {/* Modal for Cash Detail */}
+            {showCashDetail && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 2000, padding: '20px'
+                }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '500px', maxHeight: '80vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                            <h3>Movimientos de Efectivo</h3>
+                            <button onClick={() => setShowCashDetail(false)} className="btn-secondary" style={{ padding: '4px 12px' }}>Cerrar</button>
+                        </div>
+
+                        {loadingMovements ? (
+                            <p className="text-center py-lg">Cargando...</p>
+                        ) : (
+                            <div className="grid" style={{ gap: '10px' }}>
+                                {recentMovements.length === 0 ? (
+                                    <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No hay movimientos recientes.</p>
+                                ) : (
+                                    recentMovements.map((m, i) => (
+                                        <div key={i} style={{
+                                            padding: '10px',
+                                            borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}>
+                                            <div>
+                                                <p style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{m.tipo === 'ENTRADA' ? '📥 Ingreso' : '📤 Retiro'}</p>
+                                                <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>{m.comentario || 'Sin descripción'}</p>
+                                                <p style={{ fontSize: '0.65rem', opacity: 0.4 }}>{new Date(m.created_at).toLocaleString()}</p>
+                                            </div>
+                                            <p style={{
+                                                fontWeight: 'bold',
+                                                color: m.tipo === 'ENTRADA' ? 'var(--accent)' : '#ef4444'
+                                            }}>
+                                                {m.tipo === 'ENTRADA' ? '+' : '-'} $ {m.monto.toLocaleString()}
+                                            </p>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div style={{ height: '80px' }}></div>
         </div>

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, registerTiendanubeWebhooks } from '@/lib/actions'
 
 export default function GestionPage() {
     const [tab, setTab] = useState('ventas') // 'ventas' or 'stock'
@@ -9,6 +9,7 @@ export default function GestionPage() {
     const [stock, setStock] = useState([])
     const [loading, setLoading] = useState(false)
     const [editingVariant, setEditingVariant] = useState(null)
+    const [activatingTN, setActivatingTN] = useState(false)
 
     useEffect(() => {
         if (tab === 'ventas') fetchVentas()
@@ -20,11 +21,11 @@ export default function GestionPage() {
         const { data } = await supabase
             .from('unidades')
             .select(`
-                id, fecha_venta,
+                id, fecha_venta, estado,
                 ventas (id, total, medio_pago),
                 variantes (color, modelos (descripcion))
             `)
-            .eq('estado', 'VENDIDO')
+            .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
             .order('fecha_venta', { ascending: false })
             .limit(20)
         setVentas(data || [])
@@ -82,6 +83,23 @@ export default function GestionPage() {
         }
     }
 
+    const handleActivateTN = async () => {
+        if (!confirm('¿Activar conexión automática con Tiendanube?')) return
+        setActivatingTN(true)
+        try {
+            const ok = await registerTiendanubeWebhooks()
+            if (ok) {
+                alert('✅ ¡Conexión activada con éxito! Tiendanube ahora enviará los pedidos automáticamente.')
+            } else {
+                alert('❌ Error al activar. Verifique las credenciales en Vercel.')
+            }
+        } catch (err) {
+            alert('❌ Error: ' + err.message)
+        } finally {
+            setActivatingTN(false)
+        }
+    }
+
     return (
         <div className="grid mt-lg">
             <header className="text-center">
@@ -112,23 +130,28 @@ export default function GestionPage() {
                 ) : tab === 'ventas' ? (
                     <div className="grid" style={{ gap: '15px' }}>
                         {ventas.map(v => (
-                            <div key={v.id} className="card" style={{ padding: '15px' }}>
+                            <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div>
-                                        <h4 style={{ margin: 0 }}>{v.variantes.modelos.descripcion}</h4>
+                                    <div style={{ flex: 1 }}>
+                                        <h4 style={{ margin: 0 }}>{v.variantes?.modelos?.descripcion || 'Sin descripción'}</h4>
                                         <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                                            {new Date(v.fecha_venta).toLocaleString()} • {v.ventas.medio_pago}
+                                            {new Date(v.fecha_venta).toLocaleString()} • {v.estado === 'VENDIDO_ONLINE' ? 'TIENDANUBE' : (v.ventas?.medio_pago || 'S/D')}
                                         </p>
-                                        <p style={{ color: 'var(--accent)', fontWeight: 'bold', marginTop: '5px' }}>
-                                            $ {v.ventas.total.toLocaleString()}
-                                        </p>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
+                                            <p style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
+                                                $ {(v.ventas?.total || 0).toLocaleString()}
+                                            </p>
+                                            {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.6rem', padding: '2px 6px', background: '#eab308', color: 'black' }}>ONLINE</span>}
+                                        </div>
                                     </div>
-                                    <button
-                                        onClick={() => handleDeleteSale(v.ventas.id)}
-                                        style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}
-                                    >
-                                        Anular
-                                    </button>
+                                    {v.ventas && (
+                                        <button
+                                            onClick={() => handleDeleteSale(v.ventas.id)}
+                                            style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                        >
+                                            Anular
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -139,12 +162,12 @@ export default function GestionPage() {
                             <div key={u.id} className="card" style={{ padding: '15px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <div>
-                                        <h4 style={{ margin: 0 }}>{u.variantes.modelos.descripcion}</h4>
+                                        <h4 style={{ margin: 0 }}>{u.variantes?.modelos?.descripcion}</h4>
                                         <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                                            QR: {u.codigo_qr} • Talle: {u.talle_especifico} • {u.variantes.color}
+                                            QR: {u.codigo_qr} • Talle: {u.talle_especifico} • {u.variantes?.color}
                                         </p>
                                         <p style={{ fontSize: '0.8rem', marginTop: '5px' }}>
-                                            Ef: ${u.variantes.precio_efectivo} | List: ${u.variantes.precio_lista}
+                                            Ef: ${u.variantes?.precio_efectivo} | List: ${u.variantes?.precio_lista}
                                         </p>
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -168,6 +191,19 @@ export default function GestionPage() {
                 )}
             </section>
 
+            <section className="mt-xl card" style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                <h3>Configuración Avanzada</h3>
+                <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '20px' }}>Ajustes del sistema y conexiones externas.</p>
+                <button
+                    onClick={handleActivateTN}
+                    disabled={activatingTN}
+                    className="btn-primary"
+                    style={{ background: '#059669', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}
+                >
+                    <span>{activatingTN ? '⏳ Conectando...' : '🔌 Activar Conexión Tiendanube'}</span>
+                </button>
+            </section>
+
             {editingVariant && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -176,7 +212,7 @@ export default function GestionPage() {
                 }}>
                     <form onSubmit={handleUpdatePrice} className="card" style={{ width: '100%', maxWidth: '400px' }}>
                         <h3>Editar Precios</h3>
-                        <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '15px' }}>{editingVariant.modelos.descripcion} - {editingVariant.color}</p>
+                        <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '15px' }}>{editingVariant.modelos?.descripcion} - {editingVariant.color}</p>
 
                         <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Efec / Transf:</label>
                         <input name="efectivo" type="number" step="0.01" className="input-field" defaultValue={editingVariant.precio_efectivo} />
