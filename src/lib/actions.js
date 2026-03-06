@@ -45,8 +45,8 @@ export async function createPurchase({ nro_remito, items }) {
             .single()
 
         if (!variante) {
-            const precioEfectivo = costo_unitario * 2;
-            const precioLista = precioEfectivo * 1.21;
+            const precioLista = Math.round(costo_unitario * 2.42);
+            const precioEfectivo = Math.round(precioLista * (100 / 121));
 
             const { data: newVar, error: vErr } = await supabase
                 .from('variantes')
@@ -225,16 +225,24 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
 /**
  * Records a sale for a unit scanned via QR.
  */
-export async function recordSale(qrCode, medio_pago) {
+export async function recordSale(qrCode, medio_pago, options = {}) {
     const supabase = createClient();
-    // Re-verify unit availability at the moment of sale
+    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null } = options;
+
+    // 1. Re-verify unit availability
     const result = await getUnitForSale(qrCode)
     if (!result.success) throw new Error(result.message)
     const unidad = result.data
 
-    // 2. Select correct price based on payment method
-    const isSpecialPrice = ['EFECTIVO', 'TRANSFERENCIA'].includes(medio_pago)
-    const finalPrice = isSpecialPrice ? unidad.variantes.precio_efectivo : unidad.variantes.precio_lista
+    // 2. Determine price based on rules
+    let finalPrice = unidad.variantes.precio_lista;
+    if (medio_pago === 'EFECTIVO') {
+        finalPrice = Math.round(unidad.variantes.precio_lista * (100 / 121));
+    } else if (medio_pago === 'TRANSFERENCIA') {
+        finalPrice = Math.round(unidad.variantes.precio_lista * (100 / 110));
+    } else if (medio_pago === 'DIVIDIR_PAGOS') {
+        finalPrice = Number(monto_efectivo) + Number(monto_otro);
+    }
 
     // 3. Create the sale record
     const { data: { user } } = await supabase.auth.getUser();
@@ -243,14 +251,18 @@ export async function recordSale(qrCode, medio_pago) {
         .insert([{
             medio_pago,
             total: finalPrice,
-            user_id: user?.id || null
+            user_id: user?.id || null,
+            // These will work if the user ran the SQL
+            monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? finalPrice : 0),
+            monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
+            otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null
         }])
         .select()
         .single()
 
     if (ventaError) throw ventaError
 
-    // 3. Update the unit status
+    // 4. Update the unit status
     const { error: updateError } = await supabase
         .from('unidades')
         .update({
@@ -507,7 +519,7 @@ export async function getDailySummary(onlyUserId = null) {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
-            ventas (total, medio_pago, user_id, profiles (nombre)),
+            ventas (total, medio_pago, user_id, monto_efectivo, profiles (nombre)),
             variantes (color, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
@@ -534,14 +546,13 @@ export async function getDailySummary(onlyUserId = null) {
         talle: unit.talle_especifico,
         precio: parseFloat(unit.ventas?.total) || 0,
         medio_pago: unit.ventas?.medio_pago,
+        monto_efectivo: parseFloat(unit.ventas?.monto_efectivo) || 0,
         vendedor: unit.ventas?.user_id,
         vendedor_nombre: unit.ventas?.profiles?.nombre || 'S/D'
     }));
 
     // Cash Sales
-    const cashSalesAmount = allItems
-        .filter(i => i.medio_pago === 'EFECTIVO')
-        .reduce((acc, item) => acc + item.precio, 0);
+    const cashSalesAmount = allItems.reduce((acc, item) => acc + item.monto_efectivo, 0);
 
     // Manual Movements Sum
     const movementsSum = (movements || []).reduce((acc, mov) => acc + (parseFloat(mov.monto) || 0), 0);
@@ -629,9 +640,9 @@ export async function updateVariant(variantId, updates) {
 /**
  * Updates variant details (prices, color).
  */
-export async function updatePrice(variantId, newPriceEfectivo) {
+export async function updatePrice(variantId, newPriceLista) {
     const supabase = createClient();
-    const newPriceLista = Math.round(newPriceEfectivo * 1.21);
+    const newPriceEfectivo = Math.round(newPriceLista * (100 / 121));
 
     const { error } = await supabase
         .from('variantes')

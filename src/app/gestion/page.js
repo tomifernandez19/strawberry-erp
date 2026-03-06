@@ -70,9 +70,14 @@ export default function GestionPage() {
     const handleUpdatePrice = async (e) => {
         e.preventDefault()
         const formData = new FormData(e.target)
+        const newLista = parseFloat(formData.get('lista'))
+
+        // Auto-calculate cash price for consistency (100/121)
+        const newEfectivo = Math.round(newLista * (100 / 121));
+
         const updates = {
-            precio_efectivo: parseFloat(formData.get('efectivo')),
-            precio_lista: parseFloat(formData.get('lista'))
+            precio_efectivo: newEfectivo,
+            precio_lista: newLista
         }
         try {
             await updateVariant(editingVariant.id, updates)
@@ -214,15 +219,23 @@ export default function GestionPage() {
                         <h3>Editar Precios</h3>
                         <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '15px' }}>{editingVariant.modelos?.descripcion} - {editingVariant.color}</p>
 
-                        <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Efec / Transf:</label>
-                        <input name="efectivo" type="number" step="0.01" className="input-field" defaultValue={editingVariant.precio_efectivo} />
+                        <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>PRECIO LISTA (BASE):</label>
+                        <input name="lista" type="number" step="1" className="input-field" defaultValue={editingVariant.precio_lista} autoFocus />
 
-                        <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Lista / Tarjeta:</label>
-                        <input name="lista" type="number" step="0.01" className="input-field" defaultValue={editingVariant.precio_lista} />
+                        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                            <div className="card" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Efectivo (Automá.)</p>
+                                <p style={{ fontSize: '0.9rem' }}>$ {Math.round(editingVariant.precio_lista * (100 / 121)).toLocaleString()}</p>
+                            </div>
+                            <div className="card" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Transf. (Automá.)</p>
+                                <p style={{ fontSize: '0.9rem' }}>$ {Math.round(editingVariant.precio_lista * (100 / 110)).toLocaleString()}</p>
+                            </div>
+                        </div>
 
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                             <button type="button" onClick={() => setEditingVariant(null)} className="btn-secondary" style={{ flex: 1 }}>Cancelar</button>
-                            <button type="submit" className="btn-primary" style={{ flex: 1 }}>Guardar</button>
+                            <button type="submit" className="btn-primary" style={{ flex: 1 }}>Actualizar Todo</button>
                         </div>
                     </form>
                 </div>

@@ -11,10 +11,15 @@ export default function VenderPage() {
     const [error, setError] = useState('')
     const [medioPago, setMedioPago] = useState('EFECTIVO')
 
+    // State for split payments
+    const [montoEfectivo, setMontoEfectivo] = useState('')
+    const [montoOtro, setMontoOtro] = useState('')
+    const [otroMedioPago, setOtroMedioPago] = useState('TARJETA_DEBITO')
+
     const handleScanSuccess = async (qrCode) => {
         setLoading(true)
         setError('')
-        setPreviewUnit(null) // clear previous
+        setPreviewUnit(null)
         try {
             const result = await getUnitForSale(qrCode)
             if (result.success) {
@@ -31,10 +36,25 @@ export default function VenderPage() {
 
     const handleConfirmSale = async () => {
         if (!previewUnit) return
+
+        // Validation for split payment
+        if (medioPago === 'DIVIDIR_PAGOS') {
+            if (!montoEfectivo || !montoOtro) {
+                setError('Debe completar ambos montos para el pago dividido.')
+                return
+            }
+        }
+
         setLoading(true)
         setError('')
         try {
-            const result = await recordSale(previewUnit.codigo_qr, medioPago)
+            const options = medioPago === 'DIVIDIR_PAGOS' ? {
+                monto_efectivo: parseFloat(montoEfectivo),
+                monto_otro: parseFloat(montoOtro),
+                otro_medio_pago: otroMedioPago
+            } : {}
+
+            const result = await recordSale(previewUnit.codigo_qr, medioPago, options)
             setSaleResult(result)
             setPreviewUnit(null)
         } catch (err) {
@@ -48,7 +68,15 @@ export default function VenderPage() {
         setSaleResult(null)
         setPreviewUnit(null)
         setError('')
+        setMontoEfectivo('')
+        setMontoOtro('')
+        setMedioPago('EFECTIVO')
     }
+
+    // New calculated prices
+    const precioLista = previewUnit?.variantes?.precio_lista || 0
+    const precioEfectivo = Math.round(precioLista * (100 / 121))
+    const precioTransf = Math.round(precioLista * (100 / 110))
 
     if (saleResult) {
         return (
@@ -61,10 +89,18 @@ export default function VenderPage() {
                     <p style={{ marginTop: 'var(--spacing-md)', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent)' }}>
                         $ {saleResult.venta.total.toLocaleString()}
                     </p>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{saleResult.venta.medio_pago.replace('_', ' ')}</p>
                 </div>
                 <button className="btn-primary mt-lg" onClick={resetSale}>Vender Otro Par</button>
             </div>
         )
+    }
+
+    const currentTotal = () => {
+        if (medioPago === 'EFECTIVO') return precioEfectivo
+        if (medioPago === 'TRANSFERENCIA') return precioTransf
+        if (medioPago === 'DIVIDIR_PAGOS') return (Number(montoEfectivo) + Number(montoOtro)) || 0
+        return precioLista
     }
 
     return (
@@ -85,18 +121,22 @@ export default function VenderPage() {
                     <section className="card" style={{ border: '2px solid var(--accent)' }}>
                         <div className="text-center">
                             <span className="badge" style={{ marginBottom: '8px' }}>Confirmar Datos</span>
-                            <h2 style={{ color: 'var(--primary)' }}>{previewUnit.variantes.modelos.descripcion}</h2>
+                            <h2 style={{ color: 'var(--primary)', margin: '10px 0' }}>{previewUnit.variantes.modelos.descripcion}</h2>
                             <p style={{ fontSize: '1.1rem', opacity: 0.8 }}>{previewUnit.variantes.color} • Talle {previewUnit.talle_especifico}</p>
                         </div>
 
-                        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: 'var(--spacing-lg)' }}>
-                            <div className="card" style={{ backgroundColor: 'rgba(34, 197, 94, 0.05)', padding: '10px', border: medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA' ? '1px solid var(--accent)' : '1px solid transparent' }}>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>Efectivo / Transf.</p>
-                                <p style={{ fontWeight: 'bold' }}>$ {(previewUnit.variantes?.precio_efectivo || 0).toLocaleString()}</p>
+                        <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                            <div className="card text-center" style={{ padding: '10px 5px', background: medioPago === 'EFECTIVO' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: medioPago === 'EFECTIVO' ? '1px solid var(--accent)' : '1px solid transparent' }}>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Efectivo</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>${precioEfectivo.toLocaleString()}</p>
                             </div>
-                            <div className="card" style={{ backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '10px', border: !(['EFECTIVO', 'TRANSFERENCIA'].includes(medioPago)) ? '1px solid var(--accent)' : '1px solid transparent' }}>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>Precio Lista</p>
-                                <p style={{ fontWeight: 'bold' }}>$ {(previewUnit.variantes?.precio_lista || 0).toLocaleString()}</p>
+                            <div className="card text-center" style={{ padding: '10px 5px', background: medioPago === 'TRANSFERENCIA' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: medioPago === 'TRANSFERENCIA' ? '1px solid var(--accent)' : '1px solid transparent' }}>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Transf.</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>${precioTransf.toLocaleString()}</p>
+                            </div>
+                            <div className="card text-center" style={{ padding: '10px 5px', background: !['EFECTIVO', 'TRANSFERENCIA', 'DIVIDIR_PAGOS'].includes(medioPago) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: !['EFECTIVO', 'TRANSFERENCIA', 'DIVIDIR_PAGOS'].includes(medioPago) ? '1px solid var(--accent)' : '1px solid transparent' }}>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Lista</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>${precioLista.toLocaleString()}</p>
                             </div>
                         </div>
 
@@ -107,20 +147,57 @@ export default function VenderPage() {
                                 onChange={(e) => setMedioPago(e.target.value)}
                                 className="input-field"
                             >
-                                <option value="EFECTIVO">Efectivo (Descuento) 💵</option>
-                                <option value="TRANSFERENCIA">Transferencia (Descuento) 📱</option>
+                                <option value="EFECTIVO">Efectivo (Promo) 💵</option>
+                                <option value="TRANSFERENCIA">Transferencia (Promo) 📱</option>
                                 <option value="TARJETA_DEBITO">Tarjeta Débito 💳</option>
                                 <option value="TARJETA_CREDITO">Tarjeta Crédito 💳</option>
                                 <option value="QR_LISTA">QR Pago / Otros 🔘</option>
+                                <option value="DIVIDIR_PAGOS">Dividir Pago (Efe + Otro) ⚖️</option>
                             </select>
                         </div>
+
+                        {medioPago === 'DIVIDIR_PAGOS' && (
+                            <div className="card grid mt-md" style={{ gap: '15px', background: 'rgba(255,255,255,0.03)' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Monto en Efectivo:</label>
+                                    <input
+                                        type="number"
+                                        value={montoEfectivo}
+                                        onChange={(e) => setMontoEfectivo(e.target.value)}
+                                        className="input-field"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Segundo Medio de Pago:</label>
+                                    <select
+                                        value={otroMedioPago}
+                                        onChange={(e) => setOtroMedioPago(e.target.value)}
+                                        className="input-field"
+                                    >
+                                        <option value="TARJETA_DEBITO">Tarjeta Débito 💳</option>
+                                        <option value="TARJETA_CREDITO">Tarjeta Crédito 💳</option>
+                                        <option value="TRANSFERENCIA">Transferencia 📱</option>
+                                        <option value="QR_LISTA">QR Pago / Otros 🔘</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Monto Restante:</label>
+                                    <input
+                                        type="number"
+                                        value={montoOtro}
+                                        onChange={(e) => setMontoOtro(e.target.value)}
+                                        className="input-field"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         <div className="card mt-md text-center" style={{ backgroundColor: 'var(--secondary)' }}>
                             <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>TOTAL A COBRAR</p>
                             <h2 style={{ color: 'var(--accent)', margin: 0 }}>
-                                $ {((['EFECTIVO', 'TRANSFERENCIA'].includes(medioPago)
-                                    ? previewUnit.variantes?.precio_efectivo
-                                    : previewUnit.variantes?.precio_lista) || 0).toLocaleString()}
+                                $ {currentTotal().toLocaleString()}
                             </h2>
                         </div>
 
