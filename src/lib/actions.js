@@ -160,36 +160,38 @@ export async function addStock(variantId, talles) {
  */
 export async function assignQRToUnit(unitId, qrCode) {
     const supabase = createClient();
-    // 1. Validate Format (ST-000000)
-    const qrPattern = /^ST-\d{6}$/
-    if (!qrPattern.test(qrCode)) {
-        throw new Error('Formato inválido. El código debe ser ST- seguido de 6 números (ej: ST-000123).')
+    try {
+        // 1. Validate Format (ST-000000)
+        const qrPattern = /^ST-\d{6}$/
+        if (!qrPattern.test(qrCode)) {
+            throw new Error('Formato inválido. El código debe ser ST- seguido de 6 números (ej: ST-000123).')
+        }
+
+        // 2. Check if QR already exists
+        const { data: existing } = await supabase
+            .from('unidades')
+            .select('id')
+            .eq('codigo_qr', qrCode)
+            .maybeSingle()
+
+        if (existing) {
+            throw new Error('Este código QR ya está asignado a otro par.')
+        }
+
+        const { error } = await supabase
+            .from('unidades')
+            .update({
+                codigo_qr: qrCode,
+                estado: 'DISPONIBLE'
+            })
+            .eq('id', unitId)
+            .eq('estado', 'PENDIENTE_QR')
+
+        if (error) throw new Error(error.message)
+        return { success: true }
+    } catch (err) {
+        return { success: false, message: err.message }
     }
-
-    // 2. Check if QR already exists
-    const { data: existing } = await supabase
-        .from('unidades')
-        .select('id')
-        .eq('codigo_qr', qrCode)
-        .maybeSingle() // Use maybeSingle to avoid errors if not found
-
-    if (existing) {
-        throw new Error('Este código QR ya está asignado a otro par.')
-    }
-
-    const { data, error } = await supabase
-        .from('unidades')
-        .update({
-            codigo_qr: qrCode,
-            estado: 'DISPONIBLE'
-        })
-        .eq('id', unitId)
-        .eq('estado', 'PENDIENTE_QR') // Safety: only assign if pending
-        .select()
-        .single()
-
-    if (error) throw error
-    return data
 }
 
 /**

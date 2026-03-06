@@ -35,13 +35,17 @@ export default function AsignarQRPage() {
         if (!selectedUnit) return
 
         try {
-            await assignQRToUnit(selectedUnit.id, qrCode)
-            setMessage(`✅ ${selectedUnit.variantes.modelos.descripcion} (Talle ${selectedUnit.talle_especifico}) asignado!`)
+            const res = await assignQRToUnit(selectedUnit.id, qrCode)
+            if (res.success) {
+                setMessage(`✅ ${selectedUnit.variantes.modelos.descripcion} (Talle ${selectedUnit.talle_especifico}) asignado!`)
 
-            // Remove from local list and move to next
-            const remaining = pendingUnits.filter(u => u.id !== selectedUnit.id)
-            setPendingUnits(remaining)
-            setSelectedUnit(remaining.length > 0 ? remaining[0] : null)
+                // Remove from local list and move to next
+                const remaining = pendingUnits.filter(u => u.id !== selectedUnit.id)
+                setPendingUnits(remaining)
+                setSelectedUnit(remaining.length > 0 ? remaining[0] : null)
+            } else {
+                alert(res.message)
+            }
         } catch (err) {
             alert(err.message)
         }
