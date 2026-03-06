@@ -75,7 +75,8 @@ export default function VenderPage() {
 
     // New calculated prices
     const precioLista = previewUnit?.variantes?.precio_lista || 0
-    const precioEfectivo = Math.round(precioLista * (100 / 121))
+    // Cash price rounding: Ceiling to next 1000
+    const precioEfectivo = Math.ceil((precioLista * (100 / 121)) / 1000) * 1000
     const precioTransf = Math.round(precioLista * (100 / 110))
 
     if (saleResult) {

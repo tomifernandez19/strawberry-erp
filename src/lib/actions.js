@@ -46,7 +46,8 @@ export async function createPurchase({ nro_remito, items }) {
 
         if (!variante) {
             const precioLista = Math.round(costo_unitario * 2.42);
-            const precioEfectivo = Math.round(precioLista * (100 / 121));
+            // Cash price rounding: Ceiling to next 1000
+            const precioEfectivo = Math.ceil((precioLista * (100 / 121)) / 1000) * 1000;
 
             const { data: newVar, error: vErr } = await supabase
                 .from('variantes')
@@ -237,7 +238,8 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
     // 2. Determine price based on rules
     let finalPrice = unidad.variantes.precio_lista;
     if (medio_pago === 'EFECTIVO') {
-        finalPrice = Math.round(unidad.variantes.precio_lista * (100 / 121));
+        // Ceiling rounding to next 1000 for Cash
+        finalPrice = Math.ceil((unidad.variantes.precio_lista * (100 / 121)) / 1000) * 1000;
     } else if (medio_pago === 'TRANSFERENCIA') {
         finalPrice = Math.round(unidad.variantes.precio_lista * (100 / 110));
     } else if (medio_pago === 'DIVIDIR_PAGOS') {
@@ -1331,13 +1333,20 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
         // 2. Record difference sale if > 0
         let ventaId = null;
         if (difference > 0) {
+            let totalDiferencia = difference;
+            if (medio_pago === 'EFECTIVO') {
+                totalDiferencia = Math.ceil((difference * (100 / 121)) / 1000) * 1000;
+            } else if (medio_pago === 'DIVIDIR_PAGOS') {
+                totalDiferencia = Number(monto_efectivo) + Number(monto_otro);
+            }
+
             const { data: venta, error: vErr } = await supabase
                 .from('ventas')
                 .insert([{
                     medio_pago,
-                    total: difference,
+                    total: totalDiferencia,
                     user_id: user?.id || null,
-                    monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? difference : 0),
+                    monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? totalDiferencia : 0),
                     monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
                     otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
                     tipo: 'DIFERENCIA_CAMBIO'

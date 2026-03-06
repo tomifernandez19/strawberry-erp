@@ -62,8 +62,8 @@ export default function CambiosPage() {
 
     const difference = (newUnit?.variantes.precio_lista || 0) - (oldUnit?.ventas?.total || 0)
 
-    // Pre-calculated prices for split payment calculation
-    const precioEfectivoDiff = Math.round(difference * (100 / 121))
+    // Pre-calculated prices for split payment calculation (rounded up to 1000)
+    const precioEfectivoDiff = Math.ceil((difference * (100 / 121)) / 1000) * 1000
 
     const handleConfirmExchange = async () => {
         setLoading(true)
@@ -184,8 +184,8 @@ export default function CambiosPage() {
 
                             {medioPago === 'EFECTIVO' && (
                                 <div className="card text-center" style={{ background: 'var(--secondary)', padding: '10px' }}>
-                                    <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>Total con descuento Efectivo:</p>
-                                    <h3 style={{ margin: 0, color: 'var(--accent)' }}>$ {Math.round(difference * (100 / 121)).toLocaleString()}</h3>
+                                    <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>Total con descuento Efectivo (Redondeado):</p>
+                                    <h3 style={{ margin: 0, color: 'var(--accent)' }}>$ {precioEfectivoDiff.toLocaleString()}</h3>
                                 </div>
                             )}
 

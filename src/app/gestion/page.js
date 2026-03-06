@@ -72,8 +72,8 @@ export default function GestionPage() {
         const formData = new FormData(e.target)
         const newLista = parseFloat(formData.get('lista'))
 
-        // Auto-calculate cash price for consistency (100/121)
-        const newEfectivo = Math.round(newLista * (100 / 121));
+        // Auto-calculate cash price for consistency (100/121) rounded up to 1000
+        const newEfectivo = Math.ceil((newLista * (100 / 121)) / 1000) * 1000;
 
         const updates = {
             precio_efectivo: newEfectivo,
@@ -225,7 +225,7 @@ export default function GestionPage() {
                         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
                             <div className="card" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
                                 <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Efectivo (Automá.)</p>
-                                <p style={{ fontSize: '0.9rem' }}>$ {Math.round(editingVariant.precio_lista * (100 / 121)).toLocaleString()}</p>
+                                <p style={{ fontSize: '0.9rem' }}>$ {Math.ceil((editingVariant.precio_lista * (100 / 121)) / 1000) * 1000}</p>
                             </div>
                             <div className="card" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
                                 <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Transf. (Automá.)</p>
