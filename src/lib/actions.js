@@ -1479,7 +1479,6 @@ export async function getPendingInvoicesList() {
  * Uploads a product image provided as a Base64 string from the client.
  */
 export async function uploadProductImage(variantId, base64Data) {
-    const { createClient } = require('@/lib/supabase/server')
     const supabase = createClient();
     try {
         // Convert base64 to Buffer
@@ -1523,7 +1522,6 @@ export async function uploadProductImage(variantId, base64Data) {
  * Gets the list of variants missing images.
  */
 export async function getMissingImagesList() {
-    const { createClient } = require('@/lib/supabase/server')
     const supabase = createClient();
     try {
         const { data, error } = await supabase

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { createPurchase } from '@/lib/actions'
+import { createPurchase, uploadProductImage } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 import Tesseract from 'tesseract.js';
 
@@ -148,11 +148,8 @@ export default function NuevaCompraPage() {
 
         const reader = new FileReader();
         reader.onloadend = async () => {
-            // We use a specific helper for temporary upload or generic upload
-            const { uploadProductImage } = await import('@/lib/actions')
             setLoading(true)
-            // We don't have variant ID yet, so we just store base64 for now or upload to temp
-            // Actually, let's keep base64 and upload during handleSubmit
+            // We don't have variant ID yet, so we just store base64 for now
             updateItem(index, 'localImage', reader.result)
             setLoading(false)
         }
@@ -180,8 +177,6 @@ export default function NuevaCompraPage() {
         e.preventDefault()
         setLoading(true)
         try {
-            const { uploadProductImage } = await import('@/lib/actions')
-
             const formattedItems = []
             for (const item of items) {
                 if (!item.codigo_proveedor) continue;
