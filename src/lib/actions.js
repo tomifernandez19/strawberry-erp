@@ -1228,7 +1228,7 @@ export async function getAvailableStockDetailed() {
     const { data, error } = await supabase
         .from('unidades')
         .select(`
-            id, talle_especifico,
+            id, talle_especifico, ubicacion,
             variantes (id, color, precio_efectivo, precio_lista, modelos (id, descripcion, marca))
         `)
         .eq('estado', 'DISPONIBLE');
@@ -1239,4 +1239,40 @@ export async function getAvailableStockDetailed() {
     }
 
     return data || [];
+}
+
+/**
+ * Assigns a warehouse location (zone) to a unit.
+ */
+export async function assignLocation(qrCode, location) {
+    const supabase = createClient();
+    try {
+        // 1. Find the unit
+        const { data: unit, error: fetchErr } = await supabase
+            .from('unidades')
+            .select('id, talle_especifico, variantes(color, modelos(descripcion))')
+            .eq('codigo_qr', qrCode)
+            .eq('estado', 'DISPONIBLE')
+            .maybeSingle();
+
+        if (fetchErr || !unit) {
+            return { success: false, message: 'QR no encontrado o no disponible.' };
+        }
+
+        // 2. Update location
+        const { error: updateErr } = await supabase
+            .from('unidades')
+            .update({ ubicacion: location.toUpperCase() })
+            .eq('id', unit.id);
+
+        if (updateErr) throw updateErr;
+
+        return {
+            success: true,
+            details: `${unit.variantes.modelos.descripcion} (${unit.variantes.color}) T${unit.talle_especifico}`
+        };
+    } catch (err) {
+        console.error("[Location] Error:", err.message);
+        return { success: false, message: err.message };
+    }
 }

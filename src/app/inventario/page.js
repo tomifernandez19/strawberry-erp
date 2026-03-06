@@ -29,16 +29,21 @@ export default function InventarioPage() {
                     precio_efectivo: unit.variantes.precio_efectivo,
                     precio_lista: unit.variantes.precio_lista,
                     count: 0,
-                    talles: {}
+                    talles: {},
+                    ubicaciones: new Set()
                 }
             }
             acc[key].count++;
             const talle = unit.talle_especifico;
             acc[key].talles[talle] = (acc[key].talles[talle] || 0) + 1;
+            if (unit.ubicacion) acc[key].ubicaciones.add(unit.ubicacion);
             return acc;
         }, {});
 
-        setStock(Object.values(grouped))
+        setStock(Object.values(grouped).map(item => ({
+            ...item,
+            ubicaciones: Array.from(item.ubicaciones).sort()
+        })))
         setLoading(false)
     }
 
@@ -90,6 +95,13 @@ export default function InventarioPage() {
                                                     </span>
                                                 ))}
                                             </div>
+                                        </div>
+
+                                        <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '8px' }}>
+                                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Ubicación:</p>
+                                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold', color: item.ubicaciones.length > 0 ? 'var(--accent)' : '#ef4444' }}>
+                                                {item.ubicaciones.length > 0 ? item.ubicaciones.join(', ') : '⚠️ No asignada'}
+                                            </p>
                                         </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>

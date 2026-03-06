@@ -10,6 +10,7 @@ export default function HomePage() {
     const [summary, setSummary] = useState({ count: 0, total: 0, cash: 0, items: [] })
     const [pendingQR, setPendingQR] = useState(0)
     const [pendingDispatches, setPendingDispatches] = useState(0)
+    const [pendingLocation, setPendingLocation] = useState(0)
     const [showCashDetail, setShowCashDetail] = useState(false)
     const [recentMovements, setRecentMovements] = useState([])
     const [loadingMovements, setLoadingMovements] = useState(false)
@@ -35,6 +36,15 @@ export default function HomePage() {
                     .select('*', { count: 'exact', head: true })
                     .eq('estado', 'PENDIENTE_DESPACHO')
                 setPendingDispatches(dispatchCount || 0)
+
+                // Task 3: Units with QR but without Location
+                const { count: locCount } = await supabase
+                    .from('unidades')
+                    .select('*', { count: 'exact', head: true })
+                    .not('codigo_qr', 'is', null)
+                    .is('ubicacion', null)
+                    .eq('estado', 'DISPONIBLE')
+                setPendingLocation(locCount || 0)
             }
         }
 
@@ -80,6 +90,18 @@ export default function HomePage() {
                     </div>
                     <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingQR > 0 ? '#ef4444' : 'var(--accent)' }}>
                         {pendingQR}
+                    </span>
+                </section>
+            </Link>
+
+            <Link href="/ubicacion" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <section className="card" style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px' }}>
+                    <div>
+                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Sin Ubicación (Depósito)</h4>
+                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{pendingLocation} unidades pendientes</p>
+                    </div>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: pendingLocation > 0 ? '#10b981' : 'var(--accent)' }}>
+                        {pendingLocation}
                     </span>
                 </section>
             </Link>

@@ -53,6 +53,13 @@ export default function ConsultarPage() {
                             <h2 style={{ color: 'var(--primary)', margin: '10px 0' }}>{scannedData.model.descripcion}</h2>
                             <p style={{ fontSize: '1.2rem', opacity: 0.8 }}>Color: <strong>{scannedData.variant.color}</strong></p>
                             <p style={{ fontSize: '1rem', opacity: 0.6 }}>Unidad: Talle {scannedData.unit.talle_especifico}</p>
+
+                            <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '1px' }}>Ubicación en Depósito:</p>
+                                <p style={{ fontSize: '1.3rem', fontWeight: 'bold', color: scannedData.unit.ubicacion ? 'var(--accent)' : '#ef4444' }}>
+                                    {scannedData.unit.ubicacion || '⚠️ SIN ASIGNAR'}
+                                </p>
+                            </div>
                         </div>
 
                         <div className="grid mt-lg" style={{ gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
