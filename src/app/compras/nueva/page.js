@@ -282,16 +282,16 @@ export default function NuevaCompraPage() {
                         type="text"
                         placeholder="Proveedor (Opcional)"
                         value={formData.proveedor}
-                        onChange={e => setFormData({ ...formData, proveedor: e.target.value })}
-                        style={inputStyle}
+                        onChange={e => setFormData({ ...formData, proveedor: e.target.value.toUpperCase() })}
+                        style={{ ...inputStyle, textTransform: 'uppercase' }}
                     />
                     <input
                         type="text"
                         placeholder="Nro Remito"
                         required
                         value={formData.nro_remito}
-                        onChange={e => setFormData({ ...formData, nro_remito: e.target.value })}
-                        style={inputStyle}
+                        onChange={e => setFormData({ ...formData, nro_remito: e.target.value.toUpperCase() })}
+                        style={{ ...inputStyle, textTransform: 'uppercase' }}
                     />
                 </div>
 
@@ -313,8 +313,8 @@ export default function NuevaCompraPage() {
                                 type="text"
                                 placeholder="Código"
                                 value={item.codigo_proveedor}
-                                onChange={e => updateItem(index, 'codigo_proveedor', e.target.value)}
-                                style={{ ...inputStyle, flex: 1, fontWeight: 'bold', color: 'var(--primary)' }}
+                                onChange={e => updateItem(index, 'codigo_proveedor', e.target.value.toUpperCase())}
+                                style={{ ...inputStyle, flex: 1, fontWeight: 'bold', color: 'var(--primary)', textTransform: 'uppercase' }}
                             />
                             <div style={{
                                 flex: 0.5,
@@ -333,16 +333,16 @@ export default function NuevaCompraPage() {
                             type="text"
                             placeholder="Descripción (Nombre)"
                             value={item.descripcion}
-                            onChange={e => updateItem(index, 'descripcion', e.target.value)}
-                            style={inputStyle}
+                            onChange={e => updateItem(index, 'descripcion', e.target.value.toUpperCase())}
+                            style={{ ...inputStyle, textTransform: 'uppercase' }}
                         />
 
                         <input
                             type="text"
                             placeholder="Color"
                             value={item.color}
-                            onChange={e => updateItem(index, 'color', e.target.value)}
-                            style={inputStyle}
+                            onChange={e => updateItem(index, 'color', e.target.value.toUpperCase())}
+                            style={{ ...inputStyle, textTransform: 'uppercase' }}
                         />
 
                         <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
