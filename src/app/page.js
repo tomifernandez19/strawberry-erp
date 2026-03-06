@@ -11,6 +11,7 @@ export default function HomePage() {
     const [pendingQR, setPendingQR] = useState(0)
     const [pendingDispatches, setPendingDispatches] = useState(0)
     const [pendingLocation, setPendingLocation] = useState(0)
+    const [pendingImages, setPendingImages] = useState(0)
     const [showCashDetail, setShowCashDetail] = useState(false)
     const [recentMovements, setRecentMovements] = useState([])
     const [loadingMovements, setLoadingMovements] = useState(false)
@@ -50,6 +51,13 @@ export default function HomePage() {
                 // Task 4: Invoices
                 const res = await getPendingInvoicesSummary()
                 if (res.success) setInvoiceCounts(res.count)
+
+                // Task 5: Variants missing images
+                const { count: imgCount } = await supabase
+                    .from('variantes')
+                    .select('*', { count: 'exact', head: true })
+                    .is('imagen_url', null)
+                setPendingImages(imgCount || 0)
             }
         }
 
@@ -133,6 +141,14 @@ export default function HomePage() {
                     <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Lucas: {invoiceCounts.lucas}</span>
                 </div>
             )
+        } else if (type === 'IMAGE') {
+            count = pendingImages;
+            title = 'Faltan Fotos';
+            subtitle = `${count} productos sin imagen`;
+            href = '/gestion?tab=imagenes';
+            borderColor = 'rgba(236, 72, 153, 0.3)';
+            bg = 'rgba(236, 72, 153, 0.05)';
+            accentColor = '#ec4899';
         }
 
         const isCounting = count > 0;
@@ -156,7 +172,7 @@ export default function HomePage() {
     }
 
     const PendingGrid = ({ mode }) => {
-        const items = ['QR', 'LOC', 'DISPATCH', 'INVOICE'].map(t => renderCard(t, mode)).filter(Boolean)
+        const items = ['QR', 'LOC', 'DISPATCH', 'INVOICE', 'IMAGE'].map(t => renderCard(t, mode)).filter(Boolean)
         if (items.length === 0) return null;
         return (
             <div className="grid mt-md" style={{ gap: '15px' }}>
@@ -164,6 +180,8 @@ export default function HomePage() {
             </div>
         )
     }
+
+    const isAdminAndHasTasks = isAdmin && (pendingQR > 0 || pendingDispatches > 0 || pendingLocation > 0 || invoiceCounts.total > 0 || pendingImages > 0)
 
     return (
         <div className="grid mt-lg">
@@ -271,8 +289,7 @@ export default function HomePage() {
                     </Link>
                 </div>
 
-                {/* Section 2: Bottom Pending (only those at 0) */}
-                {isAdmin && <PendingGrid mode="BOTTOM" />}
+                {/* Section 2: Bottom Pending removed as requested by user - only show if count > 0 */}
             </div>
 
             <div className="mt-lg">

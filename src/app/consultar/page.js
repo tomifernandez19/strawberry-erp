@@ -50,6 +50,13 @@ export default function ConsultarPage() {
                                     {scannedData.unit.estado}
                                 </span>
                             </div>
+
+                            {scannedData.variant?.imagen_url && (
+                                <div style={{ width: '100%', maxWidth: '200px', margin: '15px auto', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)' }}>
+                                    <img src={scannedData.variant.imagen_url} alt="Producto" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                                </div>
+                            )}
+
                             <h2 style={{ color: 'var(--primary)', margin: '10px 0' }}>{scannedData.model.descripcion}</h2>
                             <p style={{ fontSize: '1.2rem', opacity: 0.8 }}>Color: <strong>{scannedData.variant.color}</strong></p>
                             <p style={{ fontSize: '1rem', opacity: 0.6 }}>Unidad: Talle {scannedData.unit.talle_especifico}</p>

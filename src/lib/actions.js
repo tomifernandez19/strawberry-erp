@@ -11,7 +11,7 @@ export async function createPurchase({ nro_remito, items }) {
     const processedItems = []
 
     for (const item of items) {
-        const { codigo_proveedor, descripcion, color, costo_unitario, talles } = item
+        const { codigo_proveedor, descripcion, color, costo_unitario, talles, imagen_url = null } = item
         const supplierCode = codigo_proveedor.substring(0, 2)
 
         // a. Find or Create Modelo
@@ -57,12 +57,19 @@ export async function createPurchase({ nro_remito, items }) {
                     talle: 'CURVA',
                     precio_efectivo: precioEfectivo,
                     precio_lista: precioLista,
-                    costo_promedio: costo_unitario
+                    costo_promedio: costo_unitario,
+                    imagen_url: imagen_url
                 }])
                 .select()
                 .single()
             if (vErr) throw vErr
             variante = newVar
+        } else if (imagen_url && !variante.imagen_url) {
+            // Update image if existing variant doesn't have one
+            await supabase
+                .from('variantes')
+                .update({ imagen_url })
+                .eq('id', variante.id)
         }
 
         processedItems.push({ ...item, variante_id: variante.id })
@@ -1460,6 +1467,70 @@ export async function getPendingInvoicesList() {
             .select('*, profiles(nombre), unidades(*, variantes(*, modelos(*)))')
             .eq('facturado', false)
             .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return { success: true, data };
+    } catch (err) {
+        return { success: false, message: err.message };
+    }
+}
+
+/**
+ * Uploads a product image provided as a Base64 string from the client.
+ */
+export async function uploadProductImage(variantId, base64Data) {
+    const { createClient } = require('@/lib/supabase/server')
+    const supabase = createClient();
+    try {
+        // Convert base64 to Buffer
+        const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
+        const fileName = `variant_${variantId}_${Date.now()}.jpg`;
+
+        const { data, error } = await supabase
+            .storage
+            .from('productos')
+            .upload(fileName, buffer, {
+                contentType: 'image/jpeg',
+                cacheControl: '3600',
+                upsert: true
+            });
+
+        if (error) throw error;
+
+        // Get Public URL
+        const { data: { publicUrl } } = supabase
+            .storage
+            .from('productos')
+            .getPublicUrl(fileName);
+
+        // Update variant if provided
+        if (variantId) {
+            const { error: vErr } = await supabase
+                .from('variantes')
+                .update({ imagen_url: publicUrl })
+                .eq('id', variantId);
+
+            if (vErr) throw vErr;
+        }
+
+        return { success: true, url: publicUrl };
+    } catch (err) {
+        return { success: false, message: err.message };
+    }
+}
+
+/**
+ * Gets the list of variants missing images.
+ */
+export async function getMissingImagesList() {
+    const { createClient } = require('@/lib/supabase/server')
+    const supabase = createClient();
+    try {
+        const { data, error } = await supabase
+            .from('variantes')
+            .select('*, modelos(*)')
+            .is('imagen_url', null)
+            .order('id', { ascending: false });
 
         if (error) throw error;
         return { success: true, data };

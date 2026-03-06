@@ -135,6 +135,13 @@ export default function VenderPage() {
                     <section className="card" style={{ border: '2px solid var(--accent)' }}>
                         <div className="text-center">
                             <span className="badge" style={{ marginBottom: '8px' }}>Confirmar Datos</span>
+
+                            {previewUnit.variantes?.imagen_url && (
+                                <div style={{ width: '100%', maxWidth: '180px', margin: '0 auto 15px auto', borderRadius: '12px', overflow: 'hidden' }}>
+                                    <img src={previewUnit.variantes.imagen_url} alt="Prod" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                                </div>
+                            )}
+
                             <h2 style={{ color: 'var(--primary)', margin: '10px 0' }}>{previewUnit.variantes.modelos.descripcion}</h2>
                             <p style={{ fontSize: '1.1rem', opacity: 0.8 }}>{previewUnit.variantes.color} • Talle {previewUnit.talle_especifico}</p>
                         </div>

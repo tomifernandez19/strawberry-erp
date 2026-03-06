@@ -142,8 +142,25 @@ export default function NuevaCompraPage() {
         }
     };
 
+    const handleItemPhoto = async (index, e) => {
+        const file = e.target.files[0]
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            // We use a specific helper for temporary upload or generic upload
+            const { uploadProductImage } = await import('@/lib/actions')
+            setLoading(true)
+            // We don't have variant ID yet, so we just store base64 for now or upload to temp
+            // Actually, let's keep base64 and upload during handleSubmit
+            updateItem(index, 'localImage', reader.result)
+            setLoading(false)
+        }
+        reader.readAsDataURL(file);
+    }
+
     const addItem = () => {
-        setItems([...items, { variante_id: '', cantidad: 1, costo_unitario: 0, curva: '35-40' }])
+        setItems([...items, { variante_id: '', cantidad: 1, costo_unitario: 0, curva: '35-40', localImage: null }])
     }
 
     const updateItem = (index, field, value) => {
@@ -163,7 +180,23 @@ export default function NuevaCompraPage() {
         e.preventDefault()
         setLoading(true)
         try {
-            const formattedItems = items.map(item => {
+            const { uploadProductImage } = await import('@/lib/actions')
+
+            const formattedItems = []
+            for (const item of items) {
+                if (!item.codigo_proveedor) continue;
+
+                let imagen_url = null;
+                if (item.localImage) {
+                    // Upload to a generic bucket or use item code as reference
+                    // Since we don't have variantId yet, we can't use uploadProductImage(variantId, ...)
+                    // Let's modify uploadProductImage to be more generic if needed.
+                    // For now, let's use a temp ID or wait after createPurchase?
+                    // Better: call uploadProductImage with a null id and get URL, then update after.
+                    const res = await uploadProductImage(null, item.localImage)
+                    if (res.success) imagen_url = res.url
+                }
+
                 let talles = [];
                 if (item.curva === '35-39(37)') {
                     talles = ['35', '36', '37', '37', '38', '39'];
@@ -178,19 +211,20 @@ export default function NuevaCompraPage() {
                 } else {
                     talles = Array(item.cantidad || 1).fill('U');
                 }
-                return {
+                formattedItems.push({
                     codigo_proveedor: item.codigo_proveedor,
                     descripcion: item.descripcion,
                     color: item.color,
                     costo_unitario: item.costo_unitario,
                     cantidad: talles.length,
-                    talles
-                };
-            });
+                    talles,
+                    imagen_url: imagen_url
+                });
+            }
 
             await createPurchase({
                 nro_remito: formData.nro_remito,
-                items: formattedItems.filter(i => i.codigo_proveedor)
+                items: formattedItems
             })
             router.push('/asignar')
         } catch (error) {
@@ -246,8 +280,18 @@ export default function NuevaCompraPage() {
 
                 <h3>Detalle de productos</h3>
                 {items.map((item, index) => (
-                    <div key={index} className="card grid">
-                        <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+                    <div key={index} className="card grid" style={{ position: 'relative' }}>
+                        <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+                            <div style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {item.localImage ? (
+                                    <img src={item.localImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                    <label style={{ cursor: 'pointer', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <span style={{ fontSize: '1.2rem' }}>📷</span>
+                                        <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => handleItemPhoto(index, e)} />
+                                    </label>
+                                )}
+                            </div>
                             <input
                                 type="text"
                                 placeholder="Código"
