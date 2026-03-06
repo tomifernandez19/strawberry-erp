@@ -1316,26 +1316,19 @@ export async function getUnitForExchange(qrCode) {
 /**
  * Records a product exchange, returning one to stock and selling another.
  */
-export async function recordProductExchange(oldUnitId, newUnitQR, difference, medioPago, options = {}) {
+export async function recordProductExchange(oldUnitId, newUnitQR, difference, medio_pago, options = {}) {
     const supabase = createClient();
     const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null } = options;
 
     try {
-        // 1. Return old unit to stock
-        await supabase.from('unidades').update({
-            estado: 'DISPONIBLE',
-            venta_id: null,
-            fecha_venta: null
-        }).eq('id', oldUnitId);
-
-        // 2. Process new unit sale
+        // 1. Process new unit sale first (to ensure availability)
         const result = await getUnitForSale(newUnitQR);
         if (!result.success) throw new Error(result.message);
         const newUnit = result.data;
 
         const { data: { user } } = await supabase.auth.getUser();
 
-        // 3. Record difference sale if > 0
+        // 2. Record difference sale if > 0
         let ventaId = null;
         if (difference > 0) {
             const { data: venta, error: vErr } = await supabase
@@ -1355,15 +1348,24 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
             ventaId = venta.id;
         }
 
-        // 4. Update new unit status
-        await supabase.from('unidades').update({
+        // 3. Update new unit status to SOLD
+        const { error: newErr } = await supabase.from('unidades').update({
             estado: 'VENDIDO',
             venta_id: ventaId,
             fecha_venta: new Date().toISOString()
         }).eq('id', newUnit.id);
+        if (newErr) throw newErr;
+
+        // 4. Return old unit to stock (DISPONIBLE)
+        const { error: oldErr } = await supabase.from('unidades').update({
+            estado: 'DISPONIBLE',
+            venta_id: null,
+            fecha_venta: null
+        }).eq('id', oldUnitId);
+        if (oldErr) throw oldErr;
 
         return { success: true };
     } catch (err) {
-        return { success: false, message: err.message };
+        return { success: false, message: 'No se pudo completar el cambio: ' + err.message };
     }
 }
