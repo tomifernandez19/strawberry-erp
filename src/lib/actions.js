@@ -257,7 +257,8 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
             // These will work if the user ran the SQL
             monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? finalPrice : 0),
             monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
-            otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null
+            otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
+            facturado: medio_pago === 'EFECTIVO'
         }])
         .select()
         .single()
@@ -1154,7 +1155,8 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
             .insert([{
                 total: montoVenta,
                 medio_pago: medioPagoFinal,
-                user_id: user?.id || null
+                user_id: user?.id || null,
+                facturado: false
             }])
             .select()
             .single();
@@ -1349,7 +1351,8 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
                     monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? totalDiferencia : 0),
                     monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
                     otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
-                    tipo: 'DIFERENCIA_CAMBIO'
+                    tipo: 'DIFERENCIA_CAMBIO',
+                    facturado: medio_pago === 'EFECTIVO'
                 }])
                 .select()
                 .single();
@@ -1376,5 +1379,77 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
         return { success: true };
     } catch (err) {
         return { success: false, message: 'No se pudo completar el cambio: ' + err.message };
+    }
+}
+
+/**
+ * Gets a summary of pending invoices grouped by responsible person.
+ */
+export async function getPendingInvoicesSummary() {
+    const { createClient } = require('@/lib/supabase/server')
+    const supabase = createClient();
+    try {
+        const { data, error } = await supabase
+            .from('ventas')
+            .select('id, medio_pago, otro_medio_pago')
+            .eq('facturado', false);
+
+        if (error) throw error;
+
+        const summary = {
+            sofi: 0, // Debit, Credit, QR
+            tomi: 0, // Tiendanube
+            lucas: 0, // Transfer
+            total: data?.length || 0
+        };
+
+        data?.forEach(v => {
+            const mp = v.otro_medio_pago || v.medio_pago;
+            if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) summary.sofi++;
+            else if (mp === 'TRANSFERENCIA') summary.lucas++;
+            else summary.tomi++; // Tiendanube or anything else digital
+        });
+
+        return { success: true, count: summary };
+    } catch (err) {
+        return { success: false, message: err.message };
+    }
+}
+
+/**
+ * Marks a sale as invoiced.
+ */
+export async function markAsInvoiced(ventaId) {
+    const { createClient } = require('@/lib/supabase/server')
+    const supabase = createClient();
+    try {
+        const { error } = await supabase
+            .from('ventas')
+            .update({ facturado: true })
+            .eq('id', ventaId);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, message: err.message };
+    }
+}
+
+/**
+ * Gets the list of pending invoices.
+ */
+export async function getPendingInvoicesList() {
+    const { createClient } = require('@/lib/supabase/server')
+    const supabase = createClient();
+    try {
+        const { data, error } = await supabase
+            .from('ventas')
+            .select('*, profiles(nombre), variantes(*, modelos(*))')
+            .eq('facturado', false)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return { success: true, data };
+    } catch (err) {
+        return { success: false, message: err.message };
     }
 }

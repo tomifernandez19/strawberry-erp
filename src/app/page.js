@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getDailySummary, registerTiendanubeWebhooks } from '@/lib/actions'
+import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary } from '@/lib/actions'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -14,6 +14,7 @@ export default function HomePage() {
     const [showCashDetail, setShowCashDetail] = useState(false)
     const [recentMovements, setRecentMovements] = useState([])
     const [loadingMovements, setLoadingMovements] = useState(false)
+    const [invoiceCounts, setInvoiceCounts] = useState({ sofi: 0, tomi: 0, lucas: 0, total: 0 })
 
     useEffect(() => {
         if (!user) return
@@ -45,6 +46,10 @@ export default function HomePage() {
                     .is('ubicacion', null)
                     .eq('estado', 'DISPONIBLE')
                 setPendingLocation(locCount || 0)
+
+                // Task 4: Invoices
+                const res = await getPendingInvoicesSummary()
+                if (res.success) setInvoiceCounts(res.count)
             }
         }
 
@@ -124,6 +129,29 @@ export default function HomePage() {
                     </span>
                 </section>
             </Link>
+
+            <Link href="/facturacion" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <section className="card" style={{
+                    border: '1px solid rgba(139, 92, 246, 0.3)',
+                    background: 'rgba(139, 92, 246, 0.05)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 20px'
+                }}>
+                    <div>
+                        <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>Facturación Pendiente</h4>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Sofi: {invoiceCounts.sofi}</span>
+                            <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Tomi: {invoiceCounts.tomi}</span>
+                            <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>Lucas: {invoiceCounts.lucas}</span>
+                        </div>
+                    </div>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: invoiceCounts.total > 0 ? '#8b5cf6' : 'var(--accent)' }}>
+                        {invoiceCounts.total}
+                    </span>
+                </section>
+            </Link>
         </div>
     )
 
@@ -154,8 +182,8 @@ export default function HomePage() {
                 </div>
             </header>
 
-            {/* Section 1: Top Pending (only if > 0) */}
-            {isAdmin && (pendingQR > 0 || pendingDispatches > 0) && <PendingCards />}
+            {/* Section 1: Top Pending (only if any task > 0) */}
+            {isAdmin && (pendingQR > 0 || pendingDispatches > 0 || pendingLocation > 0 || invoiceCounts.total > 0) && <PendingCards />}
 
             <section className={`mt-lg grid ${isAdmin ? 'grid-cols-2 grid-mobile-stack' : ''}`} style={{ gap: '15px' }}>
                 <Link href="/consultar" className="btn-primary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
@@ -233,8 +261,8 @@ export default function HomePage() {
                     </Link>
                 </div>
 
-                {/* Section 2: Bottom Pending (only if 0) */}
-                {isAdmin && (pendingQR === 0 && pendingDispatches === 0) && <PendingCards />}
+                {/* Section 2: Bottom Pending (only if all tasks are 0) */}
+                {isAdmin && (pendingQR === 0 && pendingDispatches === 0 && pendingLocation === 0 && invoiceCounts.total === 0) && <PendingCards />}
             </div>
 
             <div className="mt-lg">
