@@ -1569,16 +1569,32 @@ export async function getLastRemito() {
             .maybeSingle();
 
         if (error) throw error;
-        if (!data) return '1';
+        if (!data) return '0001-00000001';
 
-        // Try to increment if it's numeric
-        const lastNum = parseInt(data.nro_remito);
-        if (!isNaN(lastNum)) return (lastNum + 1).toString();
+        const raw = data.nro_remito;
 
-        return data.nro_remito;
+        // Handle 0000-00000000 format
+        if (raw.includes('-')) {
+            const parts = raw.split('-');
+            if (parts.length === 2) {
+                const prefix = parts[0];
+                const suffix = parts[1];
+                const nextNum = (parseInt(suffix) + 1).toString().padStart(suffix.length, '0');
+                // Check if nextNum is valid, otherwise return original
+                if (!isNaN(parseInt(nextNum))) {
+                    return `${prefix}-${nextNum}`;
+                }
+            }
+        }
+
+        // Fallback for purely numeric or other formats
+        const lastNum = parseInt(raw);
+        if (!isNaN(lastNum)) return (lastNum + 1).toString().padStart(raw.length, '0');
+
+        return raw;
     } catch (err) {
         console.error("Error getting last remito:", err);
-        return '';
+        return '0001-00000001';
     }
 }
 

@@ -350,30 +350,19 @@ export default function NuevaCompraPage() {
                             </div>
                         </div>
 
-                        <input
-                            type="text"
+                        <SearchableInput
                             placeholder="Descripción (Nombre)"
-                            list="desc-suggestions"
                             value={item.descripcion}
-                            onChange={e => updateItem(index, 'descripcion', e.target.value.toUpperCase())}
-                            style={{ ...inputStyle, textTransform: 'uppercase' }}
+                            options={autoData.descriptions}
+                            onChange={val => updateItem(index, 'descripcion', val)}
                         />
 
-                        <input
-                            type="text"
+                        <SearchableInput
                             placeholder="Color"
-                            list="color-suggestions"
                             value={item.color}
-                            onChange={e => updateItem(index, 'color', e.target.value.toUpperCase())}
-                            style={{ ...inputStyle, textTransform: 'uppercase' }}
+                            options={autoData.colors}
+                            onChange={val => updateItem(index, 'color', val)}
                         />
-
-                        <datalist id="desc-suggestions">
-                            {autoData.descriptions.map(d => <option key={d} value={d} />)}
-                        </datalist>
-                        <datalist id="color-suggestions">
-                            {autoData.colors.map(c => <option key={c} value={c} />)}
-                        </datalist>
 
                         <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
                             <select
@@ -443,4 +432,60 @@ const inputStyle = {
     color: 'white',
     border: '1px solid var(--card-border)',
     fontSize: '1rem'
+}
+
+function SearchableInput({ placeholder, value, options, onChange }) {
+    const [isOpen, setIsOpen] = useState(false)
+    const filtered = options.filter(o => o.toLowerCase().includes(value.toLowerCase()))
+
+    return (
+        <div style={{ position: 'relative' }}>
+            <input
+                type="text"
+                placeholder={placeholder}
+                value={value}
+                onChange={e => {
+                    onChange(e.target.value.toUpperCase())
+                    setIsOpen(true)
+                }}
+                onFocus={() => setIsOpen(true)}
+                onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+                style={{ ...inputStyle, textTransform: 'uppercase' }}
+            />
+            {isOpen && filtered.length > 0 && (
+                <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: '#1E293B',
+                    border: '1px solid var(--card-border)',
+                    borderRadius: 'var(--radius)',
+                    zIndex: 100,
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    marginTop: '4px',
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                }}>
+                    {filtered.map(opt => (
+                        <div
+                            key={opt}
+                            onClick={() => {
+                                onChange(opt.toUpperCase())
+                                setIsOpen(false)
+                            }}
+                            style={{
+                                padding: '10px',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                fontSize: '0.9rem'
+                            }}
+                        >
+                            {opt}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
 }
