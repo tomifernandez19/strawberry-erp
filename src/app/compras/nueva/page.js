@@ -182,6 +182,12 @@ export default function NuevaCompraPage() {
         setItems([...items, { variante_id: '', cantidad: 1, costo_unitario: 0, curva: '35-39(37)', localImage: null, descripcion: '', color: '', codigo_proveedor: '' }])
     }
 
+    const removeItem = (index) => {
+        if (items.length === 1) return; // Don't remove the last one
+        const newItems = items.filter((_, i) => i !== index)
+        setItems(newItems)
+    }
+
     const updateItem = (index, field, value) => {
         const newItems = [...items]
         newItems[index][field] = value
@@ -319,6 +325,31 @@ export default function NuevaCompraPage() {
                 <h3>Detalle de productos</h3>
                 {items.map((item, index) => (
                     <div key={index} className="card grid" style={{ position: 'relative' }}>
+                        {items.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={() => removeItem(index)}
+                                style={{
+                                    position: 'absolute',
+                                    top: '10px',
+                                    right: '10px',
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    color: '#ef4444',
+                                    border: 'none',
+                                    borderRadius: '50%',
+                                    width: '24px',
+                                    height: '24px',
+                                    fontSize: '0.8rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    zIndex: 10
+                                }}
+                            >
+                                ✕
+                            </button>
+                        )}
                         <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
                             <div style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 {item.localImage ? (
