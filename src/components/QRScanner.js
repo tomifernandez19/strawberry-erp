@@ -20,30 +20,22 @@ export default function QRScanner({ onScanSuccess, label = "Escanee un código Q
                     scannerInstance.current = new Html5Qrcode(containerId)
                 }
 
-                const cameras = await Html5Qrcode.getCameras()
-                if (cameras && cameras.length > 0 && isMounted.current) {
-                    const backCamera = cameras.find(c => c.label.toLowerCase().includes('back')) || cameras[0]
+                // Start with back camera (environment) by default
+                await scannerInstance.current.start(
+                    { facingMode: "environment" },
+                    {
+                        fps: 15,
+                        qrbox: { width: 250, height: 250 },
+                        aspectRatio: 1.0,
+                    },
+                    (decodedText) => {
+                        onScanSuccess(decodedText)
+                    },
+                    () => { /* ignore silent failure */ }
+                )
 
-                    await scannerInstance.current.start(
-                        backCamera.id,
-                        {
-                            fps: 15,
-                            qrbox: { width: 250, height: 250 },
-                            aspectRatio: 1.0,
-                        },
-                        (decodedText) => {
-                            onScanSuccess(decodedText)
-                        },
-                        () => { /* ignore silent failure */ }
-                    )
-
-                    if (isMounted.current) {
-                        setIsScanning(true)
-                    } else {
-                        // If we unmounted during start, stop immediately
-                        await scannerInstance.current.stop()
-                        scannerInstance.current.clear()
-                    }
+                if (isMounted.current) {
+                    setIsScanning(true)
                 }
             } catch (err) {
                 if (isMounted.current) {
