@@ -244,34 +244,47 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
 }
 
 /**
- * Records a sale for a unit scanned via QR.
+ * Records a sale for multiple units.
  */
-export async function recordSale(qrCode, medio_pago, options = {}) {
+export async function recordSale(qrCodes, medio_pago, options = {}) {
     const supabase = createClient();
     const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null, customerData = {}, descuento = 0 } = options;
 
-    // 1. Re-verify unit availability
-    const result = await getUnitForSale(qrCode)
-    if (!result.success) throw new Error(result.message)
-    const unidad = result.data
+    if (!Array.isArray(qrCodes) || qrCodes.length === 0) throw new Error("No hay productos seleccionados");
 
-    // 2. Determine price based on rules
-    let baseEfectivo = unidad.variantes.precio_efectivo;
-    let baseLista = unidad.variantes.precio_lista;
+    // 1. Fetch and verify all units
+    const { data: units, error: uErr } = await supabase
+        .from('unidades')
+        .select('*, variantes(*, modelos(*))')
+        .in('codigo_qr', qrCodes)
+        .eq('estado', 'DISPONIBLE');
 
-    let finalPrice = baseLista;
+    if (uErr) throw uErr;
+    if (units.length !== qrCodes.length) throw new Error("Uno o más productos ya no están disponibles");
 
-    if (medio_pago === 'EFECTIVO' || medio_pago === 'TRANSFERENCIA') {
-        finalPrice = baseEfectivo;
-    } else if (medio_pago === 'MAYORISTA_EFECTIVO') {
-        finalPrice = Math.round(baseEfectivo * 0.9);
-    } else if (medio_pago === 'DIVIDIR_PAGOS') {
-        finalPrice = Number(monto_efectivo) + Number(monto_otro);
+    // 2. Calculate Total
+    let calculatedTotal = 0;
+
+    if (medio_pago === 'DIVIDIR_PAGOS') {
+        calculatedTotal = Number(monto_efectivo) + Number(monto_otro);
+    } else {
+        units.forEach(unidad => {
+            const baseEfectivo = unidad.variantes.precio_efectivo;
+            const baseLista = unidad.variantes.precio_lista;
+
+            let itemPrice = baseLista;
+            if (medio_pago === 'EFECTIVO' || medio_pago === 'TRANSFERENCIA') {
+                itemPrice = baseEfectivo;
+            } else if (medio_pago === 'MAYORISTA_EFECTIVO') {
+                itemPrice = Math.round(baseEfectivo * 0.9);
+            }
+            calculatedTotal += itemPrice;
+        });
     }
 
-    // Apply Discount if any
+    // Apply Discount
     if (descuento > 0) {
-        finalPrice = Math.round(finalPrice * (1 - (descuento / 100)));
+        calculatedTotal = Math.round(calculatedTotal * (1 - (descuento / 100)));
     }
 
     // 3. Create the sale record
@@ -280,10 +293,9 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
         .from('ventas')
         .insert([{
             medio_pago,
-            total: finalPrice,
+            total: calculatedTotal,
             user_id: user?.id || null,
-            // These will work if the user ran the SQL
-            monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? finalPrice : 0),
+            monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? calculatedTotal : 0),
             monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
             otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
             facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
@@ -296,7 +308,7 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
 
     if (ventaError) throw ventaError
 
-    // 4. Update the unit status
+    // 4. Update all units
     const { error: updateError } = await supabase
         .from('unidades')
         .update({
@@ -304,11 +316,11 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
             venta_id: venta.id,
             fecha_venta: new Date().toISOString()
         })
-        .eq('id', unidad.id)
+        .in('id', units.map(u => u.id))
 
     if (updateError) throw updateError
 
-    return { venta, unidad }
+    return { venta, units }
 }
 
 /**

@@ -5,7 +5,7 @@ import ManualSelector from '@/components/ManualSelector'
 import { getUnitForSale, recordSale } from '@/lib/actions'
 
 export default function VenderPage() {
-    const [previewUnit, setPreviewUnit] = useState(null)
+    const [items, setItems] = useState([])
     const [saleResult, setSaleResult] = useState(null)
     const [customerName, setCustomerName] = useState('')
     const [customerPhone, setCustomerPhone] = useState('')
@@ -20,14 +20,18 @@ export default function VenderPage() {
     const [montoOtro, setMontoOtro] = useState('')
     const [otroMedioPago, setOtroMedioPago] = useState('TARJETA_DEBITO')
 
-    const handleScanSuccess = async (qrCode) => {
+    const addItem = async (qrCode) => {
+        if (items.some(it => it.codigo_qr === qrCode)) {
+            setError('Este producto ya está en la lista')
+            return
+        }
+
         setLoading(true)
         setError('')
-        setPreviewUnit(null)
         try {
             const result = await getUnitForSale(qrCode)
             if (result.success) {
-                setPreviewUnit(result.data)
+                setItems(prev => [...prev, result.data])
             } else {
                 setError(result.message)
             }
@@ -38,10 +42,13 @@ export default function VenderPage() {
         }
     }
 
-    const handleConfirmSale = async () => {
-        if (!previewUnit) return
+    const removeItem = (qrCode) => {
+        setItems(prev => prev.filter(it => it.codigo_qr !== qrCode))
+    }
 
-        // Validation for split payment
+    const handleConfirmSale = async () => {
+        if (items.length === 0) return
+
         if (medioPago === 'DIVIDIR_PAGOS') {
             if (!montoEfectivo || !montoOtro) {
                 setError('Debe completar ambos montos para el pago dividido.')
@@ -52,6 +59,7 @@ export default function VenderPage() {
         setLoading(true)
         setError('')
         try {
+            const qrCodes = items.map(it => it.codigo_qr)
             const options = {
                 ...(medioPago === 'DIVIDIR_PAGOS' ? {
                     monto_efectivo: parseFloat(montoEfectivo),
@@ -66,9 +74,9 @@ export default function VenderPage() {
                 descuento: Number(descuento)
             }
 
-            const result = await recordSale(previewUnit.codigo_qr, medioPago, options)
+            const result = await recordSale(qrCodes, medioPago, options)
             setSaleResult(result)
-            setPreviewUnit(null)
+            setItems([])
         } catch (err) {
             setError(err.message)
         } finally {
@@ -78,7 +86,7 @@ export default function VenderPage() {
 
     const resetSale = () => {
         setSaleResult(null)
-        setPreviewUnit(null)
+        setItems([])
         setError('')
         setMontoEfectivo('')
         setMontoOtro('')
@@ -89,10 +97,30 @@ export default function VenderPage() {
         setDescuento(0)
     }
 
-    // New calculated prices
-    const precioLista = previewUnit?.variantes?.precio_lista || 0
-    const precioEfectivo = previewUnit?.variantes?.precio_efectivo || 0
-    const precioMayorista = Math.round(precioEfectivo * 0.9)
+    const totals = () => {
+        let totalLista = 0
+        let totalEfectivo = 0
+
+        items.forEach(it => {
+            totalLista += it.variantes.precio_lista || 0
+            totalEfectivo += it.variantes.precio_efectivo || 0
+        })
+
+        const totalMayorista = Math.round(totalEfectivo * 0.9)
+
+        let finalTotal = totalLista
+        if (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') finalTotal = totalEfectivo
+        else if (medioPago === 'MAYORISTA_EFECTIVO') finalTotal = totalMayorista
+        else if (medioPago === 'DIVIDIR_PAGOS') finalTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
+
+        if (descuento > 0) {
+            finalTotal = Math.round(finalTotal * (1 - (descuento / 100)))
+        }
+
+        return { totalLista, totalEfectivo, totalMayorista, finalTotal }
+    }
+
+    const { totalLista, totalEfectivo, totalMayorista, finalTotal } = totals()
 
     if (saleResult) {
         return (
@@ -100,36 +128,28 @@ export default function VenderPage() {
                 <div style={{ fontSize: '4rem' }}>✅</div>
                 <h2>Venta Realizada</h2>
                 <div className="card mt-lg">
-                    <h4>{saleResult.unidad.variantes.modelos.descripcion}</h4>
-                    <p>{saleResult.unidad.variantes.color} • Talle {saleResult.unidad.talle_especifico}</p>
-                    <p style={{ marginTop: 'var(--spacing-md)', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent)' }}>
+                    <p style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.5rem' }}>
                         $ {saleResult.venta.total.toLocaleString()}
                     </p>
                     <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{saleResult.venta.medio_pago.replace('_', ' ')}</p>
+                    <div style={{ marginTop: '15px' }}>
+                        {saleResult.units.map(u => (
+                            <p key={u.id} style={{ fontSize: '0.9rem' }}>
+                                • {u.variantes.modelos.descripcion} ({u.variantes.color}) T{u.talle_especifico}
+                            </p>
+                        ))}
+                    </div>
                 </div>
-                <button className="btn-primary mt-lg" onClick={resetSale}>Vender Otro Par</button>
+                <button className="btn-primary mt-lg" onClick={resetSale}>Nueva Venta</button>
             </div>
         )
-    }
-
-    const currentTotal = () => {
-        let baseTotal = 0
-        if (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') baseTotal = precioEfectivo
-        else if (medioPago === 'MAYORISTA_EFECTIVO') baseTotal = precioMayorista
-        else if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
-        else baseTotal = precioLista
-
-        if (descuento > 0) {
-            baseTotal = Math.round(baseTotal * (1 - (descuento / 100)))
-        }
-        return baseTotal
     }
 
     return (
         <div className="grid mt-lg">
             <header className="text-center">
                 <h1>Nueva Venta</h1>
-                <p style={{ opacity: 0.7 }}>Escanee o seleccione el producto</p>
+                <p style={{ opacity: 0.7 }}>Agregue productos para iniciar la venta</p>
             </header>
 
             {error && (
@@ -138,34 +158,72 @@ export default function VenderPage() {
                 </div>
             )}
 
-            {previewUnit ? (
-                <div className="grid">
-                    <section className="card" style={{ border: '2px solid var(--accent)' }}>
-                        <div className="text-center">
-                            <span className="badge" style={{ marginBottom: '8px' }}>Confirmar Datos</span>
+            <div className="grid">
+                <QRScanner onScanSuccess={addItem} label="Escanear producto" />
 
-                            {previewUnit.variantes?.imagen_url && (
-                                <div style={{ width: '100%', maxWidth: '180px', margin: '0 auto 15px auto', borderRadius: '12px', overflow: 'hidden' }}>
-                                    <img src={previewUnit.variantes.imagen_url} alt="Prod" style={{ width: '100%', height: 'auto', display: 'block' }} />
-                                </div>
-                            )}
+                <div className="card mt-md" style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '8px' }}>Búsqueda por Código QR:</p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                            id="manualSaleQR"
+                            type="text"
+                            placeholder="ST-000000"
+                            className="input-field"
+                            style={{ flex: 1, margin: 0, textTransform: 'uppercase' }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    addItem(e.target.value.toUpperCase())
+                                    e.target.value = ''
+                                }
+                            }}
+                        />
+                        <button className="btn-primary" onClick={() => {
+                            const inp = document.getElementById('manualSaleQR')
+                            addItem(inp.value.toUpperCase())
+                            inp.value = ''
+                        }}>
+                            Ver
+                        </button>
+                    </div>
+                </div>
 
-                            <h2 style={{ color: 'var(--primary)', margin: '10px 0' }}>{previewUnit.variantes.modelos.descripcion}</h2>
-                            <p style={{ fontSize: '1.1rem', opacity: 0.8 }}>{previewUnit.variantes.color} • Talle {previewUnit.talle_especifico}</p>
+                <ManualSelector onSelect={addItem} loading={loading} />
+            </div>
+
+            {items.length > 0 && (
+                <div className="grid mt-xl">
+                    <h3 style={{ borderBottom: '1px solid var(--card-border)', paddingBottom: '10px' }}>
+                        Carrito ({items.length})
+                    </h3>
+                    {items.map(it => (
+                        <div key={it.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px' }}>
+                            <div>
+                                <h4 style={{ margin: 0 }}>{it.variantes.modelos.descripcion}</h4>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{it.variantes.color} • Talle {it.talle_especifico}</p>
+                            </div>
+                            <button
+                                className="btn-secondary"
+                                style={{ padding: '5px 10px', color: 'var(--error)', minWidth: 'auto', border: '1px solid var(--error)' }}
+                                onClick={() => removeItem(it.codigo_qr)}
+                            >
+                                ✕
+                            </button>
                         </div>
+                    ))}
 
-                        <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px' }}>
+                    <section className="card mt-lg" style={{ border: '2px solid var(--accent)' }}>
+                        <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px' }}>
                             <div className="card text-center" style={{ padding: '8px 2px', background: (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') ? '1px solid var(--accent)' : '1px solid transparent' }}>
                                 <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Efe/Tra</p>
-                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${precioEfectivo.toLocaleString()}</p>
+                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${totalEfectivo.toLocaleString()}</p>
                             </div>
                             <div className="card text-center" style={{ padding: '8px 2px', background: medioPago === 'MAYORISTA_EFECTIVO' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: medioPago === 'MAYORISTA_EFECTIVO' ? '1px solid var(--accent)' : '1px solid transparent' }}>
                                 <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Mayorista</p>
-                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${precioMayorista.toLocaleString()}</p>
+                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${totalMayorista.toLocaleString()}</p>
                             </div>
                             <div className="card text-center" style={{ padding: '8px 2px', background: !['EFECTIVO', 'TRANSFERENCIA', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: !['EFECTIVO', 'TRANSFERENCIA', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago) ? '1px solid var(--accent)' : '1px solid transparent' }}>
                                 <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Lista</p>
-                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${precioLista.toLocaleString()}</p>
+                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${totalLista.toLocaleString()}</p>
                             </div>
                         </div>
 
@@ -196,24 +254,18 @@ export default function VenderPage() {
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             setMontoEfectivo(val);
-                                            // Auto-calculate the remaining amount
                                             if (val && !isNaN(val)) {
                                                 const efeAmount = parseFloat(val);
-                                                // 1. How much of the "Cash Price" did they pay?
-                                                const portionOfCashPrice = efeAmount / precioEfectivo;
-                                                // 2. That same portion is subtracted from the List Price
-                                                const remainingListPrice = Math.round(precioLista * (1 - portionOfCashPrice));
+                                                const portionOfCashPrice = efeAmount / totalEfectivo;
+                                                const remainingListPrice = Math.round(totalLista * (1 - portionOfCashPrice));
                                                 setMontoOtro(remainingListPrice > 0 ? remainingListPrice : 0);
                                             } else {
                                                 setMontoOtro('');
                                             }
                                         }}
                                         className="input-field"
-                                        placeholder={`Máx: $${precioEfectivo}`}
+                                        placeholder={`Máx: $${totalEfectivo}`}
                                     />
-                                    <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '5px' }}>
-                                        Este monto tiene el 21% de descuento aplicado.
-                                    </p>
                                 </div>
                                 <div>
                                     <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Segundo Medio de Pago:</label>
@@ -237,9 +289,6 @@ export default function VenderPage() {
                                         className="input-field"
                                         style={{ backgroundColor: 'rgba(255,255,255,0.05)', cursor: 'not-allowed', color: 'var(--accent)', fontWeight: 'bold' }}
                                     />
-                                    <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '5px' }}>
-                                        Calculado proporcionalmente al Precio Lista.
-                                    </p>
                                 </div>
                             </div>
                         )}
@@ -254,7 +303,6 @@ export default function VenderPage() {
                                     type="number"
                                     min="0"
                                     max="100"
-                                    placeholder="Ej: 10"
                                     className="input-field"
                                     style={{ margin: 0, flex: 1 }}
                                     value={descuento > 0 ? descuento : ''}
@@ -286,7 +334,7 @@ export default function VenderPage() {
                         <div className="card mt-md text-center" style={{ backgroundColor: 'var(--secondary)' }}>
                             <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>TOTAL A COBRAR</p>
                             <h2 style={{ color: 'var(--accent)', margin: 0 }}>
-                                $ {currentTotal().toLocaleString()}
+                                $ {finalTotal.toLocaleString()}
                             </h2>
                         </div>
 
@@ -299,7 +347,6 @@ export default function VenderPage() {
                                     className="input-field"
                                     value={customerName}
                                     onChange={(e) => setCustomerName(e.target.value)}
-                                    style={{ fontSize: '0.85rem' }}
                                 />
                                 <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                                     <input
@@ -308,7 +355,6 @@ export default function VenderPage() {
                                         className="input-field"
                                         value={customerPhone}
                                         onChange={(e) => setCustomerPhone(e.target.value)}
-                                        style={{ fontSize: '0.85rem' }}
                                     />
                                     <input
                                         type="email"
@@ -316,7 +362,6 @@ export default function VenderPage() {
                                         className="input-field"
                                         value={customerEmail}
                                         onChange={(e) => setCustomerEmail(e.target.value)}
-                                        style={{ fontSize: '0.85rem' }}
                                     />
                                 </div>
                             </div>
@@ -327,35 +372,10 @@ export default function VenderPage() {
                                 Cancelar
                             </button>
                             <button className="btn-primary" onClick={handleConfirmSale} disabled={loading} style={{ background: 'var(--accent)' }}>
-                                {loading ? 'Procesando...' : 'Confirmar Venta'}
+                                {loading ? 'Procesando...' : `Confirmar Venta (${items.length})`}
                             </button>
                         </div>
                     </section>
-                </div>
-            ) : (
-                <div className="grid">
-                    <QRScanner onScanSuccess={handleScanSuccess} label="Escanee el QR del par" />
-
-                    <div className="card mt-md" style={{ textAlign: 'center' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '8px' }}>Búsqueda por Código QR:</p>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <input
-                                id="manualSaleQR"
-                                type="text"
-                                placeholder="ST-000000"
-                                className="input-field"
-                                style={{ flex: 1, margin: 0, textTransform: 'uppercase' }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleScanSuccess(e.target.value.toUpperCase())
-                                }}
-                            />
-                            <button className="btn-primary" onClick={() => handleScanSuccess(document.getElementById('manualSaleQR').value.toUpperCase())}>
-                                Ver
-                            </button>
-                        </div>
-                    </div>
-
-                    <ManualSelector onSelect={handleScanSuccess} loading={loading} />
                 </div>
             )}
             <div style={{ height: '80px' }}></div>
