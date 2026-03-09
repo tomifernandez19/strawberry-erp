@@ -1555,3 +1555,73 @@ export async function getMissingImagesList() {
         return { success: false, message: err.message };
     }
 }
+/**
+ * Gets the last remito number to suggest the next one.
+ */
+export async function getLastRemito() {
+    const supabase = createClient();
+    try {
+        const { data, error } = await supabase
+            .from('compras')
+            .select('nro_remito')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) return '1';
+
+        // Try to increment if it's numeric
+        const lastNum = parseInt(data.nro_remito);
+        if (!isNaN(lastNum)) return (lastNum + 1).toString();
+
+        return data.nro_remito;
+    } catch (err) {
+        console.error("Error getting last remito:", err);
+        return '';
+    }
+}
+
+/**
+ * Gets unique descriptions, colors and their associations for autocomplete.
+ */
+export async function getStockAutocompleteData() {
+    const supabase = createClient();
+    try {
+        const { data: modelos, error: mErr } = await supabase
+            .from('modelos')
+            .select('descripcion, codigo_proveedor, id');
+
+        if (mErr) throw mErr;
+
+        const { data: variantes, error: vErr } = await supabase
+            .from('variantes')
+            .select('color, costo_promedio, modelo_id');
+
+        if (vErr) throw vErr;
+
+        const descriptions = Array.from(new Set(modelos.map(m => m.descripcion?.toUpperCase()))).filter(Boolean);
+        const colors = Array.from(new Set(variantes.map(v => v.color?.toUpperCase()))).filter(Boolean);
+
+        // Map for quick lookup: { "KALI": { codigo: "LS123", colors: { "NEGRO": 5000 } } }
+        const lookup = {};
+        modelos.forEach(m => {
+            const desc = m.descripcion?.toUpperCase();
+            if (!desc) return;
+            if (!lookup[desc]) lookup[desc] = { codigo: m.codigo_proveedor, colors: {} };
+
+            const mVariantes = variantes.filter(v => v.modelo_id === m.id);
+            mVariantes.forEach(v => {
+                const color = v.color?.toUpperCase();
+                if (color) {
+                    lookup[desc].colors[color] = v.costo_promedio;
+                }
+            });
+        });
+
+        return { descriptions, colors, lookup };
+    } catch (err) {
+        console.error("Error getting autocomplete data:", err);
+        return { descriptions: [], colors: [], lookup: {} };
+    }
+}

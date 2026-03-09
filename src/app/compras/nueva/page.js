@@ -1,13 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { createPurchase, uploadProductImage } from '@/lib/actions'
+import { createPurchase, uploadProductImage, getLastRemito, getStockAutocompleteData } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 import Tesseract from 'tesseract.js';
 
 export default function NuevaCompraPage() {
     const router = useRouter()
-    const [variantes, setVariantes] = useState([])
     const [ocrStep, setOcrStep] = useState('')
     const [isScanning, setIsScanning] = useState(false)
     const [formData, setFormData] = useState({
@@ -19,15 +18,19 @@ export default function NuevaCompraPage() {
     ])
     const [loading, setLoading] = useState(false)
 
+    const [autoData, setAutoData] = useState({ descriptions: [], colors: [], lookup: {} })
+
     useEffect(() => {
-        fetchVariantes()
+        loadInitialStats()
     }, [])
 
-    async function fetchVariantes() {
-        const { data } = await supabase
-            .from('variantes')
-            .select('*, modelos(descripcion, codigo_proveedor)')
-        setVariantes(data || [])
+    async function loadInitialStats() {
+        const [lastRem, suggestions] = await Promise.all([
+            getLastRemito(),
+            getStockAutocompleteData()
+        ])
+        setFormData(prev => ({ ...prev, nro_remito: lastRem }))
+        setAutoData(suggestions)
     }
 
     const handleOCR = async (e) => {
@@ -183,6 +186,24 @@ export default function NuevaCompraPage() {
         const newItems = [...items]
         newItems[index][field] = value
 
+        // Smart Autocomplete Logic
+        if (field === 'descripcion' || field === 'color') {
+            const desc = newItems[index].descripcion?.toUpperCase();
+            const color = newItems[index].color?.toUpperCase();
+
+            if (autoData.lookup[desc]) {
+                // If we found a description match, suggest the code
+                if (!newItems[index].codigo_proveedor) {
+                    newItems[index].codigo_proveedor = autoData.lookup[desc].codigo;
+                }
+
+                // If we also have a color match, suggest the cost
+                if (color && autoData.lookup[desc].colors[color]) {
+                    newItems[index].costo_unitario = autoData.lookup[desc].colors[color];
+                }
+            }
+        }
+
         // Auto-set quantity to 6 ONLY for full curves
         const curves = ['35-39(37)', '36-40(38)', '35-39(38)', '36-40(37)'];
         if (field === 'curva' && curves.includes(value)) {
@@ -332,6 +353,7 @@ export default function NuevaCompraPage() {
                         <input
                             type="text"
                             placeholder="Descripción (Nombre)"
+                            list="desc-suggestions"
                             value={item.descripcion}
                             onChange={e => updateItem(index, 'descripcion', e.target.value.toUpperCase())}
                             style={{ ...inputStyle, textTransform: 'uppercase' }}
@@ -340,10 +362,18 @@ export default function NuevaCompraPage() {
                         <input
                             type="text"
                             placeholder="Color"
+                            list="color-suggestions"
                             value={item.color}
                             onChange={e => updateItem(index, 'color', e.target.value.toUpperCase())}
                             style={{ ...inputStyle, textTransform: 'uppercase' }}
                         />
+
+                        <datalist id="desc-suggestions">
+                            {autoData.descriptions.map(d => <option key={d} value={d} />)}
+                        </datalist>
+                        <datalist id="color-suggestions">
+                            {autoData.colors.map(c => <option key={c} value={c} />)}
+                        </datalist>
 
                         <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
                             <select
