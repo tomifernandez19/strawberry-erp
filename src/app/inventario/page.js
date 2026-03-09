@@ -8,6 +8,7 @@ export default function InventarioPage() {
     const [stock, setStock] = useState([])
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(null)
+    const [search, setSearch] = useState('')
 
     useEffect(() => {
         fetchStock()
@@ -63,6 +64,10 @@ export default function InventarioPage() {
         }
     }
 
+    const filteredStock = stock.filter(item =>
+        item.modelo.descripcion.toLowerCase().includes(search.toLowerCase())
+    )
+
     return (
         <div className="grid mt-lg">
             <header className="text-center">
@@ -70,14 +75,25 @@ export default function InventarioPage() {
                 <p style={{ opacity: 0.7 }}>Stock disponible por modelo</p>
             </header>
 
+            <div className="card" style={{ padding: 'var(--spacing-md)' }}>
+                <input
+                    type="text"
+                    placeholder="🔍 Buscar por modelo..."
+                    className="input-field"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{ marginBottom: 0 }}
+                />
+            </div>
+
             {loading ? (
                 <p className="text-center mt-lg">Cargando stock...</p>
             ) : (
                 <section className="grid">
-                    {stock.length === 0 ? (
-                        <p className="text-center mt-lg">No hay stock disponible.</p>
+                    {filteredStock.length === 0 ? (
+                        <p className="text-center mt-lg">No se encontraron modelos.</p>
                     ) : (
-                        stock.map(item => (
+                        filteredStock.map(item => (
                             <div key={item.id} className="card">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <div>
