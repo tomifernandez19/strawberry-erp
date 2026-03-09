@@ -56,91 +56,74 @@ export default function NuevaCompraPage() {
     };
 
     const parseInvoiceText = (text) => {
-        const allLines = text.split('\n').map(l => l.trim().toUpperCase());
+        const allLines = text.split('\n').map(l => l.trim().toUpperCase()).filter(l => l.length > 0);
         let nro_remito = '';
         const detectedItems = [];
-        const knownColors = ['NEGRO', 'CAMEL', 'BLANCO', 'AZUL', 'ROJO', 'GRIS', 'MARRON', 'BEIGE', 'ORO', 'PLATA', 'COBRE'];
+        const knownColors = [
+            'NEGRO', 'CAMEL', 'BLANCO', 'AZUL', 'ROJO', 'GRIS', 'MARRON', 'BEIGE', 'ORO', 'PLATA', 'COBRE',
+            'CHOCOLATE', 'VISON', 'FUCSIA', 'LILA', 'MOSTAZA', 'TERRACOTA', 'VERDE', 'SUELA', 'NUDE', 'LIMA'
+        ];
 
-        // 1. Find the Table Region
-        let tableStartIdx = -1;
-        let tableEndIdx = -1;
-
-        for (let i = 0; i < allLines.length; i++) {
-            const line = allLines[i];
-
-            // Extract Remito from top area (usually before table)
+        // 1. Extract Remito (Pattern 0000-00000000)
+        for (const line of allLines) {
             const remitoMatch = line.match(/\d{3,}-\d{8}/);
             if (remitoMatch && !nro_remito) nro_remito = remitoMatch[0];
-
-            // Look for Table Header Header (words like CODIGO, CANTIDAD, DESCRIPCION)
-            if (tableStartIdx === -1 && (line.includes('CODIGO') && line.includes('DESC'))) {
-                // Usually the content starts after the next line of ===
-                tableStartIdx = i + 1;
-            }
-
-            // If we found the start, look for the end (the next long line of ==== or SUBTOTAL)
-            if (tableStartIdx !== -1 && i > tableStartIdx) {
-                if (line.includes('===') || line.includes('SUBTOTAL') || line.includes('TOTAL')) {
-                    tableEndIdx = i;
-                    break;
-                }
-                // Also break if we reach the end and didn't find a clear end marker
-            }
         }
 
-        // 2. Parse only the table region
-        if (tableStartIdx !== -1) {
-            const tableLines = allLines.slice(tableStartIdx, tableEndIdx !== -1 ? tableEndIdx : allLines.length);
+        // 2. Resilient Product Extraction
+        // We look for any line that starts with a potential product code and has numbers
+        allLines.forEach(line => {
+            const words = line.split(/\s+/).filter(w => w.length >= 2);
+            if (words.length < 3) return;
 
-            tableLines.forEach(line => {
-                if (line.length < 15 || line.includes('===')) return; // Skip separators
+            const codeCandidate = words[0];
+            // Resilient Code check: At least 4 chars, starts with letters or has alphanumeric mix
+            const isCode = codeCandidate.length >= 4 && /^[A-Z]{1,3}/.test(codeCandidate);
 
-                const words = line.split(/\s+/).filter(w => w.length >= 2);
-                const codeCandidate = words[0]; // In a table, code is almost always the first column
+            if (isCode && !line.includes('PAGINA') && !line.includes('TELEFONO')) {
+                // Extract Numbers for Qty and Price
+                const numbers = line.match(/[\d.,]+/g) || [];
+                const cleanNumbers = numbers
+                    .map(n => parseFloat(n.replace(/\./g, '').replace(',', '.')))
+                    .filter(v => !isNaN(v));
 
-                if (codeCandidate && codeCandidate.length >= 4 && /^[A-Z]{2}/.test(codeCandidate)) {
-                    // Extract Numbers
-                    const numbers = line.match(/[\d.,]+/g) || [];
-                    const cleanMoney = numbers
-                        .map(n => parseFloat(n.replace(/\./g, '').replace(',', '.')))
-                        .filter(v => v > 500);
+                if (cleanNumbers.length === 0) return;
 
-                    const unitPrice = cleanMoney.length > 0 ? Math.min(...cleanMoney) : 0;
+                // Heuristic: Qty is usually a small integer (1-48), Price is > 500
+                const cantidad = cleanNumbers.find(v => v > 0 && v <= 48) || 1;
+                const cleanMoney = cleanNumbers.filter(v => v > 500);
+                const unitPrice = cleanMoney.length > 0 ? Math.min(...cleanMoney) : 0;
 
-                    // Cantidad (number between 1 and 20)
-                    const cantCandidate = numbers.find(n => {
-                        const v = parseInt(n);
-                        return v > 0 && v <= 24 && !n.includes('.') && !n.includes(',');
-                    });
-                    const cantidad = cantCandidate ? parseInt(cantCandidate) : 6;
+                const color = knownColors.find(c => line.includes(c)) || 'S/D';
 
-                    // Color & Desc
-                    const color = knownColors.find(c => line.includes(c)) || 'S/D';
-                    let description = line
-                        .replace(codeCandidate, '')
-                        .replace(color, '')
-                        .replace(/[\d.,]+/g, '')
-                        .trim();
+                // Clean description (remove code, color and numbers)
+                let description = line
+                    .replace(codeCandidate, '')
+                    .replace(color, '')
+                    .replace(/[\d.,]+/g, '')
+                    .replace(/===+/g, '')
+                    .trim();
 
+                if (description.length > 2) {
                     detectedItems.push({
                         codigo_proveedor: codeCandidate,
-                        descripcion: description || 'Calzado',
+                        descripcion: description,
                         color: color,
-                        cantidad,
+                        cantidad: Math.round(cantidad),
                         costo_unitario: unitPrice,
-                        curva: cantidad === 6 ? '35-39(37)' : 'manual'
+                        curva: cantidad === 6 ? '35-39(37)' : (cantidad === 12 ? '35-39(37)' : 'manual')
                     });
                 }
-            });
-        }
+            }
+        });
 
         if (nro_remito) setFormData(prev => ({ ...prev, nro_remito }));
 
         if (detectedItems.length > 0) {
             setItems(detectedItems);
         } else {
-            console.log("No table detected. Found Remito:", nro_remito);
-            alert("No pude detectar la tabla de productos. Asegúrate de que los títulos (CODIGO, CANTIDAD) se vean en la foto.");
+            console.log("OCR Parsing failed to find items in text:", text);
+            alert("No pude detectar los productos automáticamente. Por favor, cargalos manualmente o intente con una foto más clara.");
             if (items.length === 0) addItem();
         }
     };
