@@ -10,6 +10,9 @@ export default function QRScanner({ onScanSuccess, label = "Escanee un código Q
     const onScanRef = useRef(onScanSuccess)
     useEffect(() => { onScanRef.current = onScanSuccess }, [onScanSuccess])
 
+    const isMounted = useRef(true)
+    const scannerInstance = useRef(null)
+
     useEffect(() => {
         isMounted.current = true
 
