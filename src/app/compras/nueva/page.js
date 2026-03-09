@@ -63,6 +63,7 @@ export default function NuevaCompraPage() {
             'NEGRO', 'CAMEL', 'BLANCO', 'AZUL', 'ROJO', 'GRIS', 'MARRON', 'BEIGE', 'ORO', 'PLATA', 'COBRE',
             'CHOCOLATE', 'VISON', 'FUCSIA', 'LILA', 'MOSTAZA', 'TERRACOTA', 'VERDE', 'SUELA', 'NUDE', 'LIMA'
         ];
+        const ignoreKeywords = ['SEÑORES', 'SENORES', 'CLIENTE', 'FECHA', 'REMITO', 'PRESUPUESTO', 'IVA', 'CUIT', 'PAGINA', 'TELEFONO', 'DOMICILIO', 'CORDOBA', 'TRANSPORTE'];
 
         // 1. Extract Remito (Pattern 0000-00000000)
         for (const line of allLines) {
@@ -71,47 +72,56 @@ export default function NuevaCompraPage() {
         }
 
         // 2. Resilient Product Extraction
-        // We look for any line that starts with a potential product code and has numbers
         allLines.forEach(line => {
+            if (line.includes('===') || line.includes('---')) return;
+            if (ignoreKeywords.some(k => line.includes(k))) return;
+
             const words = line.split(/\s+/).filter(w => w.length >= 2);
             if (words.length < 3) return;
 
-            const codeCandidate = words[0];
-            // Resilient Code check: At least 4 chars, starts with letters or has alphanumeric mix
-            const isCode = codeCandidate.length >= 4 && /^[A-Z]{1,3}/.test(codeCandidate);
+            let codeCandidate = words[0].replace(/[:.;,]/g, '');
+            const isCode = codeCandidate.length >= 4 && (codeCandidate.startsWith('ID') || /^[A-Z0-9]+$/.test(codeCandidate));
 
-            if (isCode && !line.includes('PAGINA') && !line.includes('TELEFONO')) {
-                // Extract Numbers for Qty and Price
-                const numbers = line.match(/[\d.,]+/g) || [];
+            if (isCode) {
+                // Remove spaces between digits and punctuation (fixes "30 . 500")
+                const sanitizedLine = line.replace(/(\d)\s+(?=[.,\d])|([.,\d])\s+(?=\d)/g, '$1$2');
+                const numbers = sanitizedLine.match(/[\d.,]+/g) || [];
+
                 const cleanNumbers = numbers
-                    .map(n => parseFloat(n.replace(/\./g, '').replace(',', '.')))
+                    .map(n => {
+                        let parts = n.split(/[.,]/);
+                        if (parts.length > 1) {
+                            const decimals = parts.pop();
+                            const integerPart = parts.join('');
+                            return parseFloat(integerPart + '.' + decimals);
+                        }
+                        return parseFloat(n);
+                    })
                     .filter(v => !isNaN(v));
 
                 if (cleanNumbers.length === 0) return;
 
-                // Heuristic: Qty is usually a small integer (1-48), Price is > 500
-                const cantidad = cleanNumbers.find(v => v > 0 && v <= 48) || 1;
+                const cantidad = cleanNumbers.find(v => v > 0 && v <= 100) || 1;
                 const cleanMoney = cleanNumbers.filter(v => v > 500);
                 const unitPrice = cleanMoney.length > 0 ? Math.min(...cleanMoney) : 0;
 
                 const color = knownColors.find(c => line.includes(c)) || 'S/D';
 
-                // Clean description (remove code, color and numbers)
                 let description = line
-                    .replace(codeCandidate, '')
+                    .replace(words[0], '')
                     .replace(color, '')
                     .replace(/[\d.,]+/g, '')
-                    .replace(/===+/g, '')
+                    .replace(/[=+:;_]/g, '')
                     .trim();
 
-                if (description.length > 2) {
+                if (description.length > 2 && !description.includes('CÓDIGO')) {
                     detectedItems.push({
                         codigo_proveedor: codeCandidate,
                         descripcion: description,
                         color: color,
                         cantidad: Math.round(cantidad),
                         costo_unitario: unitPrice,
-                        curva: cantidad === 6 ? '35-39(37)' : (cantidad === 12 ? '35-39(37)' : 'manual')
+                        curva: [6, 12].includes(Math.round(cantidad)) ? '35-39(37)' : 'manual'
                     });
                 }
             }
@@ -122,8 +132,8 @@ export default function NuevaCompraPage() {
         if (detectedItems.length > 0) {
             setItems(detectedItems);
         } else {
-            console.log("OCR Parsing failed to find items in text:", text);
-            alert("No pude detectar los productos automáticamente. Por favor, cargalos manualmente o intente con una foto más clara.");
+            console.log("OCR Parsing results empty for text:", text);
+            alert("No pude detectar los productos automáticamente. Por favor, cargalos manualmente.");
             if (items.length === 0) addItem();
         }
     };
