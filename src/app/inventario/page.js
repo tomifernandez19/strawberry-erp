@@ -73,6 +73,22 @@ export default function InventarioPage() {
             <header className="text-center">
                 <h1>Inventario</h1>
                 <p style={{ opacity: 0.7 }}>Stock disponible por modelo</p>
+                {isAdmin && (
+                    <button
+                        className="btn-secondary mt-md"
+                        style={{ fontSize: '0.7rem', padding: '5px 10px', width: 'auto' }}
+                        onClick={async () => {
+                            if (confirm("¿Seguro que querés actualizar los precios de TODO el stock con la nueva fórmula? (Costo * 2 + 3000)")) {
+                                const { migratePricing } = await import('@/lib/actions')
+                                const res = await migratePricing()
+                                alert(res.message)
+                                window.location.reload()
+                            }
+                        }}
+                    >
+                        ⚙️ Recalcular Precios (Base Costo)
+                    </button>
+                )}
             </header>
 
             <div className="card" style={{ padding: 'var(--spacing-md)' }}>

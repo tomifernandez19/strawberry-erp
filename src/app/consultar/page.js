@@ -71,16 +71,16 @@ export default function ConsultarPage() {
 
                         <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
                             <div className="card text-center" style={{ background: 'rgba(34, 197, 94, 0.05)', padding: '10px 5px' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>Efectivo</p>
-                                <p style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>$ {(Math.ceil((scannedData.variant.precio_lista * (100 / 121)) / 1000) * 1000).toLocaleString()}</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.6 }}>Efe/Tra</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>$ {scannedData.variant.precio_efectivo?.toLocaleString()}</p>
                             </div>
                             <div className="card text-center" style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '10px 5px' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>Transf.</p>
-                                <p style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>$ {Math.round(scannedData.variant.precio_lista * (100 / 110)).toLocaleString()}</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.6 }}>Mayorista</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>$ {Math.round(scannedData.variant.precio_efectivo * 0.9).toLocaleString()}</p>
                             </div>
                             <div className="card text-center" style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px 5px' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>Lista</p>
-                                <p style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>$ {scannedData.variant.precio_lista?.toLocaleString()}</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.6 }}>Lista</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>$ {scannedData.variant.precio_lista?.toLocaleString()}</p>
                             </div>
                         </div>
 

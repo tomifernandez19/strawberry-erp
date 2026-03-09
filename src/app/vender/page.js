@@ -91,9 +91,8 @@ export default function VenderPage() {
 
     // New calculated prices
     const precioLista = previewUnit?.variantes?.precio_lista || 0
-    // Cash price rounding: Ceiling to next 1000
-    const precioEfectivo = Math.ceil((precioLista * (100 / 121)) / 1000) * 1000
-    const precioTransf = Math.round(precioLista * (100 / 110))
+    const precioEfectivo = previewUnit?.variantes?.precio_efectivo || 0
+    const precioMayorista = Math.round(precioEfectivo * 0.9)
 
     if (saleResult) {
         return (
@@ -115,8 +114,8 @@ export default function VenderPage() {
 
     const currentTotal = () => {
         let baseTotal = 0
-        if (medioPago === 'EFECTIVO') baseTotal = precioEfectivo
-        else if (medioPago === 'TRANSFERENCIA') baseTotal = precioTransf
+        if (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') baseTotal = precioEfectivo
+        else if (medioPago === 'MAYORISTA_EFECTIVO') baseTotal = precioMayorista
         else if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
         else baseTotal = precioLista
 
@@ -155,18 +154,18 @@ export default function VenderPage() {
                             <p style={{ fontSize: '1.1rem', opacity: 0.8 }}>{previewUnit.variantes.color} • Talle {previewUnit.talle_especifico}</p>
                         </div>
 
-                        <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                            <div className="card text-center" style={{ padding: '10px 5px', background: medioPago === 'EFECTIVO' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: medioPago === 'EFECTIVO' ? '1px solid var(--accent)' : '1px solid transparent' }}>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Efectivo</p>
-                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>${precioEfectivo.toLocaleString()}</p>
+                        <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px' }}>
+                            <div className="card text-center" style={{ padding: '8px 2px', background: (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') ? '1px solid var(--accent)' : '1px solid transparent' }}>
+                                <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Efe/Tra</p>
+                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${precioEfectivo.toLocaleString()}</p>
                             </div>
-                            <div className="card text-center" style={{ padding: '10px 5px', background: medioPago === 'TRANSFERENCIA' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: medioPago === 'TRANSFERENCIA' ? '1px solid var(--accent)' : '1px solid transparent' }}>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Transf.</p>
-                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>${precioTransf.toLocaleString()}</p>
+                            <div className="card text-center" style={{ padding: '8px 2px', background: medioPago === 'MAYORISTA_EFECTIVO' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: medioPago === 'MAYORISTA_EFECTIVO' ? '1px solid var(--accent)' : '1px solid transparent' }}>
+                                <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Mayorista</p>
+                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${precioMayorista.toLocaleString()}</p>
                             </div>
-                            <div className="card text-center" style={{ padding: '10px 5px', background: !['EFECTIVO', 'TRANSFERENCIA', 'DIVIDIR_PAGOS'].includes(medioPago) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: !['EFECTIVO', 'TRANSFERENCIA', 'DIVIDIR_PAGOS'].includes(medioPago) ? '1px solid var(--accent)' : '1px solid transparent' }}>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Lista</p>
-                                <p style={{ fontSize: '1rem', fontWeight: 'bold' }}>${precioLista.toLocaleString()}</p>
+                            <div className="card text-center" style={{ padding: '8px 2px', background: !['EFECTIVO', 'TRANSFERENCIA', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: !['EFECTIVO', 'TRANSFERENCIA', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago) ? '1px solid var(--accent)' : '1px solid transparent' }}>
+                                <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Lista</p>
+                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${precioLista.toLocaleString()}</p>
                             </div>
                         </div>
 
@@ -177,8 +176,9 @@ export default function VenderPage() {
                                 onChange={(e) => setMedioPago(e.target.value)}
                                 className="input-field"
                             >
-                                <option value="EFECTIVO">Efectivo (Promo) 💵</option>
-                                <option value="TRANSFERENCIA">Transferencia (Promo) 📱</option>
+                                <option value="EFECTIVO">Efectivo 💵</option>
+                                <option value="TRANSFERENCIA">Transferencia 📱</option>
+                                <option value="MAYORISTA_EFECTIVO">Mayorista Efectivo 📦</option>
                                 <option value="TARJETA_DEBITO">Tarjeta Débito 💳</option>
                                 <option value="TARJETA_CREDITO">Tarjeta Crédito 💳</option>
                                 <option value="QR_LISTA">QR Pago / Otros 🔘</option>

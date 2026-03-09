@@ -50,9 +50,8 @@ export async function createPurchase({ nro_remito, items }) {
                 .single()
 
             if (!variante) {
-                const precioLista = Math.round(costo_unitario * 2.42);
-                // Cash price rounding: Ceiling to next 1000
-                const precioEfectivo = Math.ceil((precioLista * (100 / 121)) / 1000) * 1000;
+                const precioEfectivo = (costo_unitario * 2) + 3000;
+                const precioLista = Math.round(precioEfectivo * 1.21);
 
                 const { data: newVar, error: vErr } = await supabase
                     .from('variantes')
@@ -257,12 +256,15 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
     const unidad = result.data
 
     // 2. Determine price based on rules
-    let finalPrice = unidad.variantes.precio_lista;
-    if (medio_pago === 'EFECTIVO') {
-        // Ceiling rounding to next 1000 for Cash
-        finalPrice = Math.ceil((unidad.variantes.precio_lista * (100 / 121)) / 1000) * 1000;
-    } else if (medio_pago === 'TRANSFERENCIA') {
-        finalPrice = Math.round(unidad.variantes.precio_lista * (100 / 110));
+    let baseEfectivo = unidad.variantes.precio_efectivo;
+    let baseLista = unidad.variantes.precio_lista;
+
+    let finalPrice = baseLista;
+
+    if (medio_pago === 'EFECTIVO' || medio_pago === 'TRANSFERENCIA') {
+        finalPrice = baseEfectivo;
+    } else if (medio_pago === 'MAYORISTA_EFECTIVO') {
+        finalPrice = Math.round(baseEfectivo * 0.9);
     } else if (medio_pago === 'DIVIDIR_PAGOS') {
         finalPrice = Number(monto_efectivo) + Number(monto_otro);
     }
@@ -1639,5 +1641,36 @@ export async function getStockAutocompleteData() {
     } catch (err) {
         console.error("Error getting autocomplete data:", err);
         return { descriptions: [], colors: [], lookup: {} };
+    }
+}
+
+export async function migratePricing() {
+    const supabase = createClient();
+    try {
+        const { data: variantes, error } = await supabase
+            .from('variantes')
+            .select('id, costo_promedio')
+            .gt('costo_promedio', 0);
+
+        if (error) throw error;
+        console.log(`Migrating ${variantes.length} items...`);
+
+        for (const v of variantes) {
+            const precioEfectivo = (v.costo_promedio * 2) + 3000;
+            const precioLista = Math.round(precioEfectivo * 1.21);
+
+            await supabase
+                .from('variantes')
+                .update({
+                    precio_efectivo: precioEfectivo,
+                    precio_lista: precioLista
+                })
+                .eq('id', v.id);
+        }
+
+        return { success: true, message: `Migración completada: ${variantes.length} productos actualizados.` };
+    } catch (err) {
+        console.error("Migration Error:", err);
+        return { success: false, message: err.message };
     }
 }
