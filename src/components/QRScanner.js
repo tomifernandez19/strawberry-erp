@@ -7,8 +7,8 @@ export default function QRScanner({ onScanSuccess, label = "Escanee un código Q
     const scannerRef = useRef(null)
     const containerId = "qr-reader"
 
-    const isMounted = useRef(true)
-    const scannerInstance = useRef(null)
+    const onScanRef = useRef(onScanSuccess)
+    useEffect(() => { onScanRef.current = onScanSuccess }, [onScanSuccess])
 
     useEffect(() => {
         isMounted.current = true
@@ -29,7 +29,7 @@ export default function QRScanner({ onScanSuccess, label = "Escanee un código Q
                         aspectRatio: 1.0,
                     },
                     (decodedText) => {
-                        onScanSuccess(decodedText)
+                        onScanRef.current(decodedText)
                     },
                     () => { /* ignore silent failure */ }
                 )
@@ -57,14 +57,13 @@ export default function QRScanner({ onScanSuccess, label = "Escanee un código Q
                         scannerInstance.current.clear()
                         scannerInstance.current = null
                     } catch (e) {
-                        // This usually happens if called while initializing
                         console.warn("Cleanup warning:", e)
                     }
                 }
                 stopAndClear()
             }
         }
-    }, [onScanSuccess])
+    }, []) // Run only once on mount
 
     return (
         <div className="scanner-outer-container">
