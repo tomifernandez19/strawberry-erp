@@ -249,7 +249,7 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
  */
 export async function recordSale(qrCode, medio_pago, options = {}) {
     const supabase = createClient();
-    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null, customerData = {} } = options;
+    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null, customerData = {}, descuento = 0 } = options;
 
     // 1. Re-verify unit availability
     const result = await getUnitForSale(qrCode)
@@ -265,6 +265,11 @@ export async function recordSale(qrCode, medio_pago, options = {}) {
         finalPrice = Math.round(unidad.variantes.precio_lista * (100 / 110));
     } else if (medio_pago === 'DIVIDIR_PAGOS') {
         finalPrice = Number(monto_efectivo) + Number(monto_otro);
+    }
+
+    // Apply Discount if any
+    if (descuento > 0) {
+        finalPrice = Math.round(finalPrice * (1 - (descuento / 100)));
     }
 
     // 3. Create the sale record

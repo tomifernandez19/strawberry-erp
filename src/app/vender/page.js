@@ -13,6 +13,7 @@ export default function VenderPage() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [medioPago, setMedioPago] = useState('EFECTIVO')
+    const [descuento, setDescuento] = useState(0)
 
     // State for split payments
     const [montoEfectivo, setMontoEfectivo] = useState('')
@@ -61,7 +62,8 @@ export default function VenderPage() {
                     nombre: customerName,
                     telefono: customerPhone,
                     email: customerEmail
-                }
+                },
+                descuento: Number(descuento)
             }
 
             const result = await recordSale(previewUnit.codigo_qr, medioPago, options)
@@ -84,6 +86,7 @@ export default function VenderPage() {
         setCustomerName('')
         setCustomerPhone('')
         setCustomerEmail('')
+        setDescuento(0)
     }
 
     // New calculated prices
@@ -111,10 +114,16 @@ export default function VenderPage() {
     }
 
     const currentTotal = () => {
-        if (medioPago === 'EFECTIVO') return precioEfectivo
-        if (medioPago === 'TRANSFERENCIA') return precioTransf
-        if (medioPago === 'DIVIDIR_PAGOS') return (Number(montoEfectivo) + Number(montoOtro)) || 0
-        return precioLista
+        let baseTotal = 0
+        if (medioPago === 'EFECTIVO') baseTotal = precioEfectivo
+        else if (medioPago === 'TRANSFERENCIA') baseTotal = precioTransf
+        else if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
+        else baseTotal = precioLista
+
+        if (descuento > 0) {
+            baseTotal = Math.round(baseTotal * (1 - (descuento / 100)))
+        }
+        return baseTotal
     }
 
     return (
@@ -234,6 +243,45 @@ export default function VenderPage() {
                                 </div>
                             </div>
                         )}
+
+                        <div className="mt-md" style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: 'var(--radius)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>¿Aplicar Descuento? %</label>
+                                {descuento > 0 && <span className="badge" style={{ backgroundColor: 'var(--accent)', color: 'white' }}>-{descuento}%</span>}
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    placeholder="Ej: 10"
+                                    className="input-field"
+                                    style={{ margin: 0, flex: 1 }}
+                                    value={descuento > 0 ? descuento : ''}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '') setDescuento(0);
+                                        else {
+                                            const num = parseInt(val);
+                                            if (num >= 0 && num <= 100) setDescuento(num);
+                                        }
+                                    }}
+                                />
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                    {[5, 10, 15].map(pct => (
+                                        <button
+                                            key={pct}
+                                            type="button"
+                                            className="btn-secondary"
+                                            style={{ padding: '5px 10px', fontSize: '0.7rem', minWidth: 'auto' }}
+                                            onClick={() => setDescuento(pct)}
+                                        >
+                                            {pct}%
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
 
                         <div className="card mt-md text-center" style={{ backgroundColor: 'var(--secondary)' }}>
                             <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>TOTAL A COBRAR</p>
