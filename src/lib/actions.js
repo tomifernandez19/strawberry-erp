@@ -50,8 +50,8 @@ export async function createPurchase({ nro_remito, items }) {
                 .single()
 
             if (!variante) {
+                const precioLista = Math.round(costo_unitario * 2.42);
                 const precioEfectivo = (costo_unitario * 2) + 3000;
-                const precioLista = Math.round(precioEfectivo * 1.21);
 
                 const { data: newVar, error: vErr } = await supabase
                     .from('variantes')
@@ -1657,13 +1657,11 @@ export async function migratePricing() {
 
         for (const v of variantes) {
             const precioEfectivo = (v.costo_promedio * 2) + 3000;
-            const precioLista = Math.round(precioEfectivo * 1.21);
 
             await supabase
                 .from('variantes')
                 .update({
-                    precio_efectivo: precioEfectivo,
-                    precio_lista: precioLista
+                    precio_efectivo: precioEfectivo
                 })
                 .eq('id', v.id);
         }
