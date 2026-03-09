@@ -14,7 +14,7 @@ export default function NuevaCompraPage() {
         nro_remito: ''
     })
     const [items, setItems] = useState([
-        { variante_id: '', cantidad: 1, costo_unitario: 0 }
+        { variante_id: '', cantidad: 1, costo_unitario: 0, descripcion: '', color: '', codigo_proveedor: '', curva: '35-39(37)' }
     ])
     const [loading, setLoading] = useState(false)
 
@@ -179,7 +179,7 @@ export default function NuevaCompraPage() {
     }
 
     const addItem = () => {
-        setItems([...items, { variante_id: '', cantidad: 1, costo_unitario: 0, curva: '35-40', localImage: null }])
+        setItems([...items, { variante_id: '', cantidad: 1, costo_unitario: 0, curva: '35-39(37)', localImage: null, descripcion: '', color: '', codigo_proveedor: '' }])
     }
 
     const updateItem = (index, field, value) => {
@@ -434,9 +434,11 @@ const inputStyle = {
     fontSize: '1rem'
 }
 
-function SearchableInput({ placeholder, value, options, onChange }) {
+function SearchableInput({ placeholder, value = '', options = [], onChange }) {
     const [isOpen, setIsOpen] = useState(false)
-    const filtered = options.filter(o => o.toLowerCase().includes(value.toLowerCase()))
+    const filtered = (options || []).filter(o =>
+        o && o.toLowerCase().includes((value || '').toLowerCase())
+    )
 
     return (
         <div style={{ position: 'relative' }}>
