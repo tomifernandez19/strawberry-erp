@@ -295,7 +295,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             medio_pago,
             total: calculatedTotal,
             user_id: user?.id || null,
-            monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (medio_pago === 'EFECTIVO' ? calculatedTotal : 0),
+            monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medio_pago) ? calculatedTotal : 0),
             monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
             otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
             facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
@@ -583,6 +583,25 @@ export async function getDailySummary(onlyUserId = null) {
         return { count: 0, total: 0, cash: 0, items: [] };
     }
 
+    // Calculate Totals using Unique Sales
+    const uniqueSales = new Map();
+    unitsSold.forEach(u => {
+        if (u.ventas && !uniqueSales.has(u.ventas.id)) {
+            uniqueSales.set(u.ventas.id, u.ventas);
+        }
+    });
+
+    const salesList = Array.from(uniqueSales.values());
+
+    // Cash Sales from Unique Sales list
+    const cashSalesAmount = salesList.reduce((acc, sale) => acc + (parseFloat(sale.monto_efectivo) || 0), 0);
+
+    // Manual Movements Sum
+    const movementsSum = (movements || []).reduce((acc, mov) => acc + (parseFloat(mov.monto) || 0), 0);
+
+    // Total Cash in Hand = Sales + Manual Adjustments
+    const cashInHand = cashSalesAmount + movementsSum;
+
     const allItems = unitsSold.map(unit => ({
         id: unit.id,
         fecha: unit.fecha_venta,
@@ -590,21 +609,16 @@ export async function getDailySummary(onlyUserId = null) {
         modelo: unit.variantes?.modelos?.descripcion,
         color: unit.variantes?.color,
         talle: unit.talle_especifico,
-        precio: parseFloat(unit.ventas?.total) || 0,
+        precio: parseFloat(unit.ventas?.total) / (unitsSold.filter(u => u.ventas?.id === unit.ventas?.id).length || 1), // Apportioned for individual item display in list if needed, or just use the sale total. Actually the list usually shows items.
+        // Wait, for the list display 'precio' is usually the item price.
+        // But recordSale stores the WHOLE total in ventas.total.
+        // If we want item price, we could use unit.precio_venta if we had it. 
+        // For now let's just keep the display as is but fix the sum.
         medio_pago: unit.ventas?.medio_pago,
         monto_efectivo: parseFloat(unit.ventas?.monto_efectivo) || 0,
         vendedor: unit.ventas?.user_id,
         vendedor_nombre: unit.ventas?.profiles?.nombre || 'S/D'
     }));
-
-    // Cash Sales
-    const cashSalesAmount = allItems.reduce((acc, item) => acc + item.monto_efectivo, 0);
-
-    // Manual Movements Sum
-    const movementsSum = (movements || []).reduce((acc, mov) => acc + (parseFloat(mov.monto) || 0), 0);
-
-    // Total Cash in Hand = Sales + Manual Adjustments
-    const cashInHand = cashSalesAmount + movementsSum;
 
     // Totals and items list can be PERSONALIZED
     const displayItems = onlyUserId
@@ -619,6 +633,54 @@ export async function getDailySummary(onlyUserId = null) {
         cash: cashInHand,
         items: displayItems
     };
+}
+
+/**
+ * Fetches recent cash movements (Manual + Sales) for detail view.
+ */
+export async function getRecentUnifiedCaja() {
+    const supabase = createClient();
+
+    // 1. Manual Movements
+    const { data: manual } = await supabase
+        .from('movimientos_caja')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(15);
+
+    // 2. Sales with cash (considering all non-card/online as potential cash for this view if needed, 
+    // but better strictly based on monto_efectivo > 0)
+    const { data: sales } = await supabase
+        .from('ventas')
+        .select('id, created_at, total, monto_efectivo, medio_pago')
+        .gt('monto_efectivo', 0)
+        .order('created_at', { ascending: false })
+        .limit(15);
+
+    // 3. Merge and Sort
+    const unified = [
+        ...(manual || []).map(m => ({
+            id: m.id,
+            created_at: m.created_at,
+            monto: m.monto,
+            tipo: m.tipo,
+            motivo: m.motivo,
+            persona: m.persona,
+            tag: 'MANUAL'
+        })),
+        ...(sales || []).map(s => ({
+            id: s.id,
+            created_at: s.created_at,
+            monto: s.monto_efectivo,
+            tipo: 'INGRESO',
+            motivo: `Venta ${s.medio_pago === 'EFECTIVO' ? 'Efectivo' : (s.medio_pago === 'TRANSFERENCIA' ? 'Transferencia' : s.medio_pago)}`,
+            persona: 'CAJA',
+            tag: 'VENTA'
+        }))
+    ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 15);
+
+    return unified;
 }
 
 /**

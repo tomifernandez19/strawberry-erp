@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { recordCashMovement, getCashMovements } from '@/lib/actions'
+import { recordCashMovement, getRecentUnifiedCaja } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 
 export default function CajaPage() {
@@ -22,7 +22,7 @@ export default function CajaPage() {
     async function loadData() {
         // Dynamic import to avoid waterfall if possible, though here we need getRecentPersonas
         const [movs, { getRecentPersonas }] = await Promise.all([
-            getCashMovements(),
+            getRecentUnifiedCaja(),
             import('@/lib/actions')
         ])
         setMovements(movs)
@@ -137,7 +137,7 @@ export default function CajaPage() {
             </section>
 
             <div className="mt-xl">
-                <h3 style={{ fontSize: '1rem', marginBottom: '15px' }}>Historial de Hoy</h3>
+                <h3 style={{ fontSize: '1rem', marginBottom: '15px' }}>Últimos 15 Movimientos</h3>
                 <div className="grid" style={{ gap: '10px' }}>
                     {movements.length === 0 ? (
                         <p style={{ textAlign: 'center', opacity: 0.5, padding: '20px' }}>No hay movimientos manuales registrados hoy.</p>
@@ -148,9 +148,12 @@ export default function CajaPage() {
                                     <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                             <p style={{ fontWeight: 'bold', fontSize: '0.9rem', margin: 0 }}>{mov.motivo}</p>
-                                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', opacity: 0.7 }}>
-                                                👤 {mov.persona || 'S/D'}
+                                            <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: mov.tag === 'VENTA' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', borderRadius: '4px', opacity: 0.8, color: mov.tag === 'VENTA' ? 'white' : 'inherit' }}>
+                                                {mov.tag || 'MANUAL'}
                                             </span>
+                                            {mov.persona && (
+                                                <span style={{ fontSize: '0.65rem', opacity: 0.5 }}>👤 {mov.persona}</span>
+                                            )}
                                         </div>
                                         <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>
                                             {new Date(mov.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

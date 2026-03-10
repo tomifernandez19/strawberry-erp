@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary } from '@/lib/actions'
+import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary, getRecentUnifiedCaja } from '@/lib/actions'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -84,11 +84,7 @@ export default function HomePage() {
     async function fetchCashDetail() {
         setLoadingMovements(true)
         setShowCashDetail(true)
-        const { data } = await supabase
-            .from('movimientos_caja')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(10)
+        const data = await getRecentUnifiedCaja()
         setRecentMovements(data || [])
         setLoadingMovements(false)
     }
@@ -352,22 +348,25 @@ export default function HomePage() {
                                 ) : (
                                     recentMovements.map((m, i) => (
                                         <div key={i} style={{
-                                            padding: '10px',
+                                            padding: '12px 10px',
                                             borderBottom: '1px solid rgba(255,255,255,0.05)',
                                             display: 'flex',
                                             justifyContent: 'space-between',
                                             alignItems: 'center'
                                         }}>
                                             <div>
-                                                <p style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{m.tipo === 'ENTRADA' ? '📥 Ingreso' : '📤 Retiro'}</p>
-                                                <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>{m.comentario || 'Sin descripción'}</p>
-                                                <p style={{ fontSize: '0.65rem', opacity: 0.4 }}>{new Date(m.created_at).toLocaleString()}</p>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{m.tipo === 'INGRESO' ? '📥 Ingreso' : (m.tipo === 'EGRESO' ? '📤 Retiro' : m.tipo)}</p>
+                                                    {m.tag === 'VENTA' && <span style={{ fontSize: '0.6rem', padding: '1px 5px', background: 'var(--accent)', borderRadius: '4px', color: 'white' }}>VENTA</span>}
+                                                </div>
+                                                <p style={{ fontSize: '0.75rem', opacity: 0.7 }}>{m.motivo || 'Sin descripción'}</p>
+                                                <p style={{ fontSize: '0.65rem', opacity: 0.4 }}>{new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} • {m.persona}</p>
                                             </div>
                                             <p style={{
                                                 fontWeight: 'bold',
-                                                color: m.tipo === 'ENTRADA' ? 'var(--accent)' : '#ef4444'
+                                                color: m.tipo === 'INGRESO' ? 'var(--accent)' : '#ef4444'
                                             }}>
-                                                {m.tipo === 'ENTRADA' ? '+' : '-'} $ {m.monto.toLocaleString()}
+                                                {m.tipo === 'INGRESO' ? '+' : '-'} $ {Math.abs(m.monto).toLocaleString()}
                                             </p>
                                         </div>
                                     ))
