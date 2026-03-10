@@ -736,22 +736,20 @@ export async function getFinanceSummary() {
     const supabase = createClient();
     const now = new Date().toISOString();
 
-    // 1. Fetch all sales with finance data
-    const { data: sales, error: sErr } = await supabase
-        .from('ventas')
-        .select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, created_at');
+    // Optimize by fetching in parallel and selecting only needed fields
+    const [salesRes, movementsRes, purchasesRes] = await Promise.all([
+        supabase.from('ventas').select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago'),
+        supabase.from('movimientos_caja').select('monto, cuenta, categoria'),
+        supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)')
+    ]);
 
-    // 2. Fetch all manual movements
-    const { data: movements, error: mErr } = await supabase
-        .from('movimientos_caja')
-        .select('monto, cuenta, categoria, created_at');
+    const sales = salesRes.data;
+    const movements = movementsRes.data;
+    const purchases = purchasesRes.data;
 
-    // 3. Fetch all purchases to calculate Supplier Debt
-    const { data: purchases, error: pErr } = await supabase
-        .from('detalle_compras')
-        .select('costo_unitario, cantidad, compras(propietario)');
-
-    if (sErr || mErr || pErr) throw new Error("Error fetching finance data");
+    if (salesRes.error || movementsRes.error || purchasesRes.error) {
+        throw new Error("Error fetching finance data");
+    }
 
     const accounts = {
         CAJA_LOCAL: 0,
@@ -771,16 +769,17 @@ export async function getFinanceSummary() {
         }
     });
 
-    // Process Sales
+    // 4. Process Sales
     sales?.forEach(s => {
         const total = parseFloat(s.total) || 0;
         const efe = parseFloat(s.monto_efectivo) || 0;
-        const other = total - efe;
+        const netoTotal = s.monto_neto !== null ? parseFloat(s.monto_neto) : total;
 
         // 1. Cash portion always goes to CAJA_LOCAL
         if (efe > 0) accounts.CAJA_LOCAL += efe;
 
-        if (other <= 0) return;
+        const other = netoTotal - efe;
+        if (other <= 0 && efe <= 0) return;
 
         // 2. The rest goes to its target account
         let target = s.cuenta_destino;
@@ -794,12 +793,11 @@ export async function getFinanceSummary() {
         }
 
         if (target === 'SOFI_MP') {
-            const neto = parseFloat(s.monto_neto) || other;
             const isReconciled = s.monto_neto !== null;
             if (isReconciled && s.fecha_acreditacion <= now) {
-                accounts.SOFI_MP += neto;
+                accounts.SOFI_MP += other;
             } else {
-                accounts.SOFI_PENDING += neto;
+                accounts.SOFI_PENDING += other;
             }
         } else if (target === 'PROVEEDOR') {
             accounts.PROVEEDOR += other;
@@ -808,7 +806,7 @@ export async function getFinanceSummary() {
         }
     });
 
-    // Process Manual Movements
+    // 5. Process Manual Movements
     movements?.forEach(m => {
         const monto = parseFloat(m.monto) || 0;
 
@@ -863,16 +861,29 @@ export async function deleteSale(saleId) {
  */
 export async function getUnreconciledSales() {
     const supabase = createClient();
+    // Fetch card sales that haven't been reconciled.
+    // Use array for 'in' filter and select only needed fields
+    const lastMonth = new Date();
+    lastMonth.setDate(lastMonth.getDate() - 30);
+
     const { data, error } = await supabase
         .from('ventas')
         .select('*, profiles(nombre)')
         .is('monto_neto', null)
-        .eq('cuenta_destino', 'SOFI_MP')
-        .not('medio_pago', 'in', '("EFECTIVO","MAYORISTA_EFECTIVO")')
+        .gte('created_at', lastMonth.toISOString())
         .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data;
+
+    // Filter in JS to be more robust with legacy data
+    return (data || []).filter(s => {
+        // Exclude cash-only sales
+        const medio = s.medio_pago || '';
+        if (medio === 'EFECTIVO' || medio === 'MAYORISTA_EFECTIVO') return false;
+
+        // If it's a split payment or a card/transfer, we want it
+        return true;
+    });
 }
 
 /**

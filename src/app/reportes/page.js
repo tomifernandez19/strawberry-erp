@@ -206,9 +206,14 @@ export default function ReportesPage() {
                                         key={sale.id}
                                         sale={sale}
                                         onDone={async () => {
-                                            const [f, p] = await Promise.all([getFinanceSummary(), getUnreconciledSales()])
-                                            setFinance(f)
-                                            setPendingSales(p)
+                                            try {
+                                                const [f, p] = await Promise.all([getFinanceSummary(), getUnreconciledSales()])
+                                                setFinance(f)
+                                                setPendingSales(p)
+                                            } catch (err) {
+                                                console.error("Refresh error:", err)
+                                                alert("Se concilió la venta pero hubo un problema al actualizar los saldos en pantalla. Por favor, refresca la página.")
+                                            }
                                         }}
                                     />
                                 ))}
@@ -334,7 +339,7 @@ function ReconcileRow({ sale, onDone }) {
                 setSuccess(true)
                 setTimeout(() => {
                     onDone()
-                }, 1000)
+                }, 300)
             }
         } catch (err) {
             console.error(err)
