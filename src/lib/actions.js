@@ -826,6 +826,8 @@ export async function getFinanceSummary() {
     return accounts;
 }
 export async function deleteSale(saleId) {
+    if (!saleId) throw new Error("ID de venta no proporcionado");
+
     const supabase = createClient();
 
     // 1. Revert all units associated with this sale to DISPONIBLE
@@ -844,14 +846,20 @@ export async function deleteSale(saleId) {
     }
 
     // 2. Delete the sale record itself
-    const { error: saleError } = await supabase
+    const { data: deleted, error: saleError } = await supabase
         .from('ventas')
         .delete()
-        .eq('id', saleId);
+        .eq('id', saleId)
+        .select();
 
     if (saleError) {
         console.error("[deleteSale] Sale Delete Error:", saleError);
-        throw new Error("No se pudo eliminar el registro de la venta.");
+        throw new Error("Error de base de datos al borrar venta: " + saleError.message);
+    }
+
+    if (!deleted || deleted.length === 0) {
+        console.error("[deleteSale] Row not found or RLS blocked delete for ID:", saleId);
+        throw new Error("No se pudo eliminar el registro de la venta. Es posible que no tengas permisos suficientes o la venta ya no exista.");
     }
 
     return true;
