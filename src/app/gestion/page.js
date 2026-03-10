@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant, registerTiendanubeWebhooks, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, registerTiendanubeWebhooks, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList } from '@/lib/actions'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -71,18 +71,14 @@ export default function GestionPage() {
 
     async function fetchVentas() {
         setLoading(true)
-        const { data } = await supabase
-            .from('unidades')
-            .select(`
-                id, fecha_venta, estado,
-                ventas (id, total, medio_pago),
-                variantes (color, modelos (descripcion))
-            `)
-            .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
-            .order('fecha_venta', { ascending: false })
-            .limit(20)
-        setVentas(data || [])
-        setLoading(false)
+        try {
+            const data = await getRecentSalesList()
+            setVentas(data)
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     async function fetchStock() {
@@ -277,7 +273,7 @@ export default function GestionPage() {
                 ) : tab === 'ventas' ? (
                     <div className="grid" style={{ gap: '15px' }}>
                         {ventas.map(v => {
-                            const sale = Array.isArray(v.ventas) ? v.ventas[0] : v.ventas;
+                            const sale = v.ventas;
                             return (
                                 <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

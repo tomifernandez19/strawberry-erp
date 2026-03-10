@@ -1886,6 +1886,36 @@ export async function migratePricing() {
 }
 
 /**
+ * Fetches recent units sold with their sale data for management.
+ */
+export async function getRecentSalesList() {
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+        .from('unidades')
+        .select(`
+            id, fecha_venta, estado,
+            venta_id,
+            ventas (id, total, medio_pago),
+            variantes (color, modelos (descripcion))
+        `)
+        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
+        .order('fecha_venta', { ascending: false })
+        .limit(50);
+
+    if (error) {
+        console.error("[getRecentSalesList] Error:", error);
+        return [];
+    }
+
+    // Standardize the shape to avoid any SSR/Client differences
+    return (data || []).map(u => ({
+        ...u,
+        ventas: Array.isArray(u.ventas) ? u.ventas[0] : u.ventas
+    }));
+}
+
+/**
  * Records a transfer between two accounts.
  */
 export async function recordTransfer({ from, to, amount, reason, person }) {
