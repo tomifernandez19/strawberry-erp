@@ -755,30 +755,53 @@ export async function getFinanceSummary() {
     // Process Sales
     sales?.forEach(s => {
         const total = parseFloat(s.total) || 0;
-        const neto = parseFloat(s.monto_neto) || total;
+        const efe = parseFloat(s.monto_efectivo) || 0;
+        const other = total - efe;
 
-        if (s.cuenta_destino === 'SOFI_MP') {
+        // 1. Cash portion always goes to CAJA_LOCAL
+        if (efe > 0) accounts.CAJA_LOCAL += efe;
+
+        if (other <= 0) return;
+
+        // 2. The rest goes to its target account
+        let target = s.cuenta_destino;
+        if (!target) {
+            // Legacy fallbacks
+            if (s.medio_pago === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
+            else if (s.medio_pago === 'TRANSFERENCIA_TOMI') target = 'TOMI';
+            else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
+            else if (s.medio_pago?.includes('SOFI')) target = 'SOFI_MP';
+            else target = 'SOFI_MP'; // Assume digital for anything else legacy
+        }
+
+        if (target === 'SOFI_MP') {
+            const neto = parseFloat(s.monto_neto) || other;
             if (s.fecha_acreditacion <= now) {
                 accounts.SOFI_MP += neto;
             } else {
                 accounts.SOFI_PENDING += neto;
             }
-        } else if (s.cuenta_destino === 'PROVEEDOR') {
-            accounts.PROVEEDOR += total; // Sales directly to provider reduce debt
-        } else if (accounts[s.cuenta_destino] !== undefined) {
-            accounts[s.cuenta_destino] += total;
+        } else if (target === 'PROVEEDOR') {
+            accounts.PROVEEDOR += other;
+        } else if (accounts[target] !== undefined && target !== 'CAJA_LOCAL') {
+            accounts[target] += other;
         }
     });
 
     // Process Manual Movements
     movements?.forEach(m => {
         const monto = parseFloat(m.monto) || 0;
+
+        // Always affect the account first
+        if (accounts[m.cuenta] !== undefined) {
+            accounts[m.cuenta] += monto;
+        }
+
+        // Then affect debts if special category
         if (m.categoria === 'PAGO_CAROLINA') {
             accounts.CAROLINA += Math.abs(monto);
         } else if (m.categoria === 'PAGO_PROVEEDOR') {
             accounts.PROVEEDOR += Math.abs(monto);
-        } else if (accounts[m.cuenta] !== undefined) {
-            accounts[m.cuenta] += monto;
         }
     });
 
