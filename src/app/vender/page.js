@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import QRScanner from '@/components/QRScanner'
 import ManualSelector from '@/components/ManualSelector'
 import { getUnitForSale, recordSale } from '@/lib/actions'
