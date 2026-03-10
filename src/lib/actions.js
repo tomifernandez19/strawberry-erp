@@ -825,6 +825,37 @@ export async function getFinanceSummary() {
 
     return accounts;
 }
+
+/**
+ * Gets a detailed summary of capital contributions by person.
+ */
+export async function getCapitalContributionsReport() {
+    const supabase = createClient();
+
+    const { data: movements, error } = await supabase
+        .from('movimientos_caja')
+        .select('monto, persona, categoria, created_at, motivo, cuenta')
+        .in('categoria', ['APORTE_CAPITAL', 'VUELTO_CAMBIO', 'OTRO_INGRESO'])
+        .eq('tipo', 'INGRESO')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error("[getCapitalContributionsReport] Error:", error);
+        return { byPerson: {}, history: [] };
+    }
+
+    const byPerson = {};
+    movements?.forEach(m => {
+        const name = m.persona || 'S/D';
+        if (!byPerson[name]) byPerson[name] = 0;
+        byPerson[name] += parseFloat(m.monto) || 0;
+    });
+
+    return {
+        byPerson,
+        history: movements || []
+    };
+}
 export async function deleteSale(saleId) {
     if (!saleId) throw new Error("ID de venta no proporcionado");
 

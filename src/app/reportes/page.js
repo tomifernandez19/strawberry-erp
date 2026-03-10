@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getExtendedStats, getCustomRangeStats, getFinanceSummary } from '@/lib/actions'
+import { getExtendedStats, getCustomRangeStats, getFinanceSummary, getCapitalContributionsReport } from '@/lib/actions'
 
 export default function ReportesPage() {
     const [stats, setStats] = useState(null)
@@ -14,14 +14,18 @@ export default function ReportesPage() {
     const [activeTab, setActiveTab] = useState('ventas') // 'ventas' or 'cuentas'
     const [finance, setFinance] = useState(null)
 
+    const [contributions, setContributions] = useState({ byPerson: {}, history: [] })
+
     useEffect(() => {
         async function load() {
-            const [vStats, fSummary] = await Promise.all([
+            const [vStats, fSummary, cReport] = await Promise.all([
                 getExtendedStats(),
-                getFinanceSummary()
+                getFinanceSummary(),
+                getCapitalContributionsReport()
             ])
             setStats(vStats)
             setFinance(fSummary)
+            setContributions(cReport)
             setLoading(false)
         }
         load()
@@ -190,6 +194,47 @@ export default function ReportesPage() {
                         </div>
                     </div>
 
+                </section>
+            )}
+
+            {activeTab === 'cuentas' && contributions && (
+                <section className="mt-xl">
+                    <h3 style={{ fontSize: '1rem', marginBottom: '15px' }}>💰 Aportes de Capital y Cambio</h3>
+
+                    {/* Resumen por Persona */}
+                    <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                        {Object.entries(contributions.byPerson).length === 0 ? (
+                            <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No hay aportes registrados aún.</p>
+                        ) : (
+                            Object.entries(contributions.byPerson).map(([name, total]) => (
+                                <div key={name} className="card" style={{ padding: '15px', borderTop: '4px solid var(--accent)' }}>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.6, textTransform: 'uppercase' }}>APORTE TOTAL</p>
+                                    <h4 style={{ margin: '5px 0' }}>{name}</h4>
+                                    <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)', margin: 0 }}>$ {total.toLocaleString()}</p>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Historial Reciente de Aportes */}
+                    {contributions.history.length > 0 && (
+                        <div className="card mt-lg">
+                            <h4 style={{ fontSize: '0.85rem', marginBottom: '15px', opacity: 0.8 }}>Últimos Aportes Registrados</h4>
+                            <div className="grid" style={{ gap: '10px' }}>
+                                {contributions.history.slice(0, 10).map((m, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', fontSize: '0.8rem' }}>
+                                        <div>
+                                            <p style={{ fontWeight: 'bold', margin: 0 }}>{m.motivo}</p>
+                                            <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: 0 }}>
+                                                👤 {m.persona} • {new Date(m.created_at).toLocaleDateString()} • {m.categoria.replace(/_/g, ' ')}
+                                            </p>
+                                        </div>
+                                        <p style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '0.9rem' }}>+ $ {m.monto.toLocaleString()}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </section>
             )}
 
