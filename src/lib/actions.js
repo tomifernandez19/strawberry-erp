@@ -616,7 +616,8 @@ export async function getDailySummary(onlyUserId = null) {
 
     const { data: totalManualCash, error: mAllErr } = await supabase
         .from('movimientos_caja')
-        .select('monto');
+        .select('monto')
+        .eq('cuenta', 'CAJA_LOCAL');
 
     if (sErr || mAllErr) {
         console.error("Error fetching global cash:", sErr || mAllErr);
@@ -818,7 +819,8 @@ export async function getUnreconciledSales() {
         .from('ventas')
         .select('*, profiles(nombre)')
         .is('monto_neto', null)
-        .in('cuenta_destino', ['SOFI_MP'])
+        .eq('cuenta_destino', 'SOFI_MP')
+        .not('medio_pago', 'in', '("EFECTIVO","MAYORISTA_EFECTIVO")')
         .order('created_at', { ascending: false });
 
     if (error) throw error;
