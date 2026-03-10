@@ -776,7 +776,8 @@ export async function getFinanceSummary() {
 
         if (target === 'SOFI_MP') {
             const neto = parseFloat(s.monto_neto) || other;
-            if (s.fecha_acreditacion <= now) {
+            const isReconciled = s.monto_neto !== null;
+            if (isReconciled && s.fecha_acreditacion <= now) {
                 accounts.SOFI_MP += neto;
             } else {
                 accounts.SOFI_PENDING += neto;

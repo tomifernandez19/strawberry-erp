@@ -144,7 +144,7 @@ export default function ReportesPage() {
                                     <span style={{ fontWeight: 'bold', color: 'var(--accent)' }}>$ {finance.SOFI_MP.toLocaleString()}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>⏳ Sofi (A liberar 18d)</span>
+                                    <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>⏳ Sofi (A liberar)</span>
                                     <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>$ {finance.SOFI_PENDING.toLocaleString()}</span>
                                 </div>
                             </div>
