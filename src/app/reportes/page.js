@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getExtendedStats, getCustomRangeStats, getFinanceSummary, getUnreconciledSales, reconcileSale } from '@/lib/actions'
+import { getExtendedStats, getCustomRangeStats, getFinanceSummary } from '@/lib/actions'
 
 export default function ReportesPage() {
     const [stats, setStats] = useState(null)
@@ -13,19 +13,15 @@ export default function ReportesPage() {
     const [customLoading, setCustomLoading] = useState(false)
     const [activeTab, setActiveTab] = useState('ventas') // 'ventas' or 'cuentas'
     const [finance, setFinance] = useState(null)
-    const [pendingSales, setPendingSales] = useState([])
-    const [reconcilingId, setReconcilingId] = useState(null)
 
     useEffect(() => {
         async function load() {
-            const [vStats, fSummary, pSales] = await Promise.all([
+            const [vStats, fSummary] = await Promise.all([
                 getExtendedStats(),
-                getFinanceSummary(),
-                getUnreconciledSales()
+                getFinanceSummary()
             ])
             setStats(vStats)
             setFinance(fSummary)
-            setPendingSales(pSales)
             setLoading(false)
         }
         load()
@@ -194,32 +190,6 @@ export default function ReportesPage() {
                         </div>
                     </div>
 
-                    {/* Ventas por Conciliar */}
-                    <div className="mt-xl">
-                        <h3 style={{ fontSize: '1rem', marginBottom: '15px', color: 'var(--accent)' }}>📋 Ventas por Conciliar (Sofi)</h3>
-                        {pendingSales.length === 0 ? (
-                            <div className="card text-center" style={{ opacity: 0.5 }}>No hay ventas pendientes de conciliación.</div>
-                        ) : (
-                            <div className="grid" style={{ gap: '10px' }}>
-                                {pendingSales.map(sale => (
-                                    <ReconcileRow
-                                        key={sale.id}
-                                        sale={sale}
-                                        onDone={async () => {
-                                            try {
-                                                const [f, p] = await Promise.all([getFinanceSummary(), getUnreconciledSales()])
-                                                setFinance(f)
-                                                setPendingSales(p)
-                                            } catch (err) {
-                                                console.error("Refresh error:", err)
-                                                alert("Se concilió la venta pero hubo un problema al actualizar los saldos en pantalla. Por favor, refresca la página.")
-                                            }
-                                        }}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
                 </section>
             )}
 

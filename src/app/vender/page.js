@@ -21,7 +21,19 @@ export default function VenderPage() {
     const [otroMedioPago, setOtroMedioPago] = useState('TARJETA_DEBITO')
     const [montoNeto, setMontoNeto] = useState('')
     const [diasAcreditacion, setDiasAcreditacion] = useState(18)
-    const [showSofiDetails, setShowSofiDetails] = useState(false)
+
+    // Auto-defaults for accreditation days
+    useEffect(() => {
+        const isDivided = medioPago === 'DIVIDIR_PAGOS'
+        const activeMethod = isDivided ? otroMedioPago : medioPago
+
+        if (activeMethod === 'TARJETA_DEBITO') setDiasAcreditacion(1)
+        else if (activeMethod === 'TARJETA_CREDITO') setDiasAcreditacion(18)
+        else if (activeMethod === 'QR_LISTA') setDiasAcreditacion(0) // Usually MP/QR is instant
+
+        // Reset neto when method changes to trigger focus/manual entry
+        setMontoNeto('')
+    }, [medioPago, otroMedioPago])
 
     const addItem = async (qrCode) => {
         if (items.some(it => it.codigo_qr === qrCode)) {
@@ -254,45 +266,30 @@ export default function VenderPage() {
 
                         {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(medioPago) && (
                             <div className="card mt-md grid" style={{ gap: '10px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)', margin: 0 }}>Detalle de Cobro (Sofi):</p>
-                                    <button
-                                        type="button"
-                                        className="btn-secondary"
-                                        style={{ padding: '2px 8px', fontSize: '0.65rem', minWidth: 'auto' }}
-                                        onClick={() => setShowSofiDetails(!showSofiDetails)}
-                                    >
-                                        {showSofiDetails ? 'Ocultar' : 'Completar ahora ✍️'}
-                                    </button>
-                                </div>
-
-                                {!showSofiDetails && (
-                                    <p style={{ fontSize: '0.65rem', opacity: 0.5, margin: 0 }}>Se guardará como "Pendiente" para completar luego.</p>
-                                )}
-
-                                {showSofiDetails && (
-                                    <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                        <div>
-                                            <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Monto Neto ($):</label>
-                                            <input
-                                                type="number"
-                                                className="input-field"
-                                                placeholder="Lo que entra"
-                                                value={montoNeto}
-                                                onChange={(e) => setMontoNeto(e.target.value)}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Días Acred.:</label>
-                                            <input
-                                                type="number"
-                                                className="input-field"
-                                                value={diasAcreditacion}
-                                                onChange={(e) => setDiasAcreditacion(e.target.value)}
-                                            />
-                                        </div>
+                                <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)', margin: 0 }}>Detalle de Cobro (Sofi):</p>
+                                <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Monto Neto ($):</label>
+                                        <input
+                                            type="number"
+                                            className="input-field"
+                                            placeholder="Lo que entra"
+                                            value={montoNeto}
+                                            onChange={(e) => setMontoNeto(e.target.value)}
+                                        />
+                                        <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Estimado: ${(finalTotal * 0.942).toFixed(0)}</p>
                                     </div>
-                                )}
+                                    <div>
+                                        <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Días p/ Cobrar:</label>
+                                        <input
+                                            type="number"
+                                            className="input-field"
+                                            value={diasAcreditacion}
+                                            onChange={(e) => setDiasAcreditacion(e.target.value)}
+                                        />
+                                        <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>0 = Al instante</p>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -342,6 +339,30 @@ export default function VenderPage() {
                                         style={{ backgroundColor: 'rgba(255,255,255,0.05)', cursor: 'not-allowed', color: 'var(--accent)', fontWeight: 'bold' }}
                                     />
                                 </div>
+                                {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(otroMedioPago) && (
+                                    <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px', padding: '10px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '8px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Monto Neto Tarjeta ($):</label>
+                                            <input
+                                                type="number"
+                                                className="input-field"
+                                                placeholder="Lo que entra"
+                                                value={montoNeto}
+                                                onChange={(e) => setMontoNeto(e.target.value)}
+                                            />
+                                            <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Estimado: ${(Number(montoOtro) * 0.942).toFixed(0)}</p>
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Días p/ Cobrar:</label>
+                                            <input
+                                                type="number"
+                                                className="input-field"
+                                                value={diasAcreditacion}
+                                                onChange={(e) => setDiasAcreditacion(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
