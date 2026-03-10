@@ -218,7 +218,7 @@ export default function ReportesPage() {
                 </section>
             )}
 
-            {activeTab === 'ventas' && (
+            {activeTab === 'ventas' && stats && (
                 <>
 
                     {/* Selector de Fecha Personalizado */}

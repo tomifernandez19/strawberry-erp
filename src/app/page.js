@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/context/AuthContext'
 
 export default function HomePage() {
     const { isAdmin, user } = useAuth()
-    const [summary, setSummary] = useState({ count: 0, total: 0, cash: 0, items: [] })
+    const [summary, setSummary] = useState({ count: 0, total: 0, neto: 0, cash: 0, items: [] })
     const [pendingQR, setPendingQR] = useState(0)
     const [pendingDispatches, setPendingDispatches] = useState(0)
     const [pendingLocation, setPendingLocation] = useState(0)
