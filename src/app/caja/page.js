@@ -55,7 +55,7 @@ export default function CajaPage() {
                     monto: parseFloat(formData.monto),
                     tipo: formData.tipo,
                     motivo: formData.motivo,
-                    persona: formData.persona,
+                    persona: formData.persona.trim().toUpperCase(),
                     cuenta: formData.cuenta,
                     categoria: formData.categoria
                 })

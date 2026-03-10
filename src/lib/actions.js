@@ -846,7 +846,7 @@ export async function getCapitalContributionsReport() {
 
     const byPerson = {};
     movements?.forEach(m => {
-        const name = m.persona || 'S/D';
+        const name = (m.persona || 'S/D').trim().toUpperCase();
         if (!byPerson[name]) byPerson[name] = 0;
         byPerson[name] += parseFloat(m.monto) || 0;
     });
