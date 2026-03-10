@@ -237,7 +237,11 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
             return { success: false, message: 'Datos del producto incompletos en la base de datos.' };
         }
 
-        return { success: true, data: unidad };
+        // Return a plain object to avoid serialization issues
+        return {
+            success: true,
+            data: JSON.parse(JSON.stringify(unidad))
+        };
     } catch (err) {
         console.error("[getUnitForSale] Fatal Error:", err.message);
         return { success: false, message: "Error interno: " + err.message };
@@ -1879,4 +1883,46 @@ export async function migratePricing() {
         console.error("Migration Error:", err);
         return { success: false, message: err.message };
     }
+}
+
+/**
+ * Records a transfer between two accounts.
+ */
+export async function recordTransfer({ from, to, amount, reason, person }) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const montoNum = Math.abs(parseFloat(amount));
+
+    // 1. Withdrawal (EGRESO) from Source
+    const { error: outErr } = await supabase
+        .from('movimientos_caja')
+        .insert([{
+            monto: -montoNum,
+            tipo: 'EGRESO',
+            motivo: `TRASPASO -> ${to}: ${reason}`,
+            persona: person,
+            cuenta: from,
+            categoria: 'RETIRO_PERSONAL',
+            user_id: user?.id || null
+        }]);
+
+    if (outErr) throw outErr;
+
+    // 2. Deposit (INGRESO) to Destination
+    const { error: inErr } = await supabase
+        .from('movimientos_caja')
+        .insert([{
+            monto: montoNum,
+            tipo: 'INGRESO',
+            motivo: `TRASPASO <- ${from}: ${reason}`,
+            persona: person,
+            cuenta: to,
+            categoria: 'APORTE_CAPITAL',
+            user_id: user?.id || null
+        }]);
+
+    if (inErr) throw inErr;
+
+    return { success: true };
 }

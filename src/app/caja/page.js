@@ -10,10 +10,11 @@ export default function CajaPage() {
     const [suggestions, setSuggestions] = useState([])
     const [formData, setFormData] = useState({
         monto: '',
-        tipo: 'EGRESO',
+        tipo: 'EGRESO', // 'EGRESO', 'INGRESO', 'TRASPASO'
         motivo: '',
         persona: '',
         cuenta: 'CAJA_LOCAL',
+        haciaCuenta: 'SOFI_MP',
         categoria: 'GASTOS_GENERALES'
     })
 
@@ -22,14 +23,14 @@ export default function CajaPage() {
     }, [])
 
     async function loadData() {
-        // Dynamic import to avoid waterfall if possible, though here we need getRecentPersonas
+        // Dynamic import to avoid waterfall if possible
         const [movs, { getRecentPersonas }] = await Promise.all([
             getRecentUnifiedCaja(),
             import('@/lib/actions')
         ])
         setMovements(movs)
         const pers = await getRecentPersonas()
-        setSuggestions(pers)
+        setSuggestions(pers || [])
     }
 
     const handleSubmit = async (e) => {
@@ -38,17 +39,31 @@ export default function CajaPage() {
 
         setLoading(true)
         try {
-            await recordCashMovement({
-                monto: parseFloat(formData.monto),
-                tipo: formData.tipo,
-                motivo: formData.motivo,
-                persona: formData.persona,
-                cuenta: formData.cuenta,
-                categoria: formData.categoria
-            })
-            setFormData({ monto: '', tipo: 'EGRESO', motivo: '', persona: '', cuenta: 'CAJA_LOCAL', categoria: 'GASTOS_GENERALES' })
+            const { recordCashMovement, recordTransfer } = await import('@/lib/actions')
+
+            if (formData.tipo === 'TRASPASO') {
+                if (formData.cuenta === formData.haciaCuenta) throw new Error("Las cuentas de origen y destino deben ser distintas")
+                await recordTransfer({
+                    from: formData.cuenta,
+                    to: formData.haciaCuenta,
+                    amount: formData.monto,
+                    reason: formData.motivo,
+                    person: formData.persona
+                })
+            } else {
+                await recordCashMovement({
+                    monto: parseFloat(formData.monto),
+                    tipo: formData.tipo,
+                    motivo: formData.motivo,
+                    persona: formData.persona,
+                    cuenta: formData.cuenta,
+                    categoria: formData.categoria
+                })
+            }
+
+            setFormData({ monto: '', tipo: 'EGRESO', motivo: '', persona: '', cuenta: 'CAJA_LOCAL', haciaCuenta: 'SOFI_MP', categoria: 'GASTOS_GENERALES' })
             await loadData()
-            alert('Movimiento registrado con éxito')
+            alert('Operación registrada con éxito')
         } catch (err) {
             alert('Error: ' + err.message)
         } finally {
@@ -66,25 +81,26 @@ export default function CajaPage() {
 
             <section className="card mt-lg">
                 <form onSubmit={handleSubmit} className="grid">
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        {['EGRESO', 'INGRESO'].map(tipo => (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {['EGRESO', 'INGRESO', 'TRASPASO'].map(tipo => (
                             <button
                                 key={tipo}
                                 type="button"
                                 onClick={() => setFormData({ ...formData, tipo })}
                                 style={{
                                     flex: 1,
-                                    padding: '12px',
+                                    padding: '10px 5px',
                                     borderRadius: '12px',
                                     border: '1px solid',
-                                    borderColor: formData.tipo === tipo ? (tipo === 'EGRESO' ? '#ef4444' : 'var(--accent)') : 'var(--card-border)',
-                                    backgroundColor: formData.tipo === tipo ? (tipo === 'EGRESO' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)') : 'transparent',
-                                    color: formData.tipo === tipo ? (tipo === 'EGRESO' ? '#ef4444' : 'var(--accent)') : 'white',
+                                    fontSize: '0.8rem',
+                                    borderColor: formData.tipo === tipo ? (tipo === 'EGRESO' ? '#ef4444' : (tipo === 'INGRESO' ? 'var(--accent)' : '#8b5cf6')) : 'var(--card-border)',
+                                    backgroundColor: formData.tipo === tipo ? (tipo === 'EGRESO' ? 'rgba(239, 68, 68, 0.1)' : (tipo === 'INGRESO' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(139, 92, 246, 0.1)')) : 'transparent',
+                                    color: formData.tipo === tipo ? (tipo === 'EGRESO' ? '#ef4444' : (tipo === 'INGRESO' ? 'var(--accent)' : '#8b5cf6')) : 'white',
                                     fontWeight: 'bold',
                                     cursor: 'pointer'
                                 }}
                             >
-                                {tipo === 'EGRESO' ? '💸 Retirar' : '💰 Agregar'}
+                                {tipo === 'EGRESO' ? '💸 Retirar' : (tipo === 'INGRESO' ? '💰 Agregar' : '🔄 Traspaso')}
                             </button>
                         ))}
                     </div>
@@ -120,7 +136,7 @@ export default function CajaPage() {
 
                     <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div>
-                            <label style={labelStyle}>Desde Cuenta:</label>
+                            <label style={labelStyle}>{formData.tipo === 'TRASPASO' ? 'De Cuenta:' : 'Cuenta:'}</label>
                             <select
                                 value={formData.cuenta}
                                 onChange={e => setFormData({ ...formData, cuenta: e.target.value })}
@@ -133,30 +149,48 @@ export default function CajaPage() {
                             </select>
                         </div>
                         <div>
-                            <label style={labelStyle}>Categoría:</label>
-                            <select
-                                value={formData.categoria}
-                                onChange={e => setFormData({ ...formData, categoria: e.target.value })}
-                                style={inputStyle}
-                            >
-                                {formData.tipo === 'EGRESO' ? (
-                                    <>
-                                        <option value="GASTOS_GENERALES">Gastos Generales (Insumos/Otros)</option>
-                                        <option value="ALQUILER">Alquiler 🏠</option>
-                                        <option value="SERVICIOS">Servicios (Luz/Agua/etc) 🔌</option>
-                                        <option value="FLETES">Fletes / Logística 🚚</option>
-                                        <option value="PAGO_CAROLINA">Pago a Carolina 👵</option>
-                                        <option value="PAGO_PROVEEDOR">Pago a Proveedor 🏢</option>
-                                        <option value="RETIRO_PERSONAL">Retiro Personal (Sueldo/Dueña) 👤</option>
-                                    </>
-                                ) : (
-                                    <>
-                                        <option value="APORTE_CAPITAL">Aporte de Capital 💰</option>
-                                        <option value="VUELTO_CAMBIO">Ingreso para Cambio 🪙</option>
-                                        <option value="OTRO_INGRESO">Otro Ingreso 📥</option>
-                                    </>
-                                )}
-                            </select>
+                            {formData.tipo === 'TRASPASO' ? (
+                                <>
+                                    <label style={labelStyle}>Hacia Cuenta:</label>
+                                    <select
+                                        value={formData.haciaCuenta}
+                                        onChange={e => setFormData({ ...formData, haciaCuenta: e.target.value })}
+                                        style={inputStyle}
+                                    >
+                                        <option value="CAJA_LOCAL">Caja Local (Efectivo)</option>
+                                        <option value="SOFI_MP">Cuenta Sofi (MP)</option>
+                                        <option value="LUCAS">Cuenta Lucas</option>
+                                        <option value="TOMI">Cuenta Tomi / TN</option>
+                                    </select>
+                                </>
+                            ) : (
+                                <>
+                                    <label style={labelStyle}>Categoría:</label>
+                                    <select
+                                        value={formData.categoria}
+                                        onChange={e => setFormData({ ...formData, categoria: e.target.value })}
+                                        style={inputStyle}
+                                    >
+                                        {formData.tipo === 'EGRESO' ? (
+                                            <>
+                                                <option value="GASTOS_GENERALES">Gastos Generales (Insumos/Otros)</option>
+                                                <option value="ALQUILER">Alquiler 🏠</option>
+                                                <option value="SERVICIOS">Servicios (Luz/Agua/etc) 🔌</option>
+                                                <option value="FLETES">Fletes / Logística 🚚</option>
+                                                <option value="PAGO_CAROLINA">Pago a Carolina 👵</option>
+                                                <option value="PAGO_PROVEEDOR">Pago a Proveedor 🏢</option>
+                                                <option value="RETIRO_PERSONAL">Retiro Personal (Sueldo/Dueña) 👤</option>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <option value="APORTE_CAPITAL">Aporte de Capital 💰</option>
+                                                <option value="VUELTO_CAMBIO">Ingreso para Cambio 🪙</option>
+                                                <option value="OTRO_INGRESO">Otro Ingreso 📥</option>
+                                            </>
+                                        )}
+                                    </select>
+                                </>
+                            )}
                         </div>
                     </div>
 

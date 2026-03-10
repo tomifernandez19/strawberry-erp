@@ -276,32 +276,35 @@ export default function GestionPage() {
                     <p className="text-center">Cargando...</p>
                 ) : tab === 'ventas' ? (
                     <div className="grid" style={{ gap: '15px' }}>
-                        {ventas.map(v => (
-                            <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <h4 style={{ margin: 0 }}>{v.variantes?.modelos?.descripcion || 'Sin descripción'}</h4>
-                                        <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                                            {new Date(v.fecha_venta).toLocaleString()} • {v.estado === 'VENDIDO_ONLINE' ? 'TIENDANUBE' : (v.ventas?.medio_pago || 'S/D')}
-                                        </p>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
-                                            <p style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
-                                                $ {(v.ventas?.total || 0).toLocaleString()}
+                        {ventas.map(v => {
+                            const sale = Array.isArray(v.ventas) ? v.ventas[0] : v.ventas;
+                            return (
+                                <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <h4 style={{ margin: 0 }}>{v.variantes?.modelos?.descripcion || 'Sin descripción'}</h4>
+                                            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
+                                                {new Date(v.fecha_venta).toLocaleString()} • {v.estado === 'VENDIDO_ONLINE' ? 'TIENDANUBE' : (sale?.medio_pago || 'S/D')}
                                             </p>
-                                            {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.6rem', padding: '2px 6px', background: '#eab308', color: 'black' }}>ONLINE</span>}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
+                                                <p style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
+                                                    $ {(sale?.total || 0).toLocaleString()}
+                                                </p>
+                                                {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 8px', background: '#eab308', color: 'black' }}>ONLINE</span>}
+                                            </div>
                                         </div>
+                                        {sale && (
+                                            <button
+                                                onClick={() => handleDeleteSale(sale.id)}
+                                                style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                            >
+                                                Anular ✕
+                                            </button>
+                                        )}
                                     </div>
-                                    {v.ventas && (
-                                        <button
-                                            onClick={() => handleDeleteSale(v.ventas.id)}
-                                            style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
-                                        >
-                                            Anular
-                                        </button>
-                                    )}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : tab === 'stock' ? (
                     <div className="grid" style={{ gap: '15px' }}>
