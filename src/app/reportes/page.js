@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getExtendedStats, getCustomRangeStats, getFinanceSummary } from '@/lib/actions'
+import { getExtendedStats, getCustomRangeStats, getFinanceSummary, getUnreconciledSales, reconcileSale } from '@/lib/actions'
 
 export default function ReportesPage() {
     const [stats, setStats] = useState(null)
@@ -13,15 +13,19 @@ export default function ReportesPage() {
     const [customLoading, setCustomLoading] = useState(false)
     const [activeTab, setActiveTab] = useState('ventas') // 'ventas' or 'cuentas'
     const [finance, setFinance] = useState(null)
+    const [pendingSales, setPendingSales] = useState([])
+    const [reconcilingId, setReconcilingId] = useState(null)
 
     useEffect(() => {
         async function load() {
-            const [vStats, fSummary] = await Promise.all([
+            const [vStats, fSummary, pSales] = await Promise.all([
                 getExtendedStats(),
-                getFinanceSummary()
+                getFinanceSummary(),
+                getUnreconciledSales()
             ])
             setStats(vStats)
             setFinance(fSummary)
+            setPendingSales(pSales)
             setLoading(false)
         }
         load()
@@ -186,6 +190,28 @@ export default function ReportesPage() {
                             </h2>
                         </div>
                     </div>
+
+                    {/* Ventas por Conciliar */}
+                    <div className="mt-xl">
+                        <h3 style={{ fontSize: '1rem', marginBottom: '15px', color: 'var(--accent)' }}>📋 Ventas por Conciliar (Sofi)</h3>
+                        {pendingSales.length === 0 ? (
+                            <div className="card text-center" style={{ opacity: 0.5 }}>No hay ventas pendientes de conciliación.</div>
+                        ) : (
+                            <div className="grid" style={{ gap: '10px' }}>
+                                {pendingSales.map(sale => (
+                                    <ReconcileRow
+                                        key={sale.id}
+                                        sale={sale}
+                                        onDone={async () => {
+                                            const [f, p] = await Promise.all([getFinanceSummary(), getUnreconciledSales()])
+                                            setFinance(f)
+                                            setPendingSales(p)
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </section>
             )}
 
@@ -283,6 +309,71 @@ export default function ReportesPage() {
             )}
 
             <div style={{ height: '80px' }}></div>
+        </div>
+    )
+}
+
+function ReconcileRow({ sale, onDone }) {
+    const [neto, setNeto] = useState('')
+    const [dias, setDias] = useState(18)
+    const [loading, setLoading] = useState(false)
+
+    const handleSave = async () => {
+        if (!neto) return
+        setLoading(true)
+        try {
+            await reconcileSale(sale.id, { monto_neto: neto, dias_acreditacion: dias })
+            onDone()
+        } catch (err) {
+            alert('Error al conciliar')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <div className="card" style={{ padding: '12px 15px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '15px' }}>
+                <div style={{ flex: 1, minWidth: '150px' }}>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>
+                        {new Date(sale.created_at).toLocaleDateString()} - {sale.profiles?.nombre}
+                    </p>
+                    <p style={{ fontWeight: 'bold', fontSize: '1.1rem', margin: '4px 0' }}>$ {sale.total.toLocaleString()}</p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--accent)' }}>{sale.medio_pago}</p>
+                </div>
+
+                <div className="grid" style={{ gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'flex-end', flex: 2 }}>
+                    <div>
+                        <label style={{ fontSize: '0.65rem', opacity: 0.5 }}>Monto Neto:</label>
+                        <input
+                            type="number"
+                            className="input-field"
+                            style={{ margin: 0, padding: '6px' }}
+                            placeholder="Recibido"
+                            value={neto}
+                            onChange={e => setNeto(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '0.65rem', opacity: 0.5 }}>Días Acred.:</label>
+                        <input
+                            type="number"
+                            className="input-field"
+                            style={{ margin: 0, padding: '6px' }}
+                            value={dias}
+                            onChange={e => setDias(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        className="btn-primary"
+                        style={{ padding: '8px 12px', minWidth: 'auto' }}
+                        disabled={loading}
+                        onClick={handleSave}
+                    >
+                        {loading ? '...' : '✅'}
+                    </button>
+                </div>
+            </div>
         </div>
     )
 }

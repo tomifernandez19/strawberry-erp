@@ -139,12 +139,23 @@ export default function CajaPage() {
                                 onChange={e => setFormData({ ...formData, categoria: e.target.value })}
                                 style={inputStyle}
                             >
-                                <option value="GASTOS_GENERALES">Gastos Generales</option>
-                                <option value="PAGO_CAROLINA">Pago a Carolina</option>
-                                <option value="PAGO_PROVEEDOR">Pago a Proveedor</option>
-                                <option value="SERVICIOS">Servicios (Luz/Agua/etc)</option>
-                                <option value="APORTE_CAPITAL">Aporte de Capital</option>
-                                <option value="RETIRO_PERSONAL">Retiro Personal</option>
+                                {formData.tipo === 'EGRESO' ? (
+                                    <>
+                                        <option value="GASTOS_GENERALES">Gastos Generales (Insumos/Otros)</option>
+                                        <option value="ALQUILER">Alquiler 🏠</option>
+                                        <option value="SERVICIOS">Servicios (Luz/Agua/etc) 🔌</option>
+                                        <option value="FLETES">Fletes / Logística 🚚</option>
+                                        <option value="PAGO_CAROLINA">Pago a Carolina 👵</option>
+                                        <option value="PAGO_PROVEEDOR">Pago a Proveedor 🏢</option>
+                                        <option value="RETIRO_PERSONAL">Retiro Personal (Sueldo/Dueña) 👤</option>
+                                    </>
+                                ) : (
+                                    <>
+                                        <option value="APORTE_CAPITAL">Aporte de Capital 💰</option>
+                                        <option value="VUELTO_CAMBIO">Ingreso para Cambio 🪙</option>
+                                        <option value="OTRO_INGRESO">Otro Ingreso 📥</option>
+                                    </>
+                                )}
                             </select>
                         </div>
                     </div>

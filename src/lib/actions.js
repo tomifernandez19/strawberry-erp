@@ -810,6 +810,45 @@ export async function deleteSale(saleId) {
 }
 
 /**
+ * Fetches card sales that haven't been reconciled (no monto_neto).
+ */
+export async function getUnreconciledSales() {
+    const supabase = createClient();
+    const { data, error } = await supabase
+        .from('ventas')
+        .select('*, profiles(nombre)')
+        .is('monto_neto', null)
+        .in('cuenta_destino', ['SOFI_MP'])
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+}
+
+/**
+ * Updates a sale with merchant-verified financial data.
+ */
+export async function reconcileSale(saleId, { monto_neto, dias_acreditacion }) {
+    const supabase = createClient();
+
+    let fechaAcreditacion = new Date();
+    if (dias_acreditacion > 0) {
+        fechaAcreditacion.setDate(fechaAcreditacion.getDate() + Number(dias_acreditacion));
+    }
+
+    const { error } = await supabase
+        .from('ventas')
+        .update({
+            monto_neto: parseFloat(monto_neto),
+            fecha_acreditacion: fechaAcreditacion.toISOString()
+        })
+        .eq('id', saleId);
+
+    if (error) throw error;
+    return true;
+}
+
+/**
  * Deletes a specific unit from stock.
  */
 export async function deleteUnit(unitId) {

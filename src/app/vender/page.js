@@ -21,6 +21,7 @@ export default function VenderPage() {
     const [otroMedioPago, setOtroMedioPago] = useState('TARJETA_DEBITO')
     const [montoNeto, setMontoNeto] = useState('')
     const [diasAcreditacion, setDiasAcreditacion] = useState(18)
+    const [showSofiDetails, setShowSofiDetails] = useState(false)
 
     const addItem = async (qrCode) => {
         if (items.some(it => it.codigo_qr === qrCode)) {
@@ -253,28 +254,45 @@ export default function VenderPage() {
 
                         {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(medioPago) && (
                             <div className="card mt-md grid" style={{ gap: '10px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                                <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)' }}>Detalle de Cobro (Sofi):</p>
-                                <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                    <div>
-                                        <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Monto Neto ($):</label>
-                                        <input
-                                            type="number"
-                                            className="input-field"
-                                            placeholder="Lo que entra a cuenta"
-                                            value={montoNeto}
-                                            onChange={(e) => setMontoNeto(e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Días Acreditación:</label>
-                                        <input
-                                            type="number"
-                                            className="input-field"
-                                            value={diasAcreditacion}
-                                            onChange={(e) => setDiasAcreditacion(e.target.value)}
-                                        />
-                                    </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)', margin: 0 }}>Detalle de Cobro (Sofi):</p>
+                                    <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ padding: '2px 8px', fontSize: '0.65rem', minWidth: 'auto' }}
+                                        onClick={() => setShowSofiDetails(!showSofiDetails)}
+                                    >
+                                        {showSofiDetails ? 'Ocultar' : 'Completar ahora ✍️'}
+                                    </button>
                                 </div>
+
+                                {!showSofiDetails && (
+                                    <p style={{ fontSize: '0.65rem', opacity: 0.5, margin: 0 }}>Se guardará como "Pendiente" para completar luego.</p>
+                                )}
+
+                                {showSofiDetails && (
+                                    <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Monto Neto ($):</label>
+                                            <input
+                                                type="number"
+                                                className="input-field"
+                                                placeholder="Lo que entra"
+                                                value={montoNeto}
+                                                onChange={(e) => setMontoNeto(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Días Acred.:</label>
+                                            <input
+                                                type="number"
+                                                className="input-field"
+                                                value={diasAcreditacion}
+                                                onChange={(e) => setDiasAcreditacion(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
