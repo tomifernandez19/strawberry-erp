@@ -10,9 +10,11 @@ export default function CajaPage() {
     const [suggestions, setSuggestions] = useState([])
     const [formData, setFormData] = useState({
         monto: '',
-        tipo: 'EGRESO', // Default to withdrawal as its most common for 'pagos'
+        tipo: 'EGRESO',
         motivo: '',
-        persona: ''
+        persona: '',
+        cuenta: 'CAJA_LOCAL',
+        categoria: 'GASTOS_GENERALES'
     })
 
     useEffect(() => {
@@ -40,9 +42,11 @@ export default function CajaPage() {
                 monto: parseFloat(formData.monto),
                 tipo: formData.tipo,
                 motivo: formData.motivo,
-                persona: formData.persona
+                persona: formData.persona,
+                cuenta: formData.cuenta,
+                categoria: formData.categoria
             })
-            setFormData({ monto: '', tipo: 'EGRESO', motivo: '', persona: '' })
+            setFormData({ monto: '', tipo: 'EGRESO', motivo: '', persona: '', cuenta: 'CAJA_LOCAL', categoria: 'GASTOS_GENERALES' })
             await loadData()
             alert('Movimiento registrado con éxito')
         } catch (err) {
@@ -111,6 +115,37 @@ export default function CajaPage() {
                             <datalist id="personas-list">
                                 {suggestions.map(p => <option key={p} value={p} />)}
                             </datalist>
+                        </div>
+                    </div>
+
+                    <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div>
+                            <label style={labelStyle}>Desde Cuenta:</label>
+                            <select
+                                value={formData.cuenta}
+                                onChange={e => setFormData({ ...formData, cuenta: e.target.value })}
+                                style={inputStyle}
+                            >
+                                <option value="CAJA_LOCAL">Caja Local (Efectivo)</option>
+                                <option value="SOFI_MP">Cuenta Sofi (MP)</option>
+                                <option value="LUCAS">Cuenta Lucas</option>
+                                <option value="TOMI">Cuenta Tomi / TN</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style={labelStyle}>Categoría:</label>
+                            <select
+                                value={formData.categoria}
+                                onChange={e => setFormData({ ...formData, categoria: e.target.value })}
+                                style={inputStyle}
+                            >
+                                <option value="GASTOS_GENERALES">Gastos Generales</option>
+                                <option value="PAGO_CAROLINA">Pago a Carolina</option>
+                                <option value="PAGO_PROVEEDOR">Pago a Proveedor</option>
+                                <option value="SERVICIOS">Servicios (Luz/Agua/etc)</option>
+                                <option value="APORTE_CAPITAL">Aporte de Capital</option>
+                                <option value="RETIRO_PERSONAL">Retiro Personal</option>
+                            </select>
                         </div>
                     </div>
 

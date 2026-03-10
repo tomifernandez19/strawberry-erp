@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getExtendedStats, getCustomRangeStats } from '@/lib/actions'
+import { getExtendedStats, getCustomRangeStats, getFinanceSummary } from '@/lib/actions'
 
 export default function ReportesPage() {
     const [stats, setStats] = useState(null)
@@ -11,11 +11,17 @@ export default function ReportesPage() {
     const [customRange, setCustomRange] = useState({ start: '', end: '' })
     const [customStats, setCustomStats] = useState(null)
     const [customLoading, setCustomLoading] = useState(false)
+    const [activeTab, setActiveTab] = useState('ventas') // 'ventas' or 'cuentas'
+    const [finance, setFinance] = useState(null)
 
     useEffect(() => {
         async function load() {
-            const data = await getExtendedStats()
-            setStats(data)
+            const [vStats, fSummary] = await Promise.all([
+                getExtendedStats(),
+                getFinanceSummary()
+            ])
+            setStats(vStats)
+            setFinance(fSummary)
             setLoading(false)
         }
         load()
@@ -91,96 +97,190 @@ export default function ReportesPage() {
     return (
         <div className="grid mt-lg">
             <header className="text-center">
-                <h1>Reporte de Ventas</h1>
-                <p style={{ opacity: 0.7 }}>Rendimiento de Strawberry Trejo</p>
+                <h1>Reportes Financieros</h1>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '20px' }}>
+                    <button
+                        className={activeTab === 'ventas' ? 'btn-primary' : 'btn-secondary'}
+                        onClick={() => setActiveTab('ventas')}
+                        style={{ padding: '8px 20px' }}
+                    >
+                        Ventas
+                    </button>
+                    <button
+                        className={activeTab === 'cuentas' ? 'btn-primary' : 'btn-secondary'}
+                        onClick={() => setActiveTab('cuentas')}
+                        style={{ padding: '8px 20px' }}
+                    >
+                        Estado de Cuentas
+                    </button>
+                </div>
             </header>
 
-            {/* Selector de Fecha Personalizado */}
-            <section className="card mt-md">
-                <h4 style={{ marginBottom: '15px' }}>🔍 Filtro Personalizado</h4>
-                <form onSubmit={handleCustomSearch} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>Desde:</label>
-                            <input
-                                type="date"
-                                className="input-field"
-                                style={{ margin: 0, padding: '8px' }}
-                                value={customRange.start}
-                                onChange={e => setCustomRange({ ...customRange, start: e.target.value })}
-                            />
+            {activeTab === 'cuentas' && finance && (
+                <section className="grid mt-lg">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+                        {/* Cuentas de Dueños */}
+                        <div className="card" style={{ borderLeft: '4px solid var(--accent)' }}>
+                            <h4 style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '15px' }}>DISPONIBLE POR CUENTA</h4>
+                            <div className="grid" style={{ gap: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ opacity: 0.8 }}>💵 Caja Local (Efectivo)</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {finance.CAJA_LOCAL.toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ opacity: 0.8 }}>📱 Cuenta Lucas</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {finance.LUCAS.toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ opacity: 0.8 }}>📱 Cuenta Tomi / TN</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {finance.TOMI.toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                                    <span style={{ opacity: 0.8 }}>💳 Sofi (Dispon. MP)</span>
+                                    <span style={{ fontWeight: 'bold', color: 'var(--accent)' }}>$ {finance.SOFI_MP.toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>⏳ Sofi (A liberar 18d)</span>
+                                    <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>$ {finance.SOFI_PENDING.toLocaleString()}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div style={{ flex: 1 }}>
-                            <label style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>Hasta:</label>
-                            <input
-                                type="date"
-                                className="input-field"
-                                style={{ margin: 0, padding: '8px' }}
-                                value={customRange.end}
-                                onChange={e => setCustomRange({ ...customRange, end: e.target.value })}
-                            />
+
+                        {/* Deudas y Compromisos */}
+                        <div className="card" style={{ borderLeft: '4px solid #ef4444' }}>
+                            <h4 style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '15px' }}>ESTADO DE DEUDAS</h4>
+                            <div className="grid" style={{ gap: '12px' }}>
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                        <span style={{ opacity: 0.8 }}>👵 Deuda Carolina</span>
+                                        <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {finance.CAROLINA.toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{ width: `${Math.min(100, Math.max(0, (1 - (Math.abs(finance.CAROLINA) / 13000000)) * 100))}%`, height: '100%', background: 'var(--accent)' }}></div>
+                                    </div>
+                                    <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '4px' }}>Restan pagar $ {Math.abs(finance.CAROLINA).toLocaleString()} de los $ 13M</p>
+                                </div>
+
+                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ opacity: 0.8 }}>🏢 Deuda Proveedores</span>
+                                        <span style={{ fontWeight: 'bold', color: finance.PROVEEDOR >= 0 ? 'var(--accent)' : '#ef4444' }}>$ {finance.PROVEEDOR.toLocaleString()}</span>
+                                    </div>
+                                    <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '2px' }}>
+                                        {finance.PROVEEDOR < 0 ? 'Saldo pendiente de pago' : 'Saldo a favor'}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <button type="submit" className="btn-primary" style={{ padding: '10px' }} disabled={customLoading}>
-                        {customLoading ? 'Calculando...' : 'Consultar Rango'}
-                    </button>
-                </form>
 
-                {customStats && (
-                    <div className="mt-lg" style={{ borderTop: '1px solid var(--card-border)', paddingTop: '15px' }}>
-                        <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Resultado del Rango:</p>
+                    {/* Resumen de Utilidad */}
+                    <div className="card mt-lg" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.02) 100%)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
-                                <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {customStats.total.toLocaleString()}</h2>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{customStats.count} pares vendidos</p>
+                                <h3 style={{ margin: 0 }}>Utilidad Neta Estimada</h3>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>Ventas - Costos - Gastos (Todo el tiempo)</p>
                             </div>
-                            <button className="btn-secondary" style={{ padding: '8px 15px' }} onClick={() => setViewDetail({ period: 'custom' })}>
-                                Ver Listado 📋
-                            </button>
+                            <h2 style={{ color: 'var(--accent)', margin: 0 }}>
+                                $ {(finance.CAJA_LOCAL + finance.SOFI_MP + finance.TOMI + finance.LUCAS).toLocaleString()}
+                            </h2>
                         </div>
                     </div>
-                )}
-            </section>
+                </section>
+            )}
 
-            <section className="grid mt-lg">
-                {/* Hoy */}
-                <div className="card" style={{ borderLeft: '4px solid var(--accent)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today' })}>
-                    <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Ventas de Hoy</p>
-                    <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {stats?.today.total.toLocaleString()}</h2>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.today.count} pares vendidos</p>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>Ver detalle →</span>
+            {activeTab === 'ventas' && (
+                <>
+
+                    {/* Selector de Fecha Personalizado */}
+                    <section className="card mt-md">
+                        <h4 style={{ marginBottom: '15px' }}>🔍 Filtro Personalizado</h4>
+                        <form onSubmit={handleCustomSearch} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>Desde:</label>
+                                    <input
+                                        type="date"
+                                        className="input-field"
+                                        style={{ margin: 0, padding: '8px' }}
+                                        value={customRange.start}
+                                        onChange={e => setCustomRange({ ...customRange, start: e.target.value })}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>Hasta:</label>
+                                    <input
+                                        type="date"
+                                        className="input-field"
+                                        style={{ margin: 0, padding: '8px' }}
+                                        value={customRange.end}
+                                        onChange={e => setCustomRange({ ...customRange, end: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <button type="submit" className="btn-primary" style={{ padding: '10px' }} disabled={customLoading}>
+                                {customLoading ? 'Calculando...' : 'Consultar Rango'}
+                            </button>
+                        </form>
+
+                        {customStats && (
+                            <div className="mt-lg" style={{ borderTop: '1px solid var(--card-border)', paddingTop: '15px' }}>
+                                <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Resultado del Rango:</p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {customStats.total.toLocaleString()}</h2>
+                                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{customStats.count} pares vendidos</p>
+                                    </div>
+                                    <button className="btn-secondary" style={{ padding: '8px 15px' }} onClick={() => setViewDetail({ period: 'custom' })}>
+                                        Ver Listado 📋
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </section>
+
+                    <section className="grid mt-lg">
+                        {/* Hoy */}
+                        <div className="card" style={{ borderLeft: '4px solid var(--accent)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today' })}>
+                            <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Ventas de Hoy</p>
+                            <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {stats?.today.total.toLocaleString()}</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.today.count} pares vendidos</p>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>Ver detalle →</span>
+                            </div>
+                        </div>
+
+                        {/* Semana */}
+                        <div className="card" style={{ borderLeft: '4px solid var(--primary)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week' })}>
+                            <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Últimos 7 días</p>
+                            <h2 style={{ color: 'var(--primary)', margin: '5px 0' }}>$ {stats?.week.total.toLocaleString()}</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.week.count} pares vendidos</p>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Ver detalle →</span>
+                            </div>
+                        </div>
+
+                        {/* Mes */}
+                        <div className="card" style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month' })}>
+                            <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Últimos 30 días</p>
+                            <h2 style={{ color: '#8b5cf6', margin: '5px 0' }}>$ {stats?.month.total.toLocaleString()}</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.month.count} pares vendidos</p>
+                                <span style={{ fontSize: '0.75rem', color: '#8b5cf6' }}>Ver detalle →</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div className="card mt-lg" style={{ backgroundColor: 'var(--secondary)' }}>
+                        <h4>Análisis Rápido</h4>
+                        <p style={{ fontSize: '0.9rem', marginTop: '10px', lineHeight: '1.4' }}>
+                            Tu promedio de venta por par en los últimos 30 días es de
+                            <strong> $ {stats?.month.count > 0 ? (stats.month.total / stats.month.count).toFixed(2) : 0}</strong>.
+                        </p>
                     </div>
-                </div>
 
-                {/* Semana */}
-                <div className="card" style={{ borderLeft: '4px solid var(--primary)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week' })}>
-                    <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Últimos 7 días</p>
-                    <h2 style={{ color: 'var(--primary)', margin: '5px 0' }}>$ {stats?.week.total.toLocaleString()}</h2>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.week.count} pares vendidos</p>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Ver detalle →</span>
-                    </div>
-                </div>
-
-                {/* Mes */}
-                <div className="card" style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month' })}>
-                    <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Últimos 30 días</p>
-                    <h2 style={{ color: '#8b5cf6', margin: '5px 0' }}>$ {stats?.month.total.toLocaleString()}</h2>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.month.count} pares vendidos</p>
-                        <span style={{ fontSize: '0.75rem', color: '#8b5cf6' }}>Ver detalle →</span>
-                    </div>
-                </div>
-            </section>
-
-            <div className="card mt-lg" style={{ backgroundColor: 'var(--secondary)' }}>
-                <h4>Análisis Rápido</h4>
-                <p style={{ fontSize: '0.9rem', marginTop: '10px', lineHeight: '1.4' }}>
-                    Tu promedio de venta por par en los últimos 30 días es de
-                    <strong> $ {stats?.month.count > 0 ? (stats.month.total / stats.month.count).toFixed(2) : 0}</strong>.
-                </p>
-            </div>
+                </>
+            )}
 
             <div style={{ height: '80px' }}></div>
         </div>

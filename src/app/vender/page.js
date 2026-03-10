@@ -16,10 +16,11 @@ export default function VenderPage() {
     const [descuento, setDescuento] = useState(0)
     const [montoAbonado, setMontoAbonado] = useState('')
 
-    // State for split payments
     const [montoEfectivo, setMontoEfectivo] = useState('')
     const [montoOtro, setMontoOtro] = useState('')
     const [otroMedioPago, setOtroMedioPago] = useState('TARJETA_DEBITO')
+    const [montoNeto, setMontoNeto] = useState('')
+    const [diasAcreditacion, setDiasAcreditacion] = useState(18)
 
     const addItem = async (qrCode) => {
         if (items.some(it => it.codigo_qr === qrCode)) {
@@ -72,7 +73,9 @@ export default function VenderPage() {
                     telefono: customerPhone,
                     email: customerEmail
                 },
-                descuento: Number(descuento)
+                descuento: Number(descuento),
+                monto_neto: parseFloat(montoNeto) || null,
+                dias_acreditacion: parseInt(diasAcreditacion) || 0
             }
 
             const result = await recordSale(qrCodes, medioPago, options)
@@ -237,14 +240,43 @@ export default function VenderPage() {
                                 className="input-field"
                             >
                                 <option value="EFECTIVO">Efectivo 💵</option>
-                                <option value="TRANSFERENCIA">Transferencia 📱</option>
                                 <option value="MAYORISTA_EFECTIVO">Mayorista Efectivo 📦</option>
-                                <option value="TARJETA_DEBITO">Tarjeta Débito 💳</option>
-                                <option value="TARJETA_CREDITO">Tarjeta Crédito 💳</option>
-                                <option value="QR_LISTA">QR Pago / Otros 🔘</option>
+                                <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
+                                <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
+                                <option value="TRANSFERENCIA_PROVEEDOR">Transferencia Proveedor 🚚</option>
+                                <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
+                                <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
+                                <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
                                 <option value="DIVIDIR_PAGOS">Dividir Pago (Efe + Otro) ⚖️</option>
                             </select>
                         </div>
+
+                        {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(medioPago) && (
+                            <div className="card mt-md grid" style={{ gap: '10px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)' }}>Detalle de Cobro (Sofi):</p>
+                                <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Monto Neto ($):</label>
+                                        <input
+                                            type="number"
+                                            className="input-field"
+                                            placeholder="Lo que entra a cuenta"
+                                            value={montoNeto}
+                                            onChange={(e) => setMontoNeto(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Días Acreditación:</label>
+                                        <input
+                                            type="number"
+                                            className="input-field"
+                                            value={diasAcreditacion}
+                                            onChange={(e) => setDiasAcreditacion(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {medioPago === 'DIVIDIR_PAGOS' && (
                             <div className="card grid mt-md" style={{ gap: '15px', background: 'rgba(255,255,255,0.03)' }}>

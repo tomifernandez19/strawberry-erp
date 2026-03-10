@@ -11,7 +11,8 @@ export default function NuevaCompraPage() {
     const [isScanning, setIsScanning] = useState(false)
     const [formData, setFormData] = useState({
         proveedor: '',
-        nro_remito: ''
+        nro_remito: '',
+        supplier_type: 'CAROLINA'
     })
     const [items, setItems] = useState([
         { variante_id: '', cantidad: 1, costo_unitario: 0, descripcion: '', color: '', codigo_proveedor: '', curva: '35-39(37)' }
@@ -258,7 +259,8 @@ export default function NuevaCompraPage() {
 
             const resComp = await createPurchase({
                 nro_remito: formData.nro_remito,
-                items: formattedItems
+                items: formattedItems,
+                supplier_type: formData.supplier_type
             })
             if (resComp.success) {
                 router.push('/asignar')
@@ -298,6 +300,17 @@ export default function NuevaCompraPage() {
 
             <form onSubmit={handleSubmit} className="grid mt-lg">
                 <div className="card grid">
+                    <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Tipo de Ingreso:</label>
+                    <select
+                        value={formData.supplier_type}
+                        onChange={e => setFormData({ ...formData, supplier_type: e.target.value })}
+                        style={inputStyle}
+                    >
+                        <option value="CAROLINA">Mercadería de Carolina (👵 Deuda Stock)</option>
+                        <option value="PROVEEDOR">Compra a Proveedor (🏢 Deuda Nueva)</option>
+                    </select>
+
+                    <label style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '10px' }}>Datos del Remito:</label>
                     <input
                         type="text"
                         placeholder="Proveedor (Opcional)"

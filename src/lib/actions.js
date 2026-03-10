@@ -5,10 +5,10 @@ import { createClient } from './supabase/server'
  * Creates a new purchase, creates models/variants if they don't exist,
  * and generates the units ready for QR assignment.
  */
-export async function createPurchase({ nro_remito, items }) {
+export async function createPurchase({ nro_remito, items, supplier_type = 'CAROLINA' }) {
     const supabase = createClient();
     try {
-        console.log("Creating Purchase with items:", items?.length);
+        console.log("Creating Purchase with items:", items?.length, "Type:", supplier_type);
         // 1. Process items to ensure models and variants exist
         const processedItems = []
 
@@ -89,7 +89,8 @@ export async function createPurchase({ nro_remito, items }) {
             .insert([{
                 proveedor: overallSupplier,
                 nro_remito,
-                user_id: user?.id || null
+                user_id: user?.id || null,
+                propietario: supplier_type === 'CAROLINA' ? 'Carolina' : 'Proveedor'
             }])
             .select('id')
             .single()
@@ -248,7 +249,15 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
  */
 export async function recordSale(qrCodes, medio_pago, options = {}) {
     const supabase = createClient();
-    const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null, customerData = {}, descuento = 0 } = options;
+    const {
+        monto_efectivo = 0,
+        monto_otro = 0,
+        otro_medio_pago = null,
+        customerData = {},
+        descuento = 0,
+        monto_neto = null,
+        dias_acreditacion = 0
+    } = options;
 
     if (!Array.isArray(qrCodes) || qrCodes.length === 0) throw new Error("No hay productos seleccionados");
 
@@ -273,10 +282,8 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             const baseLista = unidad.variantes.precio_lista;
 
             let itemPrice = baseLista;
-            if (medio_pago === 'EFECTIVO' || medio_pago === 'TRANSFERENCIA') {
+            if (['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio_pago)) {
                 itemPrice = baseEfectivo;
-            } else if (medio_pago === 'MAYORISTA_EFECTIVO') {
-                itemPrice = Math.round(baseEfectivo * 0.9);
             }
             calculatedTotal += itemPrice;
         });
@@ -289,6 +296,19 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
 
     // 3. Create the sale record
     const { data: { user } } = await supabase.auth.getUser();
+
+    // Calculate targeted account and metadata
+    let targetAccount = 'SOFI_MP'; // Default for cards/QR
+    if (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medio_pago)) targetAccount = 'CAJA_LOCAL';
+    if (medio_pago === 'TRANSFERENCIA_LUCAS') targetAccount = 'LUCAS';
+    if (medio_pago === 'TRANSFERENCIA_TOMI') targetAccount = 'TOMI';
+    if (medio_pago === 'TRANSFERENCIA_PROVEEDOR') targetAccount = 'PROVEEDOR';
+
+    let fechaAcreditacion = new Date();
+    if (dias_acreditacion > 0) {
+        fechaAcreditacion.setDate(fechaAcreditacion.getDate() + Number(dias_acreditacion));
+    }
+
     const { data: venta, error: ventaError } = await supabase
         .from('ventas')
         .insert([{
@@ -301,7 +321,11 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
             nombre_cliente: customerData.nombre?.toUpperCase() || null,
             telefono_cliente: customerData.telefono || null,
-            email_cliente: customerData.email?.toUpperCase() || null
+            email_cliente: customerData.email?.toUpperCase() || null,
+            // New Finance fields
+            monto_neto: monto_neto || null,
+            fecha_acreditacion: fechaAcreditacion.toISOString(),
+            cuenta_destino: targetAccount
         }])
         .select()
         .single()
@@ -504,9 +528,9 @@ export async function getCustomRangeStats(startDate, endDate) {
 }
 
 /**
- * Fetches the sales summary for the current day.
+ * Records a financial movement (Expensas, Payments, Salary, etc.)
  */
-export async function recordCashMovement({ monto, tipo, motivo, persona }) {
+export async function recordCashMovement({ monto, tipo, motivo, persona, cuenta = 'CAJA_LOCAL', categoria = 'GASTOS_GENERALES' }) {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -517,6 +541,8 @@ export async function recordCashMovement({ monto, tipo, motivo, persona }) {
             tipo,
             motivo,
             persona,
+            cuenta,
+            categoria,
             user_id: user?.id
         }])
         .select()
@@ -679,8 +705,79 @@ export async function getRecentUnifiedCaja() {
 }
 
 /**
- * Deletes a sale and reverts the associated unit to 'DISPONIBLE'.
+ * Calculates current balances for all accounts (State of Accounts).
  */
+export async function getFinanceSummary() {
+    const supabase = createClient();
+    const now = new Date().toISOString();
+
+    // 1. Fetch all sales with finance data
+    const { data: sales, error: sErr } = await supabase
+        .from('ventas')
+        .select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, created_at');
+
+    // 2. Fetch all manual movements
+    const { data: movements, error: mErr } = await supabase
+        .from('movimientos_caja')
+        .select('monto, cuenta, categoria, created_at');
+
+    // 3. Fetch all purchases to calculate Supplier Debt
+    const { data: purchases, error: pErr } = await supabase
+        .from('detalle_compras')
+        .select('costo_unitario, cantidad, compras(propietario)');
+
+    if (sErr || mErr || pErr) throw new Error("Error fetching finance data");
+
+    const accounts = {
+        CAJA_LOCAL: 0,
+        SOFI_MP: 0,
+        SOFI_PENDING: 0,
+        TOMI: 0,
+        LUCAS: 0,
+        CAROLINA: -13000000, // Initial debt
+        PROVEEDOR: 0
+    };
+
+    // Calculate Costs from Supplier Purchases
+    purchases?.forEach(p => {
+        if (p.compras?.propietario === 'Proveedor') {
+            const cost = (parseFloat(p.costo_unitario) || 0) * (p.cantidad || 0);
+            accounts.PROVEEDOR -= cost; // New stock increases debt (negative)
+        }
+    });
+
+    // Process Sales
+    sales?.forEach(s => {
+        const total = parseFloat(s.total) || 0;
+        const neto = parseFloat(s.monto_neto) || total;
+
+        if (s.cuenta_destino === 'SOFI_MP') {
+            if (s.fecha_acreditacion <= now) {
+                accounts.SOFI_MP += neto;
+            } else {
+                accounts.SOFI_PENDING += neto;
+            }
+        } else if (s.cuenta_destino === 'PROVEEDOR') {
+            accounts.PROVEEDOR += total; // Sales directly to provider reduce debt
+        } else if (accounts[s.cuenta_destino] !== undefined) {
+            accounts[s.cuenta_destino] += total;
+        }
+    });
+
+    // Process Manual Movements
+    movements?.forEach(m => {
+        const monto = parseFloat(m.monto) || 0;
+        if (m.categoria === 'PAGO_CAROLINA') {
+            accounts.CAROLINA += Math.abs(monto);
+        } else if (m.categoria === 'PAGO_PROVEEDOR') {
+            accounts.PROVEEDOR += Math.abs(monto);
+        } else if (accounts[m.cuenta] !== undefined) {
+            accounts[m.cuenta] += monto;
+        }
+    });
+
+    return accounts;
+}
 export async function deleteSale(saleId) {
     const supabase = createClient();
     // 1. Find the unit associated with this sale
