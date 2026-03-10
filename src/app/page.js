@@ -263,7 +263,7 @@ export default function HomePage() {
                         style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', cursor: 'pointer', marginBottom: 0, padding: '15px' }}
                         onClick={fetchCashDetail}
                     >
-                        <h4 style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--accent)' }}>Caja Hoy</h4>
+                        <h4 style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--accent)' }}>Caja en Local</h4>
                         <div style={{ marginTop: '5px' }}>
                             <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)' }}>
                                 $ {summary.cash.toLocaleString()}

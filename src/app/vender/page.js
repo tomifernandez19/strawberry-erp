@@ -14,6 +14,7 @@ export default function VenderPage() {
     const [error, setError] = useState('')
     const [medioPago, setMedioPago] = useState('EFECTIVO')
     const [descuento, setDescuento] = useState(0)
+    const [montoAbonado, setMontoAbonado] = useState('')
 
     // State for split payments
     const [montoEfectivo, setMontoEfectivo] = useState('')
@@ -95,6 +96,7 @@ export default function VenderPage() {
         setCustomerPhone('')
         setCustomerEmail('')
         setDescuento(0)
+        setMontoAbonado('')
     }
 
     const totals = () => {
@@ -337,6 +339,30 @@ export default function VenderPage() {
                                 $ {finalTotal.toLocaleString()}
                             </h2>
                         </div>
+
+                        {['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS', 'TRANSFERENCIA'].includes(medioPago) && (
+                            <div className="mt-md" style={{ background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div className="grid" style={{ gridTemplateColumns: '1.2fr 1fr', gap: '15px', alignItems: 'center' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block', marginBottom: '4px' }}>¿CON CUÁNTO PAGA?</label>
+                                        <input
+                                            type="number"
+                                            className="input-field"
+                                            style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}
+                                            placeholder="Monto recibido"
+                                            value={montoAbonado}
+                                            onChange={(e) => setMontoAbonado(e.target.value)}
+                                        />
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>VUELTO:</p>
+                                        <p style={{ fontSize: '1.4rem', fontWeight: 'bold', color: (Number(montoAbonado) - (medioPago === 'DIVIDIR_PAGOS' ? Number(montoEfectivo) : finalTotal)) >= 0 ? 'var(--accent)' : '#ef4444' }}>
+                                            $ {Math.max(0, (Number(montoAbonado) - (medioPago === 'DIVIDIR_PAGOS' ? Number(montoEfectivo) : finalTotal))).toLocaleString()}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="mt-lg" style={{ borderTop: '1px solid var(--card-border)', paddingTop: '15px' }}>
                             <p style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '10px' }}>DATOS DEL CLIENTE (OPCIONAL):</p>

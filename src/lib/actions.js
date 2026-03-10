@@ -583,25 +583,24 @@ export async function getDailySummary(onlyUserId = null) {
         return { count: 0, total: 0, cash: 0, items: [] };
     }
 
-    // Calculate Totals using Unique Sales
-    const uniqueSales = new Map();
-    unitsSold.forEach(u => {
-        if (u.ventas && !uniqueSales.has(u.ventas.id)) {
-            uniqueSales.set(u.ventas.id, u.ventas);
-        }
-    });
+    // 3. GLOBAL CASH CALCULATION (Perpetual balance)
+    const { data: totalSalesCash, error: sErr } = await supabase
+        .from('ventas')
+        .select('monto_efectivo');
 
-    const salesList = Array.from(uniqueSales.values());
+    const { data: totalManualCash, error: mAllErr } = await supabase
+        .from('movimientos_caja')
+        .select('monto');
 
-    // Cash Sales from Unique Sales list
-    const cashSalesAmount = salesList.reduce((acc, sale) => acc + (parseFloat(sale.monto_efectivo) || 0), 0);
+    if (sErr || mAllErr) {
+        console.error("Error fetching global cash:", sErr || mAllErr);
+    }
 
-    // Manual Movements Sum
-    const movementsSum = (movements || []).reduce((acc, mov) => acc + (parseFloat(mov.monto) || 0), 0);
+    const cashFromSales = (totalSalesCash || []).reduce((acc, s) => acc + (parseFloat(s.monto_efectivo) || 0), 0);
+    const cashFromManual = (totalManualCash || []).reduce((acc, m) => acc + (parseFloat(m.monto) || 0), 0);
+    const globalCashInHand = cashFromSales + cashFromManual;
 
-    // Total Cash in Hand = Sales + Manual Adjustments
-    const cashInHand = cashSalesAmount + movementsSum;
-
+    // Daily items list
     const allItems = unitsSold.map(unit => ({
         id: unit.id,
         fecha: unit.fecha_venta,
@@ -609,11 +608,7 @@ export async function getDailySummary(onlyUserId = null) {
         modelo: unit.variantes?.modelos?.descripcion,
         color: unit.variantes?.color,
         talle: unit.talle_especifico,
-        precio: parseFloat(unit.ventas?.total) / (unitsSold.filter(u => u.ventas?.id === unit.ventas?.id).length || 1), // Apportioned for individual item display in list if needed, or just use the sale total. Actually the list usually shows items.
-        // Wait, for the list display 'precio' is usually the item price.
-        // But recordSale stores the WHOLE total in ventas.total.
-        // If we want item price, we could use unit.precio_venta if we had it. 
-        // For now let's just keep the display as is but fix the sum.
+        precio: parseFloat(unit.ventas?.total) / (unitsSold.filter(u => u.ventas?.id === unit.ventas?.id).length || 1),
         medio_pago: unit.ventas?.medio_pago,
         monto_efectivo: parseFloat(unit.ventas?.monto_efectivo) || 0,
         vendedor: unit.ventas?.user_id,
@@ -630,7 +625,7 @@ export async function getDailySummary(onlyUserId = null) {
     return {
         count: displayItems.length,
         total: totalAmount,
-        cash: cashInHand,
+        cash: globalCashInHand,
         items: displayItems
     };
 }
