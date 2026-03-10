@@ -827,32 +827,33 @@ export async function getFinanceSummary() {
 }
 export async function deleteSale(saleId) {
     const supabase = createClient();
-    // 1. Find the unit associated with this sale
-    const { data: unit, error: unitError } = await supabase
-        .from('unidades')
-        .select('id')
-        .eq('venta_id', saleId)
-        .single();
 
-    if (unit) {
-        // 2. Revert unit status
-        await supabase
-            .from('unidades')
-            .update({
-                estado: 'DISPONIBLE',
-                venta_id: null,
-                fecha_venta: null
-            })
-            .eq('id', unit.id);
+    // 1. Revert all units associated with this sale to DISPONIBLE
+    const { error: unitError } = await supabase
+        .from('unidades')
+        .update({
+            estado: 'DISPONIBLE',
+            venta_id: null,
+            fecha_venta: null
+        })
+        .eq('venta_id', saleId);
+
+    if (unitError) {
+        console.error("[deleteSale] Unit Revert Error:", unitError);
+        throw new Error("No se pudieron liberar los productos de esta venta.");
     }
 
-    // 3. Delete the sale
+    // 2. Delete the sale record itself
     const { error: saleError } = await supabase
         .from('ventas')
         .delete()
         .eq('id', saleId);
 
-    if (saleError) throw saleError;
+    if (saleError) {
+        console.error("[deleteSale] Sale Delete Error:", saleError);
+        throw new Error("No se pudo eliminar el registro de la venta.");
+    }
+
     return true;
 }
 

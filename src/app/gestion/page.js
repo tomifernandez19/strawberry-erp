@@ -127,6 +127,7 @@ export default function GestionPage() {
         try {
             await deleteSale(saleId)
             fetchVentas()
+            fetchCounters()
         } catch (err) {
             alert(err.message)
         }
