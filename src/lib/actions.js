@@ -663,18 +663,19 @@ export async function getDailySummary(onlyUserId = null) {
 export async function getRecentUnifiedCaja() {
     const supabase = createClient();
 
-    // 1. Manual Movements
+    // 1. Manual Movements strictly for local cash
     const { data: manual } = await supabase
         .from('movimientos_caja')
         .select('*')
+        .eq('cuenta', 'CAJA_LOCAL')
         .order('created_at', { ascending: false })
         .limit(15);
 
-    // 2. Sales with cash (considering all non-card/online as potential cash for this view if needed, 
-    // but better strictly based on monto_efectivo > 0)
+    // 2. Sales with cash strictly (Cash or Wholesale Cash)
     const { data: sales } = await supabase
         .from('ventas')
         .select('id, created_at, total, monto_efectivo, medio_pago')
+        .in('medio_pago', ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'])
         .gt('monto_efectivo', 0)
         .order('created_at', { ascending: false })
         .limit(15);
@@ -695,7 +696,7 @@ export async function getRecentUnifiedCaja() {
             created_at: s.created_at,
             monto: s.monto_efectivo,
             tipo: 'INGRESO',
-            motivo: `Venta ${s.medio_pago === 'EFECTIVO' ? 'Efectivo' : (s.medio_pago === 'TRANSFERENCIA' ? 'Transferencia' : s.medio_pago)}`,
+            motivo: `Venta ${s.medio_pago === 'EFECTIVO' ? 'Efectivo' : (s.medio_pago === 'MAYORISTA_EFECTIVO' ? 'Mayorista' : 'Parte Efectivo')}`,
             persona: 'CAJA',
             tag: 'VENTA'
         }))
