@@ -282,10 +282,15 @@ export default function GestionPage() {
                                             <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
                                                 {new Date(v.fecha_venta).toLocaleString()} • {v.estado === 'VENDIDO_ONLINE' ? 'TIENDANUBE' : (sale?.medio_pago || 'S/D')}
                                             </p>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
-                                                <p style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
-                                                    $ {(sale?.total || 0).toLocaleString()}
-                                                </p>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '5px' }}>
+                                                <div>
+                                                    <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: 0 }}>
+                                                        Neto: $ {(sale?.monto_neto || sale?.total || 0).toLocaleString()}
+                                                    </p>
+                                                    <p style={{ fontSize: '0.65rem', opacity: 0.4, margin: 0 }}>
+                                                        Lista: $ {(sale?.total || 0).toLocaleString()}
+                                                    </p>
+                                                </div>
                                                 {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 8px', background: '#eab308', color: 'black' }}>ONLINE</span>}
                                             </div>
                                         </div>

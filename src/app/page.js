@@ -274,12 +274,12 @@ export default function HomePage() {
 
                     <Link href={isAdmin ? "/reportes" : "#"} style={{ textDecoration: 'none', color: 'inherit', cursor: isAdmin ? 'pointer' : 'default' }}>
                         <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', marginBottom: 0, padding: '15px' }}>
-                            <h4 style={{ fontSize: '0.7rem', opacity: 0.8 }}>Total Hoy</h4>
+                            <h4 style={{ fontSize: '0.7rem', opacity: 0.8 }}>Ingreso Neto Hoy</h4>
                             <div style={{ marginTop: '5px' }}>
-                                <p style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
-                                    $ {summary.total.toLocaleString()}
+                                <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'white' }}>
+                                    $ {summary.neto.toLocaleString()}
                                 </p>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>{summary.count} ventas</p>
+                                <p style={{ fontSize: '0.6rem', opacity: 0.4 }}>Lista: $ {summary.total.toLocaleString()}</p>
                             </div>
                         </section>
                     </Link>

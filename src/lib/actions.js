@@ -396,6 +396,7 @@ export async function getExtendedStats() {
     const initStats = () => ({
         count: 0,
         total: 0,
+        neto: 0,
         items: []
     });
 
@@ -415,7 +416,7 @@ export async function getExtendedStats() {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
-            ventas (total, medio_pago, user_id, profiles (nombre)),
+            ventas (id, total, medio_pago, monto_neto, user_id, profiles (nombre)),
             variantes (color, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
@@ -442,6 +443,7 @@ export async function getExtendedStats() {
     unitsSold.forEach(unit => {
         const saleDate = new Date(unit.fecha_venta);
         const total = parseFloat(unit.ventas?.total) || 0;
+        const neto = parseFloat(unit.ventas?.monto_neto) || total;
 
         const detailedItem = {
             id: unit.id,
@@ -451,6 +453,7 @@ export async function getExtendedStats() {
             color: unit.variantes?.color,
             talle: unit.talle_especifico,
             precio: total,
+            neto: neto,
             medio_pago: unit.ventas?.medio_pago,
             vendedor: unit.ventas?.profiles?.nombre || unit.ventas?.user_id
         };
@@ -458,6 +461,7 @@ export async function getExtendedStats() {
         const update = (obj) => {
             obj.count++;
             obj.total += total;
+            obj.neto += neto;
             obj.items.push(detailedItem);
         };
 
@@ -484,7 +488,7 @@ export async function getCustomRangeStats(startDate, endDate) {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
-            ventas (total, medio_pago, user_id, profiles (nombre)),
+            ventas (total, medio_pago, monto_neto, user_id, profiles (nombre)),
             variantes (color, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
@@ -497,6 +501,7 @@ export async function getCustomRangeStats(startDate, endDate) {
         return {
             count: 0,
             total: 0,
+            neto: 0,
             items: [],
             error: true
         };
@@ -505,11 +510,13 @@ export async function getCustomRangeStats(startDate, endDate) {
     const stats = {
         count: 0,
         total: 0,
+        neto: 0,
         items: []
     };
 
     unitsSold.forEach(unit => {
         const total = parseFloat(unit.ventas?.total) || 0;
+        const neto = parseFloat(unit.ventas?.monto_neto) || total;
 
         const detailedItem = {
             id: unit.id,
@@ -519,12 +526,14 @@ export async function getCustomRangeStats(startDate, endDate) {
             color: unit.variantes?.color,
             talle: unit.talle_especifico,
             precio: total,
+            neto: neto,
             medio_pago: unit.ventas?.medio_pago,
             vendedor: unit.ventas?.profiles?.nombre || unit.ventas?.user_id
         };
 
         stats.count++;
         stats.total += total;
+        stats.neto += neto;
         stats.items.push(detailedItem);
     });
 
@@ -595,7 +604,7 @@ export async function getDailySummary(onlyUserId = null) {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
-            ventas (total, medio_pago, user_id, monto_efectivo, profiles (nombre)),
+            ventas (id, total, medio_pago, user_id, monto_efectivo, monto_neto, profiles (nombre)),
             variantes (color, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
@@ -610,7 +619,7 @@ export async function getDailySummary(onlyUserId = null) {
 
     if (uError || mError) {
         console.error("Error fetching summary:", uError || mError);
-        return { count: 0, total: 0, cash: 0, items: [] };
+        return { count: 0, total: 0, neto: 0, cash: 0, items: [] };
     }
 
     // 3. GLOBAL CASH CALCULATION (Perpetual balance)
@@ -632,19 +641,27 @@ export async function getDailySummary(onlyUserId = null) {
     const globalCashInHand = cashFromSales + cashFromManual;
 
     // Daily items list
-    const allItems = unitsSold.map(unit => ({
-        id: unit.id,
-        fecha: unit.fecha_venta,
-        codigo: unit.variantes?.modelos?.codigo_proveedor,
-        modelo: unit.variantes?.modelos?.descripcion,
-        color: unit.variantes?.color,
-        talle: unit.talle_especifico,
-        precio: parseFloat(unit.ventas?.total) / (unitsSold.filter(u => u.ventas?.id === unit.ventas?.id).length || 1),
-        medio_pago: unit.ventas?.medio_pago,
-        monto_efectivo: parseFloat(unit.ventas?.monto_efectivo) || 0,
-        vendedor: unit.ventas?.user_id,
-        vendedor_nombre: unit.ventas?.profiles?.nombre || 'S/D'
-    }));
+    const allItems = unitsSold.map(unit => {
+        const total = parseFloat(unit.ventas?.total) || 0;
+        const perUnitTotal = total / (unitsSold.filter(u => u.ventas?.id === unit.ventas?.id).length || 1);
+        const neto = parseFloat(unit.ventas?.monto_neto) || total;
+        const perUnitNeto = neto / (unitsSold.filter(u => u.ventas?.id === unit.ventas?.id).length || 1);
+
+        return {
+            id: unit.id,
+            fecha: unit.fecha_venta,
+            codigo: unit.variantes?.modelos?.codigo_proveedor,
+            modelo: unit.variantes?.modelos?.descripcion,
+            color: unit.variantes?.color,
+            talle: unit.talle_especifico,
+            precio: perUnitTotal,
+            neto: perUnitNeto,
+            medio_pago: unit.ventas?.medio_pago,
+            monto_efectivo: parseFloat(unit.ventas?.monto_efectivo) || 0,
+            vendedor: unit.ventas?.user_id,
+            vendedor_nombre: unit.ventas?.profiles?.nombre || 'S/D'
+        };
+    });
 
     // Totals and items list can be PERSONALIZED
     const displayItems = onlyUserId
@@ -652,10 +669,12 @@ export async function getDailySummary(onlyUserId = null) {
         : allItems;
 
     const totalAmount = displayItems.reduce((acc, item) => acc + item.precio, 0);
+    const totalNeto = displayItems.reduce((acc, item) => acc + (item.neto || item.precio), 0);
 
     return {
         count: displayItems.length,
         total: totalAmount,
+        neto: totalNeto,
         cash: globalCashInHand,
         items: displayItems
     };
@@ -1920,7 +1939,7 @@ export async function getRecentSalesList() {
         .select(`
             id, fecha_venta, estado,
             venta_id,
-            ventas (id, total, medio_pago),
+            ventas (id, total, medio_pago, monto_neto),
             variantes (color, modelos (descripcion))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])

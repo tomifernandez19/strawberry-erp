@@ -68,7 +68,10 @@ export default function ReportesPage() {
                             <div key={i} className="card" style={{ padding: '12px', fontSize: '0.85rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                     <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{item.codigo}</span>
-                                    <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>$ {item.precio.toLocaleString()}</span>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: '0' }}>$ {item.neto.toLocaleString()} (Neto)</p>
+                                        <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: '0' }}>Lista: $ {item.precio.toLocaleString()}</p>
+                                    </div>
                                 </div>
                                 <p style={{ opacity: 0.9 }}>{item.modelo} - {item.color}</p>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', opacity: 0.6, fontSize: '0.75rem' }}>
@@ -186,7 +189,7 @@ export default function ReportesPage() {
                                 <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>Ventas - Costos - Gastos (Todo el tiempo)</p>
                             </div>
                             <h2 style={{ color: 'var(--accent)', margin: 0 }}>
-                                $ {(finance.CAJA_LOCAL + finance.SOFI_MP + finance.TOMI + finance.LUCAS).toLocaleString()}
+                                $ {(finance.CAJA_LOCAL + finance.SOFI_MP + finance.SOFI_PENDING + finance.TOMI + finance.LUCAS).toLocaleString()}
                             </h2>
                         </div>
                     </div>
@@ -254,8 +257,8 @@ export default function ReportesPage() {
                                 <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Resultado del Rango:</p>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
-                                        <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {customStats.total.toLocaleString()}</h2>
-                                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{customStats.count} pares vendidos</p>
+                                        <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>Neto: $ {customStats.neto.toLocaleString()}</h2>
+                                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>Lista: $ {customStats.total.toLocaleString()} ({customStats.count} pares)</p>
                                     </div>
                                     <button className="btn-secondary" style={{ padding: '8px 15px' }} onClick={() => setViewDetail({ period: 'custom' })}>
                                         Ver Listado 📋
@@ -268,31 +271,31 @@ export default function ReportesPage() {
                     <section className="grid mt-lg">
                         {/* Hoy */}
                         <div className="card" style={{ borderLeft: '4px solid var(--accent)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today' })}>
-                            <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Ventas de Hoy</p>
-                            <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {stats?.today.total.toLocaleString()}</h2>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Ingreso Real de Hoy (Neto)</p>
+                            <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {stats?.today.neto.toLocaleString()}</h2>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.today.count} pares vendidos</p>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>Ver detalle →</span>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Lista: $ {stats?.today.total.toLocaleString()}</p>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--accent)' }}>Ver detalle →</span>
                             </div>
                         </div>
 
                         {/* Semana */}
                         <div className="card" style={{ borderLeft: '4px solid var(--primary)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week' })}>
-                            <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Últimos 7 días</p>
-                            <h2 style={{ color: 'var(--primary)', margin: '5px 0' }}>$ {stats?.week.total.toLocaleString()}</h2>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Ingreso Real 7 días</p>
+                            <h2 style={{ color: 'var(--primary)', margin: '5px 0' }}>$ {stats?.week.neto.toLocaleString()}</h2>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.week.count} pares vendidos</p>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Ver detalle →</span>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Lista: $ {stats?.week.total.toLocaleString()}</p>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>Ver detalle →</span>
                             </div>
                         </div>
 
                         {/* Mes */}
                         <div className="card" style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month' })}>
-                            <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Últimos 30 días</p>
-                            <h2 style={{ color: '#8b5cf6', margin: '5px 0' }}>$ {stats?.month.total.toLocaleString()}</h2>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Ingreso Real 30 días</p>
+                            <h2 style={{ color: '#8b5cf6', margin: '5px 0' }}>$ {stats?.month.neto.toLocaleString()}</h2>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>{stats?.month.count} pares vendidos</p>
-                                <span style={{ fontSize: '0.75rem', color: '#8b5cf6' }}>Ver detalle →</span>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Lista: $ {stats?.month.total.toLocaleString()}</p>
+                                <span style={{ fontSize: '0.7rem', color: '#8b5cf6' }}>Ver detalle →</span>
                             </div>
                         </div>
                     </section>
