@@ -126,21 +126,22 @@ export default function VenderPage() {
 
         const totalMayorista = Math.round(totalEfectivo * 0.9)
 
-        let finalTotal = totalLista
+        let baseTotal = totalLista
         const esEfeOTra = ['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago)
 
-        if (esEfeOTra) finalTotal = totalEfectivo
-        else if (medioPago === 'MAYORISTA_EFECTIVO') finalTotal = totalMayorista
-        else if (medioPago === 'DIVIDIR_PAGOS') finalTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
+        if (esEfeOTra) baseTotal = totalEfectivo
+        else if (medioPago === 'MAYORISTA_EFECTIVO') baseTotal = totalMayorista
+        else if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
 
+        let finalTotal = baseTotal
         if (descuento > 0) {
-            finalTotal = Math.round(finalTotal * (1 - (descuento / 100)))
+            finalTotal = Math.round(baseTotal * (1 - (descuento / 100)))
         }
 
-        return { totalLista, totalEfectivo, totalMayorista, finalTotal }
+        return { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal }
     }
 
-    const { totalLista, totalEfectivo, totalMayorista, finalTotal } = totals()
+    const { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal } = totals()
 
     if (saleResult) {
         return (
@@ -376,52 +377,67 @@ export default function VenderPage() {
                             </div>
                         )}
 
-                        <div className="mt-md" style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: 'var(--radius)', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>¿Aplicar Descuento? %</label>
-                                {descuento > 0 && <span className="badge" style={{ backgroundColor: 'var(--accent)', color: 'white' }}>-{descuento}%</span>}
+                        <div className="card mt-md" style={{ border: '1px solid rgba(59, 130, 246, 0.2)', background: 'rgba(59, 130, 246, 0.05)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.8 }}>¿Cuánto le vas a cobrar? ($)</label>
+                                {descuento > 0 && <span className="badge" style={{ backgroundColor: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>-{descuento}% OFF</span>}
                             </div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    className="input-field"
-                                    style={{ margin: 0, flex: 1 }}
-                                    value={descuento > 0 ? descuento : ''}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        if (val === '') setDescuento(0);
-                                        else {
-                                            const num = parseInt(val);
-                                            if (num >= 0 && num <= 100) setDescuento(num);
-                                        }
-                                    }}
-                                />
-                                <div style={{ display: 'flex', gap: '5px' }}>
-                                    {[5, 10, 15].map(pct => (
+
+                            <div className="grid" style={{ gap: '10px' }}>
+                                <div style={{ position: 'relative' }}>
+                                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>$</span>
+                                    <input
+                                        type="number"
+                                        className="input-field"
+                                        placeholder={`Base: $${baseTotal}`}
+                                        style={{ margin: 0, paddingLeft: '30px', fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}
+                                        value={finalTotal}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (!val || parseFloat(val) >= baseTotal) {
+                                                setDescuento(0);
+                                            } else {
+                                                const final = parseFloat(val);
+                                                const pct = Math.round(((baseTotal - final) / baseTotal) * 100);
+                                                setDescuento(pct > 0 ? (pct > 100 ? 100 : pct) : 0);
+                                            }
+                                        }}
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                                    {[5, 10, 15, 20, 25].map(pct => (
                                         <button
                                             key={pct}
                                             type="button"
                                             className="btn-secondary"
-                                            style={{ padding: '5px 10px', fontSize: '0.7rem', minWidth: 'auto' }}
+                                            style={{
+                                                flex: 1,
+                                                padding: '8px 5px',
+                                                fontSize: '0.75rem',
+                                                minWidth: 'auto',
+                                                border: descuento === pct ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.1)',
+                                                background: descuento === pct ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)'
+                                            }}
                                             onClick={() => setDescuento(pct)}
                                         >
                                             {pct}%
                                         </button>
                                     ))}
+                                    <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ flex: 1, padding: '8px 5px', fontSize: '0.75rem', color: '#ef4444' }}
+                                        onClick={() => setDescuento(0)}
+                                    >
+                                        Limpiar
+                                    </button>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="card mt-md text-center" style={{ backgroundColor: 'var(--secondary)' }}>
-                            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>TOTAL A COBRAR</p>
-                            <h2 style={{ color: 'var(--accent)', margin: 0 }}>
-                                $ {finalTotal.toLocaleString()}
-                            </h2>
-                        </div>
 
-                        {['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS', 'TRANSFERENCIA'].includes(medioPago) && (
+                        {['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago) && (
                             <div className="mt-md" style={{ background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.1)' }}>
                                 <div className="grid" style={{ gridTemplateColumns: '1.2fr 1fr', gap: '15px', alignItems: 'center' }}>
                                     <div>
