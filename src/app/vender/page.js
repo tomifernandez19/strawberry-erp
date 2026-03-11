@@ -13,7 +13,7 @@ export default function VenderPage() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [medioPago, setMedioPago] = useState('EFECTIVO')
-    const [descuento, setDescuento] = useState(0)
+    const [montoDescuento, setMontoDescuento] = useState(0)
     const [montoAbonado, setMontoAbonado] = useState('')
 
     const [montoEfectivo, setMontoEfectivo] = useState('')
@@ -86,7 +86,7 @@ export default function VenderPage() {
                     telefono: customerPhone,
                     email: customerEmail
                 },
-                descuento: Number(descuento),
+                monto_descuento_fijo: Number(montoDescuento),
                 monto_neto: parseFloat(montoNeto) || null,
                 dias_acreditacion: parseInt(diasAcreditacion) || 0
             }
@@ -111,7 +111,7 @@ export default function VenderPage() {
         setCustomerName('')
         setCustomerPhone('')
         setCustomerEmail('')
-        setDescuento(0)
+        setMontoDescuento(0)
         setMontoAbonado('')
     }
 
@@ -133,15 +133,13 @@ export default function VenderPage() {
         else if (medioPago === 'MAYORISTA_EFECTIVO') baseTotal = totalMayorista
         else if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
 
-        let finalTotal = baseTotal
-        if (descuento > 0) {
-            finalTotal = Math.round(baseTotal * (1 - (descuento / 100)))
-        }
+        let finalTotal = baseTotal - montoDescuento
+        const currentPct = baseTotal > 0 ? Math.round((montoDescuento / baseTotal) * 100) : 0
 
-        return { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal }
+        return { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal, currentPct }
     }
 
-    const { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal } = totals()
+    const { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal, currentPct } = totals()
 
     if (saleResult) {
         return (
@@ -380,7 +378,7 @@ export default function VenderPage() {
                         <div className="card mt-md" style={{ border: '1px solid rgba(59, 130, 246, 0.2)', background: 'rgba(59, 130, 246, 0.05)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                 <label style={{ fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.8 }}>¿Cuánto le vas a cobrar? ($)</label>
-                                {descuento > 0 && <span className="badge" style={{ backgroundColor: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>-{descuento}% OFF</span>}
+                                {montoDescuento > 0 && <span className="badge" style={{ backgroundColor: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>-{currentPct}% OFF</span>}
                             </div>
 
                             <div className="grid" style={{ gap: '10px' }}>
@@ -391,15 +389,15 @@ export default function VenderPage() {
                                         className="input-field"
                                         placeholder={`Base: $${baseTotal}`}
                                         style={{ margin: 0, paddingLeft: '30px', fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}
-                                        value={finalTotal}
+                                        value={finalTotal || ''}
                                         onChange={(e) => {
                                             const val = e.target.value;
-                                            if (!val || parseFloat(val) >= baseTotal) {
-                                                setDescuento(0);
+                                            if (!val) {
+                                                setMontoDescuento(0);
                                             } else {
                                                 const final = parseFloat(val);
-                                                const pct = Math.round(((baseTotal - final) / baseTotal) * 100);
-                                                setDescuento(pct > 0 ? (pct > 100 ? 100 : pct) : 0);
+                                                if (final >= baseTotal) setMontoDescuento(0);
+                                                else setMontoDescuento(baseTotal - final);
                                             }
                                         }}
                                     />
@@ -416,10 +414,10 @@ export default function VenderPage() {
                                                 padding: '8px 5px',
                                                 fontSize: '0.75rem',
                                                 minWidth: 'auto',
-                                                border: descuento === pct ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.1)',
-                                                background: descuento === pct ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)'
+                                                border: currentPct === pct ? '1px solid var(--accent)' : '1px solid rgba(255,255,255,0.1)',
+                                                background: currentPct === pct ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)'
                                             }}
-                                            onClick={() => setDescuento(pct)}
+                                            onClick={() => setMontoDescuento(Math.round(baseTotal * (pct / 100)))}
                                         >
                                             {pct}%
                                         </button>
@@ -428,7 +426,7 @@ export default function VenderPage() {
                                         type="button"
                                         className="btn-secondary"
                                         style={{ flex: 1, padding: '8px 5px', fontSize: '0.75rem', color: '#ef4444' }}
-                                        onClick={() => setDescuento(0)}
+                                        onClick={() => setMontoDescuento(0)}
                                     >
                                         Limpiar
                                     </button>

@@ -259,6 +259,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
         otro_medio_pago = null,
         customerData = {},
         descuento = 0,
+        monto_descuento_fijo = 0,
         monto_neto = null,
         dias_acreditacion = 0
     } = options;
@@ -294,7 +295,9 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     }
 
     // Apply Discount
-    if (descuento > 0) {
+    if (monto_descuento_fijo > 0) {
+        calculatedTotal = Math.max(0, calculatedTotal - Number(monto_descuento_fijo));
+    } else if (descuento > 0) {
         calculatedTotal = Math.round(calculatedTotal * (1 - (descuento / 100)));
     }
 
