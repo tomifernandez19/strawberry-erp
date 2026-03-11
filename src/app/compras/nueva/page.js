@@ -182,6 +182,11 @@ export default function NuevaCompraPage() {
         setItems(newItems)
     }
 
+    const duplicateItem = (index) => {
+        const itemToClone = { ...items[index] }
+        setItems([...items, itemToClone])
+    }
+
     const updateItem = (index, field, value) => {
         const newItems = [...items]
         newItems[index][field] = value
@@ -331,18 +336,43 @@ export default function NuevaCompraPage() {
                 <h3>Detalle de productos</h3>
                 {items.map((item, index) => (
                     <div key={index} className="card grid" style={{ position: 'relative' }}>
+                        <button
+                            type="button"
+                            onClick={() => duplicateItem(index)}
+                            title="Duplicar"
+                            style={{
+                                position: 'absolute',
+                                top: '10px',
+                                right: items.length > 1 ? '40px' : '10px',
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                color: 'var(--accent)',
+                                border: '1px solid rgba(59, 130, 246, 0.2)',
+                                borderRadius: '8px',
+                                width: '32px',
+                                height: '24px',
+                                fontSize: '0.9rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 10
+                            }}
+                        >
+                            👯
+                        </button>
                         {items.length > 1 && (
                             <button
                                 type="button"
                                 onClick={() => removeItem(index)}
+                                title="Eliminar"
                                 style={{
                                     position: 'absolute',
                                     top: '10px',
                                     right: '10px',
                                     background: 'rgba(239, 68, 68, 0.1)',
                                     color: '#ef4444',
-                                    border: 'none',
-                                    borderRadius: '50%',
+                                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                                    borderRadius: '8px',
                                     width: '24px',
                                     height: '24px',
                                     fontSize: '0.8rem',
