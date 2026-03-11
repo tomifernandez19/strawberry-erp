@@ -127,7 +127,9 @@ export default function VenderPage() {
         const totalMayorista = Math.round(totalEfectivo * 0.9)
 
         let finalTotal = totalLista
-        if (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') finalTotal = totalEfectivo
+        const esEfeOTra = ['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago)
+
+        if (esEfeOTra) finalTotal = totalEfectivo
         else if (medioPago === 'MAYORISTA_EFECTIVO') finalTotal = totalMayorista
         else if (medioPago === 'DIVIDIR_PAGOS') finalTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
 
@@ -231,7 +233,11 @@ export default function VenderPage() {
 
                     <section className="card mt-lg" style={{ border: '2px solid var(--accent)' }}>
                         <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px' }}>
-                            <div className="card text-center" style={{ padding: '8px 2px', background: (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: (medioPago === 'EFECTIVO' || medioPago === 'TRANSFERENCIA') ? '1px solid var(--accent)' : '1px solid transparent' }}>
+                            <div className="card text-center" style={{
+                                padding: '8px 2px',
+                                background: ['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)',
+                                border: ['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago) ? '1px solid var(--accent)' : '1px solid transparent'
+                            }}>
                                 <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Efe/Tra</p>
                                 <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${totalEfectivo.toLocaleString()}</p>
                             </div>
@@ -239,7 +245,11 @@ export default function VenderPage() {
                                 <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Mayorista</p>
                                 <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${totalMayorista.toLocaleString()}</p>
                             </div>
-                            <div className="card text-center" style={{ padding: '8px 2px', background: !['EFECTIVO', 'TRANSFERENCIA', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)', border: !['EFECTIVO', 'TRANSFERENCIA', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago) ? '1px solid var(--accent)' : '1px solid transparent' }}>
+                            <div className="card text-center" style={{
+                                padding: '8px 2px',
+                                background: !['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.02)',
+                                border: !['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago) ? '1px solid var(--accent)' : '1px solid transparent'
+                            }}>
                                 <p style={{ fontSize: '0.6rem', opacity: 0.5 }}>Lista</p>
                                 <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${totalLista.toLocaleString()}</p>
                             </div>
