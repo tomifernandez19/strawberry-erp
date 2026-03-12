@@ -848,7 +848,9 @@ export async function getCapitalContributionsReport() {
     }
 
     const byPerson = {};
-    movements?.forEach(m => {
+    const validMovements = movements?.filter(m => !m.motivo?.includes('TRASPASO')) || [];
+
+    validMovements.forEach(m => {
         const name = (m.persona || 'S/D').trim().toUpperCase();
         if (!byPerson[name]) byPerson[name] = 0;
         byPerson[name] += parseFloat(m.monto) || 0;
@@ -856,7 +858,7 @@ export async function getCapitalContributionsReport() {
 
     return {
         byPerson,
-        history: movements || []
+        history: validMovements
     };
 }
 export async function deleteSale(saleId) {
@@ -2028,9 +2030,9 @@ export async function recordTransfer({ from, to, amount, reason, person }) {
             monto: -montoNum,
             tipo: 'EGRESO',
             motivo: `TRASPASO -> ${to}: ${reason}`,
-            persona: person,
+            persona: person.trim().toUpperCase(),
             cuenta: from,
-            categoria: 'RETIRO_PERSONAL',
+            categoria: 'TRASPASO',
             user_id: user?.id || null
         }]);
 
@@ -2043,9 +2045,9 @@ export async function recordTransfer({ from, to, amount, reason, person }) {
             monto: montoNum,
             tipo: 'INGRESO',
             motivo: `TRASPASO <- ${from}: ${reason}`,
-            persona: person,
+            persona: person.trim().toUpperCase(),
             cuenta: to,
-            categoria: 'APORTE_CAPITAL',
+            categoria: 'TRASPASO',
             user_id: user?.id || null
         }]);
 
