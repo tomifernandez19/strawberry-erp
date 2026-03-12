@@ -847,7 +847,11 @@ export async function getCapitalContributionsReport() {
         return { byPerson: {}, history: [] };
     }
 
-    const byPerson = {};
+    const byPerson = {
+        'LUCAS': 0,
+        'SOFI': 0,
+        'TOMI': 0
+    };
     const validMovements = movements?.filter(m => !m.motivo?.includes('TRASPASO')) || [];
 
     validMovements.forEach(m => {
