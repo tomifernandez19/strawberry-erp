@@ -130,10 +130,15 @@ export default function AsignarQRPage() {
                         className="btn-secondary"
                         onClick={() => {
                             if (pendingUnits.length <= 1) return;
-                            const currentIndex = pendingUnits.findIndex(u => u.id === selectedUnit.id);
-                            const nextIndex = (currentIndex + 1) % pendingUnits.length;
-                            setSelectedUnit(pendingUnits[nextIndex]);
-                            setMessage(''); // Clear previous success message when skipping
+
+                            // Move current unit to the end of the list
+                            const currentUnit = selectedUnit;
+                            const remaining = pendingUnits.filter(u => u.id !== currentUnit.id);
+                            const updatedList = [...remaining, currentUnit];
+
+                            setPendingUnits(updatedList);
+                            setSelectedUnit(updatedList[0]);
+                            setMessage('');
                         }}
                         style={{ marginTop: 'var(--spacing-md)' }}
                     >
