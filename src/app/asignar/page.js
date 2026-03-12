@@ -65,7 +65,7 @@ export default function AsignarQRPage() {
     if (loading) return <p className="text-center mt-lg">Cargando unidades...</p>
 
     return (
-        <div className="grid mt-lg">
+        <div className="grid mt-lg pb-xl" style={{ minHeight: '90vh' }}>
             <header className="text-center">
                 <h1>Asignar QR</h1>
                 <p style={{ opacity: 0.7 }}>{pendingUnits.length} pares pendientes</p>
@@ -129,8 +129,11 @@ export default function AsignarQRPage() {
                     <button
                         className="btn-secondary"
                         onClick={() => {
-                            const next = pendingUnits.find(u => u.id !== selectedUnit.id);
-                            if (next) setSelectedUnit(next);
+                            if (pendingUnits.length <= 1) return;
+                            const currentIndex = pendingUnits.findIndex(u => u.id === selectedUnit.id);
+                            const nextIndex = (currentIndex + 1) % pendingUnits.length;
+                            setSelectedUnit(pendingUnits[nextIndex]);
+                            setMessage(''); // Clear previous success message when skipping
                         }}
                         style={{ marginTop: 'var(--spacing-md)' }}
                     >
