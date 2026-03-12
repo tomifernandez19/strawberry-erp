@@ -65,7 +65,7 @@ export default function AsignarQRPage() {
     if (loading) return <p className="text-center mt-lg">Cargando unidades...</p>
 
     return (
-        <div className="grid mt-lg pb-xl" style={{ minHeight: '90vh' }}>
+        <div className="grid mt-lg" style={{ minHeight: '85vh', paddingBottom: '120px' }}>
             <header className="text-center">
                 <h1>Asignar QR</h1>
                 <p style={{ opacity: 0.7 }}>{pendingUnits.length} pares pendientes</p>
