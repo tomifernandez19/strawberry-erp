@@ -151,11 +151,20 @@ export default function VenderPage() {
                         $ {saleResult.venta.total.toLocaleString()}
                     </p>
                     <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{saleResult.venta.medio_pago.replace('_', ' ')}</p>
-                    <div style={{ marginTop: '15px' }}>
+                    <div style={{ marginTop: '15px', display: 'grid', gap: '10px' }}>
                         {saleResult.units.map(u => (
-                            <p key={u.id} style={{ fontSize: '0.9rem' }}>
-                                • {u.variantes.modelos.descripcion} ({u.variantes.color}) T{u.talle_especifico}
-                            </p>
+                            <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '10px' }}>
+                                {u.variantes?.imagen_url && (
+                                    <img
+                                        src={u.variantes.imagen_url}
+                                        alt=""
+                                        style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }}
+                                    />
+                                )}
+                                <p style={{ fontSize: '0.9rem', margin: 0, textAlign: 'left' }}>
+                                    • {u.variantes.modelos.descripcion} ({u.variantes.color}) T{u.talle_especifico}
+                                </p>
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -215,14 +224,25 @@ export default function VenderPage() {
                         Carrito ({items.length})
                     </h3>
                     {items.map(it => (
-                        <div key={it.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px' }}>
-                            <div>
-                                <h4 style={{ margin: 0 }}>{it.variantes.modelos.descripcion}</h4>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{it.variantes.color} • Talle {it.talle_especifico}</p>
+                        <div key={it.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', gap: '15px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1 }}>
+                                {it.variantes?.imagen_url ? (
+                                    <div style={{ width: '50px', height: '50px', borderRadius: '10px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--card-border)' }}>
+                                        <img src={it.variantes.imagen_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    </div>
+                                ) : (
+                                    <div style={{ width: '50px', height: '50px', borderRadius: '10px', background: 'var(--secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>
+                                        👟
+                                    </div>
+                                )}
+                                <div style={{ flex: 1 }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{it.variantes.modelos.descripcion}</h4>
+                                    <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>{it.variantes.color} • Talle {it.talle_especifico}</p>
+                                </div>
                             </div>
                             <button
                                 className="btn-secondary"
-                                style={{ padding: '5px 10px', color: 'var(--error)', minWidth: 'auto', border: '1px solid var(--error)' }}
+                                style={{ padding: '8px', color: 'var(--error)', minWidth: '36px', height: '36px', border: '1px solid var(--error)', borderRadius: '10px' }}
                                 onClick={() => removeItem(it.codigo_qr)}
                             >
                                 ✕
