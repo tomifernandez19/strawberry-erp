@@ -39,7 +39,16 @@ export default function CajaPage() {
 
         setLoading(true)
         try {
-            const { recordCashMovement, recordTransfer } = await import('@/lib/actions')
+            const { recordCashMovement, recordTransfer, getFinanceSummary } = await import('@/lib/actions')
+
+            // Check balance if it's an outgoing movement
+            if (formData.tipo === 'EGRESO' || formData.tipo === 'TRASPASO') {
+                const currentBalances = await getFinanceSummary()
+                const available = currentBalances[formData.cuenta] || 0
+                if (parseFloat(formData.monto) > available) {
+                    throw new Error(`Saldo insuficiente en ${formData.cuenta.replace('_', ' ')}. Disponible: $${available.toLocaleString()}`)
+                }
+            }
 
             if (formData.tipo === 'TRASPASO') {
                 if (formData.cuenta === formData.haciaCuenta) throw new Error("Las cuentas de origen y destino deben ser distintas")
