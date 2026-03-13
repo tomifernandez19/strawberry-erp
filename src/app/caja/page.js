@@ -335,7 +335,7 @@ export default function CajaPage() {
                                 <div style={{ flex: 1 }}>
                                     <p style={{ fontWeight: 'bold', fontSize: '0.85rem', margin: 0 }}>{mov.motivo}</p>
                                     <p style={{ fontSize: '0.65rem', opacity: 0.5, margin: 0 }}>
-                                        {mov.persona} • {new Date(mov.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {mov.persona} • {new Date(mov.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • 🏦 {mov.cuenta?.replace('_', ' ')}
                                     </p>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>

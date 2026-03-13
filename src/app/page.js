@@ -360,7 +360,7 @@ export default function HomePage() {
                                                     {m.tag === 'VENTA' && <span style={{ fontSize: '0.6rem', padding: '1px 5px', background: 'var(--accent)', borderRadius: '4px', color: 'white' }}>VENTA</span>}
                                                 </div>
                                                 <p style={{ fontSize: '0.75rem', opacity: 0.7 }}>{m.motivo || 'Sin descripción'}</p>
-                                                <p style={{ fontSize: '0.65rem', opacity: 0.4 }}>{new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} • {m.persona}</p>
+                                                <p style={{ fontSize: '0.65rem', opacity: 0.4 }}>{new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} • {m.persona} • 🏦 {m.cuenta?.replace('_', ' ')}</p>
                                             </div>
                                             <p style={{
                                                 fontWeight: 'bold',

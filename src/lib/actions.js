@@ -689,13 +689,12 @@ export async function getDailySummary(onlyUserId = null) {
 export async function getRecentUnifiedCaja() {
     const supabase = createClient();
 
-    // 1. Manual Movements strictly for local cash
+    // 1. Manual Movements for all accounts
     const { data: manual } = await supabase
         .from('movimientos_caja')
         .select('*')
-        .eq('cuenta', 'CAJA_LOCAL')
         .order('created_at', { ascending: false })
-        .limit(15);
+        .limit(20);
 
     // 2. Sales with cash strictly (Cash or Wholesale Cash)
     const { data: sales } = await supabase
@@ -715,6 +714,7 @@ export async function getRecentUnifiedCaja() {
             tipo: m.tipo,
             motivo: m.motivo,
             persona: m.persona,
+            cuenta: m.cuenta,
             tag: 'MANUAL'
         })),
         ...(sales || []).map(s => ({
@@ -724,6 +724,7 @@ export async function getRecentUnifiedCaja() {
             tipo: 'INGRESO',
             motivo: `Venta ${s.medio_pago === 'EFECTIVO' ? 'Efectivo' : (s.medio_pago === 'MAYORISTA_EFECTIVO' ? 'Mayorista' : 'Parte Efectivo')}`,
             persona: 'CAJA',
+            cuenta: 'CAJA_LOCAL',
             tag: 'VENTA'
         }))
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
