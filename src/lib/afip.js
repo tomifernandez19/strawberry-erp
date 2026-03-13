@@ -28,9 +28,12 @@ function getAfipInstance(person = 'tomi') {
         throw new Error(`Configuración de ARCA (AFIP) incompleta para ${person.toUpperCase()}. Faltan CUIT o Certificados.`);
     }
 
-    // SANITIZATION: Remove accidental quotes and handle newlines (Vercel compatibility)
-    cert = cert.replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
-    key = key.replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
+    // Aggressive SANITIZATION for Vercel: 
+    // Remove all whitespace at start/end, remove quotes, and fix \n
+    const sanitize = (val) => val?.trim()?.replace(/^["']|["']$/g, '')?.replace(/\\n/g, '\n');
+
+    cert = sanitize(cert);
+    key = sanitize(key);
 
     return new Afip({
         CUIT: parseInt(cuit),
