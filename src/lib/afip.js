@@ -2,17 +2,7 @@ import Afip from '@afipsdk/afip.js';
 import { jsPDF } from 'jspdf';
 import fs from 'fs';
 import path from 'path';
-
-/**
- * Maps the destination account to the AFIP person.
- */
-export function getAfipPersonFromAccount(cuentaDestino) {
-    if (cuentaDestino === 'SOFI_MP') return 'sofi';
-    if (cuentaDestino === 'LUCAS') return 'lucas';
-    if (cuentaDestino === 'TOMI') return 'tomi';
-    // Fallback for Caja Local or others
-    return 'tomi';
-}
+import { getAfipPersonFromAccount } from './afip-utils';
 
 /**
  * Initializes Afip SDK for a specific person.

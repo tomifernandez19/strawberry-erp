@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { getPendingInvoicesList, markAsInvoiced, generateInvoice } from '@/lib/actions'
-import { getAfipPersonFromAccount } from '@/lib/afip'
+import { getAfipPersonFromAccount } from '@/lib/afip-utils'
 import Link from 'next/link'
 
 export default function FacturacionPage() {
