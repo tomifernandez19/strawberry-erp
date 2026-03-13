@@ -1,5 +1,7 @@
 import Afip from '@afipsdk/afip.js';
 import { jsPDF } from 'jspdf';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Maps the destination account to the AFIP person.
@@ -16,8 +18,6 @@ export function getAfipPersonFromAccount(cuentaDestino) {
  * Initializes Afip SDK for a specific person.
  */
 function getAfipInstance(person = 'tomi') {
-    const fs = require('fs');
-    const path = require('path');
     const keyPrefix = person.toUpperCase();
     const cuit = process.env[`AFIP_CUIT_${keyPrefix}`];
     let certStr = process.env[`AFIP_CERT_${keyPrefix}`];

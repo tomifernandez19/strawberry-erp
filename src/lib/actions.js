@@ -2075,7 +2075,6 @@ export async function recordTransfer({ from, to, amount, reason, person }) {
  * Server Action to generate an electronic invoice via ARCA (AFIP)
  */
 export async function generateInvoice(ventaId) {
-    const { createClient } = require('@/lib/supabase/server')
     const supabase = createClient();
     try {
         // Fetch full venta data
