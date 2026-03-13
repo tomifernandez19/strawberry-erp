@@ -1,21 +1,25 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { recordCashMovement, getRecentUnifiedCaja } from '@/lib/actions'
+import { recordCashMovement, getRecentUnifiedCaja, getFinanceSummary } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 
 export default function CajaPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [movements, setMovements] = useState([])
+    const [balances, setBalances] = useState(null)
     const [suggestions, setSuggestions] = useState([])
+    const [activeTab, setActiveTab] = useState('GASTO') // GASTO, INGRESO, TRASPASO, AJUSTE
+
     const [formData, setFormData] = useState({
         monto: '',
-        tipo: 'EGRESO', // 'EGRESO', 'INGRESO', 'TRASPASO'
         motivo: '',
         persona: '',
         cuenta: 'CAJA_LOCAL',
         haciaCuenta: 'SOFI_MP',
-        categoria: 'GASTOS_GENERALES'
+        categoria: 'GASTOS_GENERALES',
+        origenDinero: 'NEGOCIO', // 'NEGOCIO' or 'BOLSILLO' (for GASTO)
+        tipoAjuste: 'INGRESO' // For AJUSTE (Intereses / Cargo)
     })
 
     useEffect(() => {
@@ -23,12 +27,13 @@ export default function CajaPage() {
     }, [])
 
     async function loadData() {
-        // Dynamic import to avoid waterfall if possible
-        const [movs, { getRecentPersonas }] = await Promise.all([
+        const [movs, fSummary, { getRecentPersonas }] = await Promise.all([
             getRecentUnifiedCaja(),
+            getFinanceSummary(),
             import('@/lib/actions')
         ])
         setMovements(movs)
+        setBalances(fSummary)
         const pers = await getRecentPersonas()
         setSuggestions(pers || [])
     }
@@ -39,40 +44,85 @@ export default function CajaPage() {
 
         setLoading(true)
         try {
-            const { recordCashMovement, recordTransfer, getFinanceSummary } = await import('@/lib/actions')
+            const { recordTransfer } = await import('@/lib/actions')
+            const montoNum = parseFloat(formData.monto)
 
-            // Check balance if it's an outgoing movement
-            if (formData.tipo === 'EGRESO' || formData.tipo === 'TRASPASO') {
-                const currentBalances = await getFinanceSummary()
-                const available = currentBalances[formData.cuenta] || 0
-                if (parseFloat(formData.monto) > available) {
-                    throw new Error(`Saldo insuficiente en ${formData.cuenta.replace('_', ' ')}. Disponible: $${available.toLocaleString()}`)
+            if (activeTab === 'TRASPASO') {
+                if (formData.cuenta === formData.haciaCuenta) throw new Error("Las cuentas deben ser distintas")
+                // Check balance
+                if (montoNum > (balances[formData.cuenta] || 0)) {
+                    throw new Error(`Saldo insuficiente en ${formData.cuenta}. Disponible: $${balances[formData.cuenta]}`)
                 }
-            }
-
-            if (formData.tipo === 'TRASPASO') {
-                if (formData.cuenta === formData.haciaCuenta) throw new Error("Las cuentas de origen y destino deben ser distintas")
                 await recordTransfer({
                     from: formData.cuenta,
                     to: formData.haciaCuenta,
-                    amount: formData.monto,
+                    amount: montoNum,
                     reason: formData.motivo,
                     person: formData.persona
                 })
-            } else {
+
+            } else if (activeTab === 'GASTO') {
+                if (formData.origenDinero === 'BOLSILLO') {
+                    // Two entries: One donation (virtual) and one expense
+                    // We use 'PERSONAL' as account so it doesn't affect real bank balances
+                    await recordCashMovement({
+                        monto: montoNum,
+                        tipo: 'INGRESO',
+                        motivo: `APORTE (P/GASTO): ${formData.motivo}`,
+                        persona: formData.persona.trim().toUpperCase(),
+                        cuenta: 'PERSONAL',
+                        categoria: 'APORTE_CAPITAL'
+                    })
+                    await recordCashMovement({
+                        monto: montoNum,
+                        tipo: 'EGRESO',
+                        motivo: formData.motivo,
+                        persona: formData.persona.trim().toUpperCase(),
+                        cuenta: 'PERSONAL',
+                        categoria: formData.categoria
+                    })
+                } else {
+                    // Real money from business
+                    if (montoNum > (balances[formData.cuenta] || 0)) {
+                        throw new Error(`Saldo insuficiente. Disponible: $${balances[formData.cuenta]}`)
+                    }
+                    await recordCashMovement({
+                        monto: montoNum,
+                        tipo: 'EGRESO',
+                        motivo: formData.motivo,
+                        persona: formData.persona.trim().toUpperCase(),
+                        cuenta: formData.cuenta,
+                        categoria: formData.categoria
+                    })
+                }
+            } else if (activeTab === 'INGRESO') {
                 await recordCashMovement({
-                    monto: parseFloat(formData.monto),
-                    tipo: formData.tipo,
+                    monto: montoNum,
+                    tipo: 'INGRESO',
                     motivo: formData.motivo,
                     persona: formData.persona.trim().toUpperCase(),
                     cuenta: formData.cuenta,
-                    categoria: formData.categoria
+                    categoria: formData.categoria // APORTE_CAPITAL, etc.
+                })
+            } else if (activeTab === 'AJUSTE') {
+                await recordCashMovement({
+                    monto: montoNum,
+                    tipo: formData.tipoAjuste,
+                    motivo: formData.motivo,
+                    persona: formData.persona.trim().toUpperCase(),
+                    cuenta: formData.cuenta,
+                    categoria: 'INTERESES'
                 })
             }
 
-            setFormData({ monto: '', tipo: 'EGRESO', motivo: '', persona: '', cuenta: 'CAJA_LOCAL', haciaCuenta: 'SOFI_MP', categoria: 'GASTOS_GENERALES' })
+            setFormData({
+                monto: '', motivo: '', persona: '',
+                cuenta: 'CAJA_LOCAL', haciaCuenta: 'SOFI_MP',
+                categoria: 'GASTOS_GENERALES', origenDinero: 'NEGOCIO',
+                tipoAjuste: 'INGRESO'
+            })
             await loadData()
-            alert('Operación registrada con éxito')
+            alert('Operación registrada')
         } catch (err) {
             alert('Error: ' + err.message)
         } finally {
@@ -84,205 +134,226 @@ export default function CajaPage() {
     return (
         <div className="grid mt-lg">
             <header className="text-center">
-                <h1>Gestión de Efectivo</h1>
-                <p style={{ opacity: 0.7 }}>Ingresos y Egresos Manuales</p>
+                <h1>Dinero del Negocio</h1>
+                <p style={{ opacity: 0.7 }}>Gestión de saldos y gastos</p>
             </header>
 
-            <section className="card mt-lg">
-                <form onSubmit={handleSubmit} className="grid">
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        {['EGRESO', 'INGRESO', 'TRASPASO'].map(tipo => (
-                            <button
-                                key={tipo}
-                                type="button"
-                                onClick={() => setFormData({ ...formData, tipo })}
-                                style={{
-                                    flex: 1,
-                                    padding: '10px 5px',
-                                    borderRadius: '12px',
-                                    border: '1px solid',
-                                    fontSize: '0.8rem',
-                                    borderColor: formData.tipo === tipo ? (tipo === 'EGRESO' ? '#ef4444' : (tipo === 'INGRESO' ? 'var(--accent)' : '#8b5cf6')) : 'var(--card-border)',
-                                    backgroundColor: formData.tipo === tipo ? (tipo === 'EGRESO' ? 'rgba(239, 68, 68, 0.1)' : (tipo === 'INGRESO' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(139, 92, 246, 0.1)')) : 'transparent',
-                                    color: formData.tipo === tipo ? (tipo === 'EGRESO' ? '#ef4444' : (tipo === 'INGRESO' ? 'var(--accent)' : '#8b5cf6')) : 'white',
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                {tipo === 'EGRESO' ? '💸 Retirar' : (tipo === 'INGRESO' ? '💰 Agregar' : '🔄 Traspaso')}
-                            </button>
-                        ))}
+            {/* Panel de Saldos */}
+            {balances && (
+                <section className="card mt-lg" style={{ border: '2px solid var(--primary)', background: 'rgba(59, 130, 246, 0.05)' }}>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 'bold' }}>💵 SALDOS EN CUENTAS DEL LOCAL:</p>
+                    <div className="grid mt-md" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                        <div className="card" style={{ padding: '10px', margin: 0, background: 'rgba(255,255,255,0.03)' }}>
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>CAJA LOCAL</p>
+                            <p style={{ fontWeight: 'bold', fontSize: '1rem', color: 'var(--accent)' }}>$ {balances.CAJA_LOCAL.toLocaleString()}</p>
+                        </div>
+                        <div className="card" style={{ padding: '10px', margin: 0, background: 'rgba(255,255,255,0.03)' }}>
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>SOFI (MP)</p>
+                            <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>$ {balances.SOFI_MP.toLocaleString()}</p>
+                        </div>
+                        <div className="card" style={{ padding: '10px', margin: 0, background: 'rgba(255,255,255,0.03)' }}>
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>TOMI</p>
+                            <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>$ {balances.TOMI.toLocaleString()}</p>
+                        </div>
+                        <div className="card" style={{ padding: '10px', margin: 0, background: 'rgba(255,255,255,0.03)' }}>
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>LUCAS</p>
+                            <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>$ {balances.LUCAS.toLocaleString()}</p>
+                        </div>
                     </div>
+                </section>
+            )}
 
-                    <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {/* Formulario Principal */}
+            <section className="card mt-lg">
+                <div style={{ display: 'flex', gap: '5px', marginBottom: '20px', borderBottom: '1px solid var(--card-border)', paddingBottom: '15px' }}>
+                    {[
+                        { id: 'GASTO', label: '💸 Gasto', color: '#ef4444' },
+                        { id: 'INGRESO', label: '💰 Capital', color: 'var(--accent)' },
+                        { id: 'TRASPASO', label: '🔄 Traspaso', color: '#3b82f6' },
+                        { id: 'AJUSTE', label: '⚙️ Ajuste', color: '#8b5cf6' }
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            style={{
+                                flex: 1, padding: '10px 5px', borderRadius: '10px', fontSize: '0.75rem',
+                                border: '1px solid',
+                                borderColor: activeTab === tab.id ? tab.color : 'transparent',
+                                backgroundColor: activeTab === tab.id ? `${tab.color}22` : 'rgba(255,255,255,0.05)',
+                                color: activeTab === tab.id ? tab.color : '#888',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+
+                <form onSubmit={handleSubmit} className="grid">
+                    {/* Campo común: Monto y Responsable */}
+                    <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div>
                             <label style={labelStyle}>Monto ($):</label>
-                            <input
-                                type="number"
-                                placeholder="0.00"
-                                required
-                                value={formData.monto}
-                                onChange={e => setFormData({ ...formData, monto: e.target.value })}
-                                style={inputStyle}
-                            />
+                            <input type="number" step="any" required value={formData.monto} onChange={e => setFormData({ ...formData, monto: e.target.value })} style={inputStyle} />
                         </div>
                         <div>
                             <label style={labelStyle}>Responsable:</label>
-                            <input
-                                type="text"
-                                list="personas-list"
-                                placeholder="Nombre"
-                                required
-                                value={formData.persona}
-                                onChange={e => setFormData({ ...formData, persona: e.target.value })}
-                                style={inputStyle}
-                            />
-                            <datalist id="personas-list">
-                                {suggestions.map(p => <option key={p} value={p} />)}
-                            </datalist>
+                            <input type="text" list="personas-list" required value={formData.persona} onChange={e => setFormData({ ...formData, persona: e.target.value })} style={inputStyle} />
                         </div>
                     </div>
 
-                    <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                        <div>
-                            <label style={labelStyle}>{formData.tipo === 'TRASPASO' ? 'De Cuenta:' : 'Cuenta:'}</label>
-                            <select
-                                value={formData.cuenta}
-                                onChange={e => setFormData({ ...formData, cuenta: e.target.value })}
-                                style={inputStyle}
-                            >
-                                <option value="CAJA_LOCAL">Caja Local (Efectivo)</option>
-                                <option value="SOFI_MP">Cuenta Sofi (MP)</option>
-                                <option value="LUCAS">Cuenta Lucas</option>
-                                <option value="TOMI">Cuenta Tomi / TN</option>
-                            </select>
-                        </div>
-                        <div>
-                            {formData.tipo === 'TRASPASO' ? (
-                                <>
-                                    <label style={labelStyle}>Hacia Cuenta:</label>
-                                    <select
-                                        value={formData.haciaCuenta}
-                                        onChange={e => setFormData({ ...formData, haciaCuenta: e.target.value })}
-                                        style={inputStyle}
-                                    >
+                    {/* Lógica según TAB */}
+                    {activeTab === 'GASTO' && (
+                        <>
+                            <div className="mt-md">
+                                <label style={labelStyle}>¿Con qué se pagó?</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, origenDinero: 'NEGOCIO' })}
+                                        style={{ ...toggleStyle, borderColor: formData.origenDinero === 'NEGOCIO' ? 'var(--primary)' : 'var(--card-border)', opacity: formData.origenDinero === 'NEGOCIO' ? 1 : 0.5 }}
+                                    >🏛️ Plata del Local</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, origenDinero: 'BOLSILLO' })}
+                                        style={{ ...toggleStyle, borderColor: formData.origenDinero === 'BOLSILLO' ? 'var(--accent)' : 'var(--card-border)', opacity: formData.origenDinero === 'BOLSILLO' ? 1 : 0.5 }}
+                                    >👤 De mi Bolsillo</button>
+                                </div>
+                            </div>
+                            {formData.origenDinero === 'NEGOCIO' && (
+                                <div className="mt-md">
+                                    <label style={labelStyle}>Cuenta de Origen:</label>
+                                    <select value={formData.cuenta} onChange={e => setFormData({ ...formData, cuenta: e.target.value })} style={inputStyle}>
                                         <option value="CAJA_LOCAL">Caja Local (Efectivo)</option>
                                         <option value="SOFI_MP">Cuenta Sofi (MP)</option>
+                                        <option value="TOMI">Cuenta Tomi</option>
                                         <option value="LUCAS">Cuenta Lucas</option>
-                                        <option value="TOMI">Cuenta Tomi / TN</option>
                                     </select>
-                                </>
-                            ) : (
-                                <>
-                                    <label style={labelStyle}>Categoría:</label>
-                                    <select
-                                        value={formData.categoria}
-                                        onChange={e => setFormData({ ...formData, categoria: e.target.value })}
-                                        style={inputStyle}
-                                    >
-                                        {formData.tipo === 'EGRESO' ? (
-                                            <>
-                                                <option value="GASTOS_GENERALES">Gastos Generales (Insumos/Otros)</option>
-                                                <option value="ALQUILER">Alquiler 🏠</option>
-                                                <option value="SERVICIOS">Servicios (Luz/Agua/etc) 🔌</option>
-                                                <option value="FLETES">Fletes / Logística 🚚</option>
-                                                <option value="PAGO_CAROLINA">Pago a Carolina 👵</option>
-                                                <option value="PAGO_PROVEEDOR">Pago a Proveedor 🏢</option>
-                                                <option value="RETIRO_PERSONAL">Retiro Personal (Sueldo/Dueña) 👤</option>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <option value="APORTE_CAPITAL">Aporte de Capital 💰</option>
-                                                <option value="VUELTO_CAMBIO">Ingreso para Cambio 🪙</option>
-                                                <option value="OTRO_INGRESO">Otro Ingreso 📥</option>
-                                            </>
-                                        )}
-                                    </select>
-                                </>
+                                </div>
                             )}
+                            <div className="mt-md">
+                                <label style={labelStyle}>Categoría de Gasto:</label>
+                                <select value={formData.categoria} onChange={e => setFormData({ ...formData, categoria: e.target.value })} style={inputStyle}>
+                                    <option value="GASTOS_GENERALES">Gastos Generales / Insumos</option>
+                                    <option value="ALQUILER">Alquiler 🏠</option>
+                                    <option value="SERVICIOS">Servicios (Luz/Impresiones) 💡</option>
+                                    <option value="FLETES">Fletes / Viáticos 🚚</option>
+                                    <option value="PAGO_CAROLINA">Pago a Carolina 👵</option>
+                                    <option value="PAGO_PROVEEDOR">Pago a Proveedor 📦</option>
+                                </select>
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'INGRESO' && (
+                        <>
+                            <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <div>
+                                    <label style={labelStyle}>Cuenta Destino:</label>
+                                    <select value={formData.cuenta} onChange={e => setFormData({ ...formData, cuenta: e.target.value })} style={inputStyle}>
+                                        <option value="CAJA_LOCAL">Caja Local</option>
+                                        <option value="SOFI_MP">Cuenta Sofi</option>
+                                        <option value="TOMI">Cuenta Tomi</option>
+                                        <option value="LUCAS">Cuenta Lucas</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Motivo:</label>
+                                    <select value={formData.categoria} onChange={e => setFormData({ ...formData, categoria: e.target.value })} style={inputStyle}>
+                                        <option value="APORTE_CAPITAL">Aporte de Capital 💰</option>
+                                        <option value="VUELTO_CAMBIO">Carga de Cambio 🪙</option>
+                                        <option value="OTRO_INGRESO">Otro Ingreso 📥</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'TRASPASO' && (
+                        <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div>
+                                <label style={labelStyle}>Desde:</label>
+                                <select value={formData.cuenta} onChange={e => setFormData({ ...formData, cuenta: e.target.value })} style={inputStyle}>
+                                    <option value="CAJA_LOCAL">Caja Local</option>
+                                    <option value="SOFI_MP">Cuenta Sofi</option>
+                                    <option value="TOMI">Cuenta Tomi</option>
+                                    <option value="LUCAS">Cuenta Lucas</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Hacia:</label>
+                                <select value={formData.haciaCuenta} onChange={e => setFormData({ ...formData, haciaCuenta: e.target.value })} style={inputStyle}>
+                                    <option value="CAJA_LOCAL">Caja Local</option>
+                                    <option value="SOFI_MP">Cuenta Sofi</option>
+                                    <option value="TOMI">Cuenta Tomi</option>
+                                    <option value="LUCAS">Cuenta Lucas</option>
+                                </select>
+                            </div>
                         </div>
-                    </div>
+                    )}
+
+                    {activeTab === 'AJUSTE' && (
+                        <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div>
+                                <label style={labelStyle}>¿Qué ajustar?</label>
+                                <select value={formData.tipoAjuste} onChange={e => setFormData({ ...formData, tipoAjuste: e.target.value })} style={inputStyle}>
+                                    <option value="INGRESO">Intereses / Sumar (+)</option>
+                                    <option value="EGRESO">Cargo / Restar (-)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Cuenta:</label>
+                                <select value={formData.cuenta} onChange={e => setFormData({ ...formData, cuenta: e.target.value })} style={inputStyle}>
+                                    <option value="SOFI_MP">Cuenta Sofi</option>
+                                    <option value="TOMI">Cuenta Tomi</option>
+                                    <option value="LUCAS">Cuenta Lucas</option>
+                                    <option value="CAJA_LOCAL">Caja Local</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="mt-md">
-                        <label style={labelStyle}>Motivo / Descripción:</label>
-                        <input
-                            type="text"
-                            placeholder="Ej: Pago de flete, Cambio inicial, etc."
-                            required
-                            value={formData.motivo}
-                            onChange={e => setFormData({ ...formData, motivo: e.target.value })}
-                            style={inputStyle}
-                        />
+                        <label style={labelStyle}>Descripción:</label>
+                        <input type="text" placeholder="Ej: Pago luz, Intereses MP, etc." required value={formData.motivo} onChange={e => setFormData({ ...formData, motivo: e.target.value })} style={inputStyle} />
                     </div>
 
-                    <button
-                        type="submit"
-                        className="btn-primary btn-large mt-lg"
-                        disabled={loading}
-                    >
-                        {loading ? 'Procesando...' : 'Confirmar Movimiento'}
+                    <button type="submit" className="btn-primary btn-large mt-lg" disabled={loading}>
+                        {loading ? 'Procesando...' : 'Confirmar Registro'}
                     </button>
                 </form>
             </section>
 
+            {/* Listado Reciente */}
             <div className="mt-xl">
-                <h3 style={{ fontSize: '1rem', marginBottom: '15px' }}>Últimos 15 Movimientos</h3>
+                <h3 style={{ fontSize: '1rem', marginBottom: '15px' }}>Últimos Movimientos</h3>
                 <div className="grid" style={{ gap: '10px' }}>
-                    {movements.length === 0 ? (
-                        <p style={{ textAlign: 'center', opacity: 0.5, padding: '20px' }}>No hay movimientos manuales registrados hoy.</p>
-                    ) : (
-                        movements.map(mov => (
-                            <div key={mov.id} className="card" style={{ padding: '12px 15px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                            <p style={{ fontWeight: 'bold', fontSize: '0.9rem', margin: 0 }}>{mov.motivo}</p>
-                                            <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: mov.tag === 'VENTA' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', borderRadius: '4px', opacity: 0.8, color: mov.tag === 'VENTA' ? 'white' : 'inherit' }}>
-                                                {mov.tag || 'MANUAL'}
-                                            </span>
-                                            {mov.persona && (
-                                                <span style={{ fontSize: '0.65rem', opacity: 0.5 }}>👤 {mov.persona}</span>
-                                            )}
-                                        </div>
-                                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>
-                                            {new Date(mov.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </p>
-                                    </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <p style={{
-                                            fontWeight: 'bold',
-                                            color: mov.tipo === 'EGRESO' ? '#ef4444' : 'var(--accent)',
-                                            fontSize: '1rem'
-                                        }}>
-                                            {mov.tipo === 'EGRESO' ? '-' : '+'} $ {Math.abs(mov.monto).toLocaleString()}
-                                        </p>
-                                        <p style={{ fontSize: '0.6rem', opacity: 0.4 }}>{mov.tipo}</p>
-                                    </div>
+                    {movements.map(mov => (
+                        <div key={mov.id} className="card" style={{ padding: '10px 15px', margin: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ flex: 1 }}>
+                                    <p style={{ fontWeight: 'bold', fontSize: '0.85rem', margin: 0 }}>{mov.motivo}</p>
+                                    <p style={{ fontSize: '0.65rem', opacity: 0.5, margin: 0 }}>
+                                        {mov.persona} • {new Date(mov.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <p style={{ fontWeight: 'bold', color: mov.tipo === 'EGRESO' ? '#ef4444' : 'var(--accent)', fontSize: '0.9rem', margin: 0 }}>
+                                        {mov.tipo === 'EGRESO' ? '-' : '+'} ${Math.abs(mov.monto).toLocaleString()}
+                                    </p>
                                 </div>
                             </div>
-                        ))
-                    )}
+                        </div>
+                    ))}
                 </div>
             </div>
 
+            <datalist id="personas-list">{suggestions.map(p => <option key={p} value={p} />)}</datalist>
             <div style={{ height: '80px' }}></div>
         </div>
     )
 }
 
-const labelStyle = {
-    fontSize: '0.8rem',
-    opacity: 0.6,
-    display: 'block',
-    marginBottom: '8px'
-}
-
-const inputStyle = {
-    width: '100%',
-    padding: 'var(--spacing-md)',
-    borderRadius: 'var(--radius)',
-    backgroundColor: 'var(--secondary)',
-    color: 'white',
-    border: '1px solid var(--card-border)',
-    fontSize: '1rem'
-}
+const labelStyle = { fontSize: '0.75rem', opacity: 0.5, display: 'block', marginBottom: '5px' }
+const inputStyle = { width: '100%', padding: '12px', borderRadius: '12px', background: 'var(--secondary)', color: 'white', border: '1px solid var(--card-border)', fontSize: '0.9rem' }
+const toggleStyle = { flex: 1, padding: '12px', borderRadius: '12px', background: 'var(--secondary)', color: 'white', border: '2px solid transparent', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }

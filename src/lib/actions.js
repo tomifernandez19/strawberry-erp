@@ -823,6 +823,8 @@ export async function getFinanceSummary() {
             accounts.CAROLINA += Math.abs(monto);
         } else if (m.categoria === 'PAGO_PROVEEDOR') {
             accounts.PROVEEDOR += Math.abs(monto);
+        } else if (m.categoria === 'INTERESES') {
+            // Intereses are already added/subtracted to the account balance in the step above
         }
     });
 
