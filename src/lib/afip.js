@@ -60,10 +60,10 @@ export async function createElectronicInvoice(venta, personOverride = null) {
         const puntoVenta = parseInt(process.env[`AFIP_POS_${person.toUpperCase()}`] || '1');
         const type = 11; // Factura C
 
-        // Restore date now right after instance creation to avoid side effects
-        Date.now = originalNow;
-
         const lastVoucher = await afip.ElectronicBilling.getLastVoucher(puntoVenta, type);
+
+        // Restore date now right after the first AFIP call (where login happens)
+        Date.now = originalNow;
         const nextVoucher = lastVoucher + 1;
         const amount = venta.medio_pago === 'DIVIDIR_PAGOS' ? venta.monto_otro : venta.total;
 
