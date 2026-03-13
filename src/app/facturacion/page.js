@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { getPendingInvoicesList, markAsInvoiced } from '@/lib/actions'
-import { createElectronicInvoice, generateInvoicePDF } from '@/lib/afip'
+import { createElectronicInvoice, generateInvoicePDF, getAfipPersonFromAccount } from '@/lib/afip'
 import Link from 'next/link'
 
 export default function FacturacionPage() {
@@ -39,7 +39,7 @@ export default function FacturacionPage() {
         if (!confirm('¿Generar Factura Electrónica C en ARCA (AFIP)?')) return
         setGenerating(venta.id)
         try {
-            const res = await createElectronicInvoice(venta, 'tomi')
+            const res = await createElectronicInvoice(venta)
             if (res.success) {
                 const pdf = generateInvoicePDF(venta, res)
                 // Offer download/open
@@ -50,7 +50,8 @@ export default function FacturacionPage() {
                 await markAsInvoiced(venta.id)
                 setInvoices(prev => prev.filter(v => v.id !== venta.id))
             } else {
-                alert(`Error ARCA: ${res.message}\n\nNota: Verificá que el servidor tenga configurados los certificados de Tomi.`)
+                const person = getAfipPersonFromAccount(venta.cuenta_destino).toUpperCase();
+                alert(`Error ARCA: ${res.message}\n\nNota: Verificá que el servidor tenga configurada la cuenta de ${person} en .env.local`)
             }
         } catch (err) {
             alert(err.message)
@@ -60,6 +61,11 @@ export default function FacturacionPage() {
     }
 
     const getResponsible = (v) => {
+        if (v.cuenta_destino === 'SOFI_MP') return { name: 'Sofi', color: '#ec4899' }
+        if (v.cuenta_destino === 'LUCAS') return { name: 'Lucas', color: '#3b82f6' }
+        if (v.cuenta_destino === 'TOMI') return { name: 'Tomi', color: '#eab308' }
+
+        // Fallback or Legacy
         const mp = v.otro_medio_pago || v.medio_pago
         if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) return { name: 'Sofi', color: '#ec4899' }
         if (mp === 'TRANSFERENCIA') return { name: 'Lucas', color: '#3b82f6' }
@@ -134,16 +140,14 @@ export default function FacturacionPage() {
                                         )}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {resp.name === 'Tomi' && (
-                                            <button
-                                                className="btn-primary"
-                                                style={{ padding: '12px', fontSize: '0.8rem', background: 'var(--accent)', fontWeight: 'bold' }}
-                                                onClick={() => handleAFIPInvoice(v)}
-                                                disabled={generating === v.id}
-                                            >
-                                                {generating === v.id ? 'Generando...' : 'Emitir ARCA 🏛️'}
-                                            </button>
-                                        )}
+                                        <button
+                                            className="btn-primary"
+                                            style={{ padding: '12px', fontSize: '0.8rem', background: 'var(--accent)', fontWeight: 'bold' }}
+                                            onClick={() => handleAFIPInvoice(v)}
+                                            disabled={generating === v.id}
+                                        >
+                                            {generating === v.id ? 'Generando...' : `Emitir ARCA 🏛️ (${resp.name})`}
+                                        </button>
                                         <button
                                             className="btn-primary"
                                             style={{ padding: '8px 12px', fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#10b981' }}

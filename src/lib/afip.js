@@ -2,18 +2,33 @@ import Afip from '@afipsdk/afip.js';
 import { jsPDF } from 'jspdf';
 
 /**
+ * Maps the destination account to the AFIP person.
+ */
+export function getAfipPersonFromAccount(cuentaDestino) {
+    if (cuentaDestino === 'SOFI_MP') return 'sofi';
+    if (cuentaDestino === 'LUCAS') return 'lucas';
+    if (cuentaDestino === 'TOMI') return 'tomi';
+    // Fallback for Caja Local or others
+    return 'tomi';
+}
+
+/**
  * Initializes Afip SDK for a specific person.
- * You should store certificates in the filesystem or as environment variables.
  */
 function getAfipInstance(person = 'tomi') {
-    const cuit = process.env[`AFIP_CUIT_${person.toUpperCase()}`];
-    const cert = process.env[`AFIP_CERT_${person.toUpperCase()}`]; // Should be the full .crt content
-    const key = process.env[`AFIP_KEY_${person.toUpperCase()}`];   // Should be the full .key content
-    const production = process.env.NODE_ENV === 'production';
+    const keyPrefix = person.toUpperCase();
+    const cuit = process.env[`AFIP_CUIT_${keyPrefix}`];
+    let cert = process.env[`AFIP_CERT_${keyPrefix}`];
+    let key = process.env[`AFIP_KEY_${keyPrefix}`];
+    const production = process.env.NODE_ENV === 'production' || process.env.AFIP_PRODUCTION === 'true';
 
     if (!cuit || !cert || !key) {
-        throw new Error(`Configuración de AFIP faltante para ${person}. Verificá las variables de entorno.`);
+        throw new Error(`Configuración de ARCA (AFIP) incompleta para ${person.toUpperCase()}. Faltan CUIT o Certificados.`);
     }
+
+    // Handle newlines if they come as literal \n from .env
+    cert = cert.replace(/\\n/g, '\n');
+    key = key.replace(/\\n/g, '\n');
 
     return new Afip({
         CUIT: parseInt(cuit),
@@ -26,8 +41,9 @@ function getAfipInstance(person = 'tomi') {
 /**
  * Creates an Electronic Invoice (Factura C) in AFIP.
  */
-export async function createElectronicInvoice(venta, person = 'tomi') {
+export async function createElectronicInvoice(venta, personOverride = null) {
     try {
+        const person = personOverride || getAfipPersonFromAccount(venta.cuenta_destino);
         const afip = getAfipInstance(person);
         const puntoVenta = parseInt(process.env[`AFIP_POS_${person.toUpperCase()}`] || '1');
 
