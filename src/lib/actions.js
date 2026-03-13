@@ -1,6 +1,5 @@
 'use server'
 import { createClient } from './supabase/server'
-import { createElectronicInvoice as createInvoiceARCA, generateInvoicePDF } from './afip'
 
 /**
  * Creates a new purchase, creates models/variants if they don't exist,
@@ -2071,61 +2070,6 @@ export async function recordTransfer({ from, to, amount, reason, person }) {
     return { success: true };
 }
 
-/**
- * Server Action to generate an electronic invoice via ARCA (AFIP)
- */
-export async function generateInvoice(ventaId) {
-    const supabase = createClient();
-    try {
-        // Fetch full venta data
-        const { data: venta, error: vErr } = await supabase
-            .from('ventas')
-            .select('*, unidades(*, variantes(*, modelos(*)))')
-            .eq('id', ventaId)
-            .single();
-
-        if (vErr) throw vErr;
-
-        // Call AFIP logic (this runs on server)
-        const res = await createInvoiceARCA(venta);
-
-        if (res.success) {
-            // Generate PDF string
-            const pdf = generateInvoicePDF(venta, res);
-
-            // Mark as invoiced in DB
-            const { error: updErr } = await supabase
-                .from('ventas')
-                .update({ facturado: true, cae: res.cae })
-                .eq('id', ventaId);
-
-            if (updErr) console.warn("Could not mark as invoiced in DB, but ARCA was successful.");
-
-            return { success: true, pdf };
-        } else {
-            return { success: false, message: res.message };
-        }
-    } catch (err) {
-        console.error("generateInvoice error:", err);
-        return { success: false, message: err.message };
-    }
-}
-
-export async function debugAFIP(person, force = false) {
-    const { getAfipInstance } = require('./afip');
-    try {
-        const afip = getAfipInstance(person);
-        if (force) {
-            console.log(`[AFIP DEBUG] Forcing new TA for ${person}`);
-            await afip.GetServiceTA('wsfe', true);
-        }
-        const status = await afip.ElectronicBilling.getServerStatus();
-        const salesPoints = await afip.ElectronicBilling.getSalesPoints();
-        return { success: true, status, salesPoints };
-    } catch (err) {
-        return { success: false, message: err.message };
-    }
-}
 
 export async function sendToInvoiceSheet(ventaId) {
     const { createClient } = require('@/lib/supabase/server')

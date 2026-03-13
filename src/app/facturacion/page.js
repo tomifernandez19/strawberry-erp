@@ -1,14 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getPendingInvoicesList, markAsInvoiced, generateInvoice, sendToInvoiceSheet } from '@/lib/actions'
-import { getAfipPersonFromAccount } from '@/lib/afip-utils'
+import { getPendingInvoicesList, markAsInvoiced, sendToInvoiceSheet } from '@/lib/actions'
 import Link from 'next/link'
 
 export default function FacturacionPage() {
     const [invoices, setInvoices] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
-    const [generating, setGenerating] = useState(null) // ID of invoice being generated
     const [sending, setSending] = useState(null) // ID of invoice being sent to sheet
 
     useEffect(() => {
@@ -54,35 +52,11 @@ export default function FacturacionPage() {
         }
     }
 
-    async function handleAFIPInvoice(venta) {
-        if (!confirm('¿Generar Factura Electrónica C en ARCA (AFIP)?')) return
-        setGenerating(venta.id)
-        try {
-            const res = await generateInvoice(venta.id)
-            if (res.success) {
-                // Offer download/open
-                const win = window.open();
-                if (win) win.document.write(`<iframe src="${res.pdf}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`)
-
-                // Update UI list
-                setInvoices(prev => prev.filter(v => v.id !== venta.id))
-            } else {
-                const person = getAfipPersonFromAccount(venta.cuenta_destino).toUpperCase();
-                alert(`Error ARCA: ${res.message}\n\nNota: Si estás en Vercel, recordá cargar los Certificados en el Dashboard de Vercel.`)
-            }
-        } catch (err) {
-            alert(err.message)
-        } finally {
-            setGenerating(null)
-        }
-    }
-
     const getResponsible = (v) => {
         if (v.cuenta_destino === 'SOFI_MP') return { name: 'Sofi', color: '#ec4899' }
         if (v.cuenta_destino === 'LUCAS') return { name: 'Lucas', color: '#3b82f6' }
         if (v.cuenta_destino === 'TOMI') return { name: 'Tomi', color: '#eab308' }
 
-        // Fallback or Legacy
         const mp = v.otro_medio_pago || v.medio_pago
         if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) return { name: 'Sofi', color: '#ec4899' }
         if (mp === 'TRANSFERENCIA') return { name: 'Lucas', color: '#3b82f6' }
@@ -97,43 +71,9 @@ export default function FacturacionPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <h1>Facturación</h1>
-                        <p style={{ opacity: 0.7 }}>Pendientes por medio de pago</p>
+                        <p style={{ opacity: 0.7 }}>Pendientes por medio de la planilla</p>
                     </div>
                     <Link href="/" className="btn-secondary" style={{ padding: '8px 15px' }}>Volver</Link>
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px' }}>
-                    <span style={{ fontSize: '0.65rem', opacity: 0.5, fontWeight: 'bold', width: '100%', marginBottom: '5px' }}>HERRAMIENTAS DE DIAGNÓSTICO (ARCA/AFIP):</span>
-                    {['tomi', 'lucas', 'sofi'].map(p => (
-                        <div key={p} style={{ display: 'flex', gap: '4px' }}>
-                            <button
-                                className="btn-secondary"
-                                style={{ fontSize: '0.65rem', padding: '6px 10px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.2)' }}
-                                onClick={async () => {
-                                    const { debugAFIP } = await import('@/lib/actions')
-                                    alert(`Chequeando ${p.toUpperCase()}...\n\nSi tarda más de 30s es problema de conexión con AFIP.`)
-                                    const res = await debugAFIP(p, false)
-                                    alert(`Status ${p.toUpperCase()}:\n${JSON.stringify(res, null, 2)}`)
-                                }}
-                            >
-                                Status {p}
-                            </button>
-                            <button
-                                className="btn-secondary"
-                                style={{ fontSize: '0.65rem', padding: '6px 8px', borderColor: 'rgba(255,255,255,0.1)' }}
-                                title="Forzar nuevo Token (TA)"
-                                onClick={async () => {
-                                    const { debugAFIP } = await import('@/lib/actions')
-                                    if (!confirm(`¿Forzar nuevo token para ${p}? Usar solo si da error de autorización.`)) return
-                                    alert(`Generando nuevo token para ${p}...`)
-                                    const res = await debugAFIP(p, true)
-                                    alert(`Resultado Force Token:\n${JSON.stringify(res, null, 2)}`)
-                                }}
-                            >
-                                🔄
-                            </button>
-                        </div>
-                    ))}
                 </div>
             </header>
 
@@ -186,26 +126,13 @@ export default function FacturacionPage() {
                                         <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)', marginTop: '10px' }}>
                                             $ {(v.medio_pago === 'DIVIDIR_PAGOS' ? v.monto_otro : v.total).toLocaleString()}
                                         </p>
-                                        {v.medio_pago === 'DIVIDIR_PAGOS' && (
-                                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>
-                                                (Monto total: ${v.total.toLocaleString()} - Solo se factura la parte no-efectivo)
-                                            </p>
-                                        )}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                         <button
                                             className="btn-primary"
-                                            style={{ padding: '12px', fontSize: '0.8rem', background: 'var(--accent)', fontWeight: 'bold' }}
-                                            onClick={() => handleAFIPInvoice(v)}
-                                            disabled={generating === v.id || sending === v.id}
-                                        >
-                                            {generating === v.id ? 'Generando...' : `Emitir ARCA 🏛️ (${resp.name})`}
-                                        </button>
-                                        <button
-                                            className="btn-primary"
-                                            style={{ padding: '10px', fontSize: '0.75rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid #0ea5e9', color: '#0ea5e9', fontWeight: 'bold' }}
+                                            style={{ padding: '15px', fontSize: '0.9rem', background: 'var(--accent)', fontWeight: 'bold' }}
                                             onClick={() => handleSendToSheet(v)}
-                                            disabled={generating === v.id || sending === v.id}
+                                            disabled={sending === v.id}
                                         >
                                             {sending === v.id ? 'Enviando...' : 'Mandar a Planilla 🐍'}
                                         </button>
@@ -213,7 +140,7 @@ export default function FacturacionPage() {
                                             className="btn-secondary"
                                             style={{ padding: '8px 12px', fontSize: '0.75rem', opacity: 0.6 }}
                                             onClick={() => handleMarkDone(v.id)}
-                                            disabled={generating === v.id || sending === v.id}
+                                            disabled={sending === v.id}
                                         >
                                             Facturado Manual ✅
                                         </button>
