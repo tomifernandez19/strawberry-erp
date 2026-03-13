@@ -2110,3 +2110,15 @@ export async function generateInvoice(ventaId) {
         return { success: false, message: err.message };
     }
 }
+
+export async function debugAFIP(person) {
+    const { createElectronicInvoice, getAfipInstance } = require('./afip');
+    try {
+        const afip = getAfipInstance(person);
+        const status = await afip.ElectronicBilling.getServerStatus();
+        const salesPoints = await afip.ElectronicBilling.getSalesPoints();
+        return { success: true, status, salesPoints };
+    } catch (err) {
+        return { success: false, message: err.message };
+    }
+}

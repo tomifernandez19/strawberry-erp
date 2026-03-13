@@ -162,6 +162,25 @@ export default function FacturacionPage() {
                 </div>
             )}
 
+            <div style={{ marginTop: '30px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <p style={{ width: '100%', fontSize: '0.7rem', opacity: 0.5, marginBottom: '5px' }}>DEBUG TOOLS:</p>
+                {['tomi', 'lucas', 'sofi'].map(p => (
+                    <button
+                        key={p}
+                        className="btn-secondary"
+                        style={{ fontSize: '0.65rem', padding: '5px 10px' }}
+                        onClick={async () => {
+                            const { debugAFIP } = await import('@/lib/actions')
+                            alert(`Chequeando ${p.toUpperCase()}... Por favor esperá.`)
+                            const res = await debugAFIP(p)
+                            alert(JSON.stringify(res, null, 2))
+                        }}
+                    >
+                        Status ARCA ({p})
+                    </button>
+                ))}
+            </div>
+
             <div style={{ height: '80px' }}></div>
         </div>
     )
