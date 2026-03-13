@@ -2,7 +2,7 @@ import Afip from '@afipsdk/afip.js';
 import { jsPDF } from 'jspdf';
 import fs from 'fs';
 import path from 'path';
-import { getAfipPersonFromAccount } from './afip-utils';
+import { getAfipPersonFromAccount, AFIP_DATA } from './afip-utils';
 
 /**
  * In-memory cache for AFIP instances to speed up warm starts in Vercel.
@@ -142,38 +142,164 @@ export async function createElectronicInvoice(venta, personOverride = null) {
     }
 }
 
+
+
 /**
- * Generates a PDF of the invoice.
+ * Generates a professional PDF of the invoice matching the Python script.
  */
 export function generateInvoicePDF(venta, afipData) {
     const doc = new jsPDF();
-    const margin = 20;
+    const personKey = getAfipPersonFromAccount(venta.cuenta_destino);
+    const emisor = AFIP_DATA[personKey];
 
-    // Simple template
-    doc.setFontSize(22);
-    doc.text("STRAWBERRY", margin, 25);
-    doc.text("FACTURA C", 140, 25);
+    const drawPage = (label) => {
+        const margin = 10;
+        const width = 210;
+        const height = 297;
 
-    doc.setFontSize(10);
-    doc.text(`Punto de Venta: ${String(afipData.puntoVenta).padStart(4, '0')}`, 140, 32);
-    doc.text(`Número: ${String(afipData.cbte).padStart(8, '0')}`, 140, 38);
-    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 140, 44);
+        // 1. External Border
+        doc.setDrawColor(180);
+        doc.rect(margin, margin, width - margin * 2, height - margin * 2);
 
-    doc.line(margin, 55, 190, 55);
+        // 2. Header
+        doc.setFontSize(22);
+        doc.setFont("helvetica", "bold");
+        doc.text("STRAWBERRY", margin + 10, margin + 20);
 
-    doc.setFontSize(12);
-    doc.text("Detalle:", margin, 65);
-    doc.text(`${venta.unidades?.[0]?.variantes?.modelos?.descripcion || 'Calzado'}`, margin, 75);
-    doc.text(`$ ${venta.total.toLocaleString()}`, 160, 75, { align: 'right' });
+        doc.setFontSize(10);
+        doc.text(label, width - margin - 30, margin + 10, { align: 'right' });
 
-    doc.line(margin, 150, 190, 150);
+        // Center Box (Factura C)
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.rect(width / 2 - 15, margin, 30, 20);
+        doc.setFontSize(20);
+        doc.text("C", width / 2, margin + 12, { align: 'center' });
+        doc.setFontSize(8);
+        doc.text("COD. 011", width / 2, margin + 18, { align: 'center' });
 
-    doc.setFontSize(14);
-    doc.text(`TOTAL: $ ${venta.total.toLocaleString()}`, 160, 160, { align: 'right' });
+        // Header Labels (Right Side)
+        doc.setFontSize(18);
+        doc.text("FACTURA", width - 70, margin + 20);
 
-    doc.setFontSize(10);
-    doc.text(`CAE: ${afipData.cae}`, margin, 260);
-    doc.text(`Vto. CAE: ${afipData.caution}`, margin, 265);
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+        const nroCmp = `${String(afipData.puntoVenta).padStart(4, '0')}-${String(afipData.cbte).padStart(8, '0')}`;
+        doc.text(`Punto de Venta: ${String(afipData.puntoVenta).padStart(4, '0')}`, width - 70, margin + 30);
+        doc.text(`Comp. Nro: ${String(afipData.cbte).padStart(8, '0')}`, width - 70, margin + 36);
+        doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString('es-AR')}`, width - 70, margin + 42);
+
+        // 3. Emisor Box (Left Side)
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text("Razón Social:", margin + 5, margin + 35);
+        doc.setFont("helvetica", "normal");
+        doc.text(emisor.razonSocial, margin + 35, margin + 35);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Domicilio:", margin + 5, margin + 41);
+        doc.setFont("helvetica", "normal");
+        doc.text(emisor.domicilio, margin + 35, margin + 41);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Condición IVA:", margin + 5, margin + 47);
+        doc.setFont("helvetica", "normal");
+        doc.text(emisor.condicionIva, margin + 35, margin + 47);
+
+        // Emisor Details (Right Side info below header)
+        doc.setFont("helvetica", "bold");
+        doc.text("CUIT:", margin + 110, margin + 55);
+        doc.setFont("helvetica", "normal");
+        doc.text(emisor.cuit, margin + 140, margin + 55);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Ingresos Brutos:", margin + 110, margin + 61);
+        doc.setFont("helvetica", "normal");
+        doc.text(emisor.iibb, margin + 140, margin + 61);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Inicio Actividades:", margin + 110, margin + 67);
+        doc.setFont("helvetica", "normal");
+        doc.text(emisor.inicioActividades, margin + 140, margin + 67);
+
+        doc.line(margin, margin + 75, width - margin, margin + 75);
+
+        // 4. Cliente
+        doc.setFont("helvetica", "bold");
+        doc.text("Cliente: Consumidor Final", margin + 5, margin + 85);
+        doc.text("Condición IVA: Consumidor Final", margin + 110, margin + 85);
+
+        doc.line(margin, margin + 95, width - margin, margin + 95);
+
+        // 5. Items Table Header
+        doc.setFillColor(245, 245, 245);
+        doc.rect(margin, margin + 100, width - margin * 2, 8, 'F');
+        doc.setFont("helvetica", "bold");
+        doc.text("Descripción", margin + 5, margin + 105);
+        doc.text("Can.", margin + 110, margin + 105);
+        doc.text("P. Unit.", margin + 130, margin + 105);
+        doc.text("Subtotal", margin + 160, margin + 105);
+
+        // Item
+        doc.setFont("helvetica", "normal");
+        const itemDesc = venta.unidades?.[0]?.variantes?.modelos?.descripcion || 'Calzado';
+        const amount = venta.medio_pago === 'DIVIDIR_PAGOS' ? venta.monto_otro : venta.total;
+        doc.text(itemDesc, margin + 5, margin + 115);
+        doc.text("1", margin + 110, margin + 115);
+        doc.text(`$ ${amount.toLocaleString()}`, margin + 130, margin + 115);
+        doc.text(`$ ${amount.toLocaleString()}`, margin + 160, margin + 115);
+
+        // 6. Totals
+        doc.line(margin, height - 80, width - margin, height - 80);
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("TOTAL:", width - 80, height - 70);
+        doc.text(`$ ${amount.toLocaleString()}`, width - 20, height - 70, { align: 'right' });
+
+        // 7. QR and CAE
+        const vto = afipData.caution; // YYYYMMDD
+        const vtoFmt = `${vto.slice(6, 8)}/${vto.slice(4, 6)}/${vto.slice(0, 4)}`;
+
+        // AFIP QR Data
+        const qrObj = {
+            ver: 1,
+            fecha: new Date().toISOString().slice(0, 10),
+            cuit: parseInt(emisor.cuit),
+            ptoVta: afipData.puntoVenta,
+            tipoCmp: 11,
+            nroCmp: afipData.cbte,
+            importe: amount,
+            moneda: "PES",
+            ctz: 1,
+            tipoDocRec: 99,
+            nroDocRec: 0,
+            tipoCodAut: "E",
+            codAut: parseInt(afipData.cae)
+        };
+        const qrBase64 = Buffer.from(JSON.stringify(qrObj)).toString('base64');
+        const qrUrl = `https://www.afip.gob.ar/fe/qr/?p=${qrBase64}`;
+
+        // Add QR placeholder for now (or use api)
+        // Since we are server-side, we can use a QR API to get an image
+        const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrUrl)}`;
+        // Note: For now we'll just put the text or a box if network is an issue, 
+        // but jspdf supports images if they are base64.
+
+        doc.setFontSize(10);
+        doc.text(`CAE N°: ${afipData.cae}`, margin + 60, height - 30);
+        doc.text(`Fecha de Vto. CAE: ${vtoFmt}`, margin + 60, height - 25);
+
+        doc.setFontSize(8);
+        doc.text("Comprobante Autorizado por AFIP.", margin + 60, height - 15);
+        doc.text("Esta Administración Federal no se responsabiliza por los datos ingresados...", margin + 60, height - 10);
+    };
+
+    // Original
+    drawPage("ORIGINAL");
+
+    // Duplicated
+    doc.addPage();
+    drawPage("DUPLICADO");
 
     return doc.output('datauristring');
 }

@@ -9,3 +9,33 @@ export function getAfipPersonFromAccount(cuentaDestino) {
     // Fallback for Caja Local or others
     return 'tomi';
 }
+
+/**
+ * Detailed fiscal data for each taxpayer.
+ */
+export const AFIP_DATA = {
+    tomi: {
+        razonSocial: "FERNANDEZ DE MAUSSION TOMAS ESTEBAN",
+        domicilio: "Guayaquil 1507 - Villa Allende, Córdoba",
+        condicionIva: "Responsable Monotributo",
+        iibb: "286117261",
+        inicioActividades: "01/09/2021",
+        cuit: "20418463970"
+    },
+    lucas: {
+        razonSocial: "LUCAS MAUSSION",
+        domicilio: "Villa Allende, Córdoba",
+        condicionIva: "Responsable Monotributo",
+        iibb: "---",
+        inicioActividades: "01/01/2023",
+        cuit: "20324831201"
+    },
+    sofi: {
+        razonSocial: "SOFIA MAUSSION",
+        domicilio: "Villa Allende, Córdoba",
+        condicionIva: "Responsable Monotributo",
+        iibb: "---",
+        inicioActividades: "01/01/2023",
+        cuit: "27389421231"
+    }
+}
