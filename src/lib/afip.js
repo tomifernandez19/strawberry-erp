@@ -16,29 +16,34 @@ export function getAfipPersonFromAccount(cuentaDestino) {
  * Initializes Afip SDK for a specific person.
  */
 function getAfipInstance(person = 'tomi') {
+    const fs = require('fs');
+    const path = require('path');
     const keyPrefix = person.toUpperCase();
     const cuit = process.env[`AFIP_CUIT_${keyPrefix}`];
-    let cert = process.env[`AFIP_CERT_${keyPrefix}`];
-    let key = process.env[`AFIP_KEY_${keyPrefix}`];
+    let certStr = process.env[`AFIP_CERT_${keyPrefix}`];
+    let keyStr = process.env[`AFIP_KEY_${keyPrefix}`];
 
-    // Explicitly check for 'true' to enable production, otherwise default to false (homologation)
     const production = process.env.AFIP_PRODUCTION === 'true';
 
-    if (!cuit || !cert || !key) {
+    if (!cuit || !certStr || !keyStr) {
         throw new Error(`Configuración de ARCA (AFIP) incompleta para ${person.toUpperCase()}. Faltan CUIT o Certificados.`);
     }
 
-    // Aggressive SANITIZATION for Vercel: 
-    // Remove all whitespace at start/end, remove quotes, and fix \n
-    const sanitize = (val) => val?.trim()?.replace(/^["']|["']$/g, '')?.replace(/\\n/g, '\n');
+    const sanitize = (val) => val?.trim()?.replace(/^["']|["']$/g, '')?.replace(/\\n/g, '\n')?.replace(/\r/g, '');
 
-    cert = sanitize(cert);
-    key = sanitize(key);
+    certStr = sanitize(certStr);
+    keyStr = sanitize(keyStr);
+
+    const certPath = path.join('/tmp', `afip_${person}_cert.crt`);
+    const keyPath = path.join('/tmp', `afip_${person}_key.key`);
+
+    fs.writeFileSync(certPath, certStr);
+    fs.writeFileSync(keyPath, keyStr);
 
     return new Afip({
         CUIT: parseInt(cuit),
-        cert: cert,
-        key: key,
+        cert: certPath,
+        key: keyPath,
         production: production,
         ta_folder: '/tmp/'
     });
