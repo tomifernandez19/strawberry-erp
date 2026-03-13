@@ -2126,3 +2126,46 @@ export async function debugAFIP(person, force = false) {
         return { success: false, message: err.message };
     }
 }
+
+export async function sendToInvoiceSheet(ventaId) {
+    const { createClient } = require('@/lib/supabase/server')
+    const { appendToSheet } = require('./sheets')
+    const supabase = createClient();
+
+    try {
+        const { data: venta, error: vErr } = await supabase
+            .from('ventas')
+            .select('*, unidades(*, variantes(*, modelos(*)))')
+            .eq('id', ventaId)
+            .single();
+
+        if (vErr) throw vErr;
+
+        const amount = venta.medio_pago === 'DIVIDIR_PAGOS' ? venta.monto_otro : venta.total;
+
+        const sheetData = {
+            id: venta.id,
+            fecha: new Date(venta.created_at).toLocaleString('es-AR'),
+            cliente: venta.nombre_cliente || 'Consumidor Final',
+            tipo_doc: 'CF',
+            nro_doc: '0',
+            total: amount,
+            medio_pago: venta.medio_pago,
+        };
+
+        await appendToSheet(sheetData);
+
+        // Update database to mark that it was sent to sheet
+        const { error: updErr } = await supabase
+            .from('ventas')
+            .update({ facturado: true, cae: 'EN_PLANILLA' }) // Placeholder to know it's in progress
+            .eq('id', ventaId);
+
+        if (updErr) console.warn("Could not mark as sent to sheet in DB, but sheet was updated.");
+
+        return { success: true };
+    } catch (err) {
+        console.error("sendToInvoiceSheet error:", err);
+        return { success: false, message: err.message };
+    }
+}

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getPendingInvoicesList, markAsInvoiced, generateInvoice } from '@/lib/actions'
+import { getPendingInvoicesList, markAsInvoiced, generateInvoice, sendToInvoiceSheet } from '@/lib/actions'
 import { getAfipPersonFromAccount } from '@/lib/afip-utils'
 import Link from 'next/link'
 
@@ -9,6 +9,7 @@ export default function FacturacionPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
     const [generating, setGenerating] = useState(null) // ID of invoice being generated
+    const [sending, setSending] = useState(null) // ID of invoice being sent to sheet
 
     useEffect(() => {
         loadInvoices()
@@ -32,6 +33,24 @@ export default function FacturacionPage() {
             setInvoices(prev => prev.filter(v => v.id !== id))
         } else {
             alert(res.message)
+        }
+    }
+
+    async function handleSendToSheet(venta) {
+        if (!confirm('¿Mandar esta venta a la planilla de Google Sheets para procesar con Python?')) return
+        setSending(venta.id)
+        try {
+            const res = await sendToInvoiceSheet(venta.id)
+            if (res.success) {
+                alert('¡Venta enviada a la planilla con éxito!')
+                setInvoices(prev => prev.filter(v => v.id !== venta.id))
+            } else {
+                alert(`Error al enviar a la planilla: ${res.message}\n\nAsegurate de configurar las credenciales de Google en el Dashboard de Vercel.`)
+            }
+        } catch (err) {
+            alert(err.message)
+        } finally {
+            setSending(null)
         }
     }
 
@@ -178,15 +197,23 @@ export default function FacturacionPage() {
                                             className="btn-primary"
                                             style={{ padding: '12px', fontSize: '0.8rem', background: 'var(--accent)', fontWeight: 'bold' }}
                                             onClick={() => handleAFIPInvoice(v)}
-                                            disabled={generating === v.id}
+                                            disabled={generating === v.id || sending === v.id}
                                         >
                                             {generating === v.id ? 'Generando...' : `Emitir ARCA 🏛️ (${resp.name})`}
                                         </button>
                                         <button
                                             className="btn-primary"
-                                            style={{ padding: '8px 12px', fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#10b981' }}
+                                            style={{ padding: '10px', fontSize: '0.75rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid #0ea5e9', color: '#0ea5e9', fontWeight: 'bold' }}
+                                            onClick={() => handleSendToSheet(v)}
+                                            disabled={generating === v.id || sending === v.id}
+                                        >
+                                            {sending === v.id ? 'Enviando...' : 'Mandar a Planilla 🐍'}
+                                        </button>
+                                        <button
+                                            className="btn-secondary"
+                                            style={{ padding: '8px 12px', fontSize: '0.75rem', opacity: 0.6 }}
                                             onClick={() => handleMarkDone(v.id)}
-                                            disabled={generating === v.id}
+                                            disabled={generating === v.id || sending === v.id}
                                         >
                                             Facturado Manual ✅
                                         </button>
