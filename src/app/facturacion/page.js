@@ -74,12 +74,48 @@ export default function FacturacionPage() {
 
     return (
         <div className="grid mt-lg">
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div>
-                    <h1>Facturación</h1>
-                    <p style={{ opacity: 0.7 }}>Pendientes por medio de pago</p>
+            <header style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '25px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h1>Facturación</h1>
+                        <p style={{ opacity: 0.7 }}>Pendientes por medio de pago</p>
+                    </div>
+                    <Link href="/" className="btn-secondary" style={{ padding: '8px 15px' }}>Volver</Link>
                 </div>
-                <Link href="/" className="btn-secondary" style={{ padding: '8px 15px' }}>Volver</Link>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '0.65rem', opacity: 0.5, fontWeight: 'bold', width: '100%', marginBottom: '5px' }}>HERRAMIENTAS DE DIAGNÓSTICO (ARCA/AFIP):</span>
+                    {['tomi', 'lucas', 'sofi'].map(p => (
+                        <div key={p} style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                                className="btn-secondary"
+                                style={{ fontSize: '0.65rem', padding: '6px 10px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.2)' }}
+                                onClick={async () => {
+                                    const { debugAFIP } = await import('@/lib/actions')
+                                    alert(`Chequeando ${p.toUpperCase()}...\n\nSi tarda más de 30s es problema de conexión con AFIP.`)
+                                    const res = await debugAFIP(p, false)
+                                    alert(`Status ${p.toUpperCase()}:\n${JSON.stringify(res, null, 2)}`)
+                                }}
+                            >
+                                Status {p}
+                            </button>
+                            <button
+                                className="btn-secondary"
+                                style={{ fontSize: '0.65rem', padding: '6px 8px', borderColor: 'rgba(255,255,255,0.1)' }}
+                                title="Forzar nuevo Token (TA)"
+                                onClick={async () => {
+                                    const { debugAFIP } = await import('@/lib/actions')
+                                    if (!confirm(`¿Forzar nuevo token para ${p}? Usar solo si da error de autorización.`)) return
+                                    alert(`Generando nuevo token para ${p}...`)
+                                    const res = await debugAFIP(p, true)
+                                    alert(`Resultado Force Token:\n${JSON.stringify(res, null, 2)}`)
+                                }}
+                            >
+                                🔄
+                            </button>
+                        </div>
+                    ))}
+                </div>
             </header>
 
             {error && <div className="card" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>{error}</div>}
@@ -161,25 +197,6 @@ export default function FacturacionPage() {
                     })}
                 </div>
             )}
-
-            <div style={{ marginTop: '30px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <p style={{ width: '100%', fontSize: '0.7rem', opacity: 0.5, marginBottom: '5px' }}>DEBUG TOOLS:</p>
-                {['tomi', 'lucas', 'sofi'].map(p => (
-                    <button
-                        key={p}
-                        className="btn-secondary"
-                        style={{ fontSize: '0.65rem', padding: '5px 10px' }}
-                        onClick={async () => {
-                            const { debugAFIP } = await import('@/lib/actions')
-                            alert(`Chequeando ${p.toUpperCase()}... Por favor esperá.`)
-                            const res = await debugAFIP(p)
-                            alert(JSON.stringify(res, null, 2))
-                        }}
-                    >
-                        Status ARCA ({p})
-                    </button>
-                ))}
-            </div>
 
             <div style={{ height: '80px' }}></div>
         </div>

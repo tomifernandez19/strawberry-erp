@@ -2111,10 +2111,14 @@ export async function generateInvoice(ventaId) {
     }
 }
 
-export async function debugAFIP(person) {
-    const { createElectronicInvoice, getAfipInstance } = require('./afip');
+export async function debugAFIP(person, force = false) {
+    const { getAfipInstance } = require('./afip');
     try {
         const afip = getAfipInstance(person);
+        if (force) {
+            console.log(`[AFIP DEBUG] Forcing new TA for ${person}`);
+            await afip.GetServiceTA('wsfe', true);
+        }
         const status = await afip.ElectronicBilling.getServerStatus();
         const salesPoints = await afip.ElectronicBilling.getSalesPoints();
         return { success: true, status, salesPoints };
