@@ -37,7 +37,7 @@ function getAfipInstance(person = 'tomi') {
         cert: cert,
         key: key,
         production: production,
-        ta_folder: '/tmp/' // CRITICAL for Vercel/Serverless: Use writable directory for tokens
+        ta_folder: '/tmp/'
     });
 }
 
@@ -98,8 +98,10 @@ export async function createElectronicInvoice(venta, personOverride = null) {
             puntoVenta: puntoVenta
         };
     } catch (err) {
-        console.error("AFIP Error:", err);
-        return { success: false, message: err.message };
+        console.error("AFIP Error Details:", err);
+        // Extract real error message if available in the SDK error object
+        const errMsg = err.message || (err.err ? JSON.stringify(err.err) : "Error desconocido en ARCA");
+        return { success: false, message: errMsg };
     }
 }
 
