@@ -28,7 +28,7 @@ export const AFIP_DATA = {
         condicionIva: "Responsable Monotributo",
         iibb: "---",
         inicioActividades: "01/01/2023",
-        cuit: "20324831201"
+        cuit: "20432991920"
     },
     sofi: {
         razonSocial: "SOFIA MAUSSION",
@@ -36,6 +36,6 @@ export const AFIP_DATA = {
         condicionIva: "Responsable Monotributo",
         iibb: "---",
         inicioActividades: "01/01/2023",
-        cuit: "27389421231"
+        cuit: "27421075897"
     }
 }

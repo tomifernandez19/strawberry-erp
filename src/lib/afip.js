@@ -111,6 +111,7 @@ export async function createElectronicInvoice(venta, personOverride = null) {
 
         console.log(`[AFIP] Creating voucher ${nextVoucher}...`);
         const res = await afip.ElectronicBilling.createVoucher(data);
+        console.log(`[AFIP] Voucher created successfully.`);
 
         return {
             success: true,
