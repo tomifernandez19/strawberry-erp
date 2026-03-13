@@ -5,9 +5,19 @@ import path from 'path';
 import { getAfipPersonFromAccount } from './afip-utils';
 
 /**
+ * In-memory cache for AFIP instances to speed up warm starts in Vercel.
+ */
+let afipInstances = {};
+
+/**
  * Initializes Afip SDK for a specific person.
  */
 function getAfipInstance(person = 'tomi') {
+    if (afipInstances[person]) {
+        console.log(`[AFIP] Using cached instance for ${person}`);
+        return afipInstances[person];
+    }
+
     const keyPrefix = person.toUpperCase();
     const cuit = process.env[`AFIP_CUIT_${keyPrefix}`];
     let certStr = process.env[`AFIP_CERT_${keyPrefix}`];
@@ -35,13 +45,20 @@ function getAfipInstance(person = 'tomi') {
     fs.writeFileSync(certPath, certStr);
     fs.writeFileSync(keyPath, keyStr);
 
-    return new Afip({
+    console.log(`[AFIP] Initializing instance for ${person}...`);
+    const instance = new Afip({
         CUIT: parseInt(cuit),
         cert: certPath,
         key: keyPath,
         production: production,
-        ta_folder: taFolder
+        ta_folder: taFolder,
+        // Common ways to pass timeout to underlying clients in various SDK versions
+        timeout: 60000,
+        http_options: { timeout: 60000 }
     });
+
+    afipInstances[person] = instance;
+    return instance;
 }
 
 /**
