@@ -26,6 +26,11 @@ function getAfipInstance(person = 'tomi') {
 
     const certPath = path.join('/tmp', `afip_${person}_cert.crt`);
     const keyPath = path.join('/tmp', `afip_${person}_key.key`);
+    const taFolder = path.join('/tmp', `afip_ta_${person}`);
+
+    if (!fs.existsSync(taFolder)) {
+        fs.mkdirSync(taFolder, { recursive: true });
+    }
 
     fs.writeFileSync(certPath, certStr);
     fs.writeFileSync(keyPath, keyStr);
@@ -35,7 +40,7 @@ function getAfipInstance(person = 'tomi') {
         cert: certPath,
         key: keyPath,
         production: production,
-        ta_folder: '/tmp/'
+        ta_folder: taFolder
     });
 }
 
