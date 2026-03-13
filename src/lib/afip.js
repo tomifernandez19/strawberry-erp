@@ -60,6 +60,7 @@ export async function createElectronicInvoice(venta, personOverride = null) {
         const puntoVenta = parseInt(process.env[`AFIP_POS_${person.toUpperCase()}`] || '1');
         const type = 11; // Factura C
 
+        console.log(`[AFIP] Fetching last voucher for POS ${puntoVenta}...`);
         const lastVoucher = await afip.ElectronicBilling.getLastVoucher(puntoVenta, type);
 
         // Restore date now right after the first AFIP call (where login happens)
@@ -87,6 +88,7 @@ export async function createElectronicInvoice(venta, personOverride = null) {
             MonCotiz: 1,
         };
 
+        console.log(`[AFIP] Creating voucher ${nextVoucher}...`);
         const res = await afip.ElectronicBilling.createVoucher(data);
 
         return {
