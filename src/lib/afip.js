@@ -106,9 +106,22 @@ export async function createElectronicInvoice(venta, personOverride = null) {
             puntoVenta: puntoVenta
         };
     } catch (err) {
-        console.error("AFIP Error Details:", err);
-        // Extract real error message if available in the SDK error object
-        const errMsg = err.message || (err.err ? JSON.stringify(err.err) : "Error desconocido en ARCA");
+        console.error("--- DEBUG ARCA ERROR START ---");
+        console.error("Person:", personOverride || "n/a");
+        console.error(err);
+
+        // Extract the most detailed message possible from the AFIP SDK
+        let errMsg = err.message || "Error desconocido en ARCA";
+
+        // Many AFIP errors come inside a soap "faultstring" or "err" object
+        if (err.err && err.err.faultstring) {
+            errMsg = `AFIP Fault: ${err.err.faultstring}`;
+        } else if (err.response && err.response.data) {
+            errMsg = `AFIP Response: ${JSON.stringify(err.response.data)}`;
+        }
+
+        console.error("--- DEBUG ARCA ERROR END ---");
+
         return { success: false, message: errMsg };
     }
 }
