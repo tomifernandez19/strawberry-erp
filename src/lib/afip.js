@@ -20,7 +20,9 @@ function getAfipInstance(person = 'tomi') {
     const cuit = process.env[`AFIP_CUIT_${keyPrefix}`];
     let cert = process.env[`AFIP_CERT_${keyPrefix}`];
     let key = process.env[`AFIP_KEY_${keyPrefix}`];
-    const production = process.env.NODE_ENV === 'production' || process.env.AFIP_PRODUCTION === 'true';
+
+    // Explicitly check for 'true' to enable production, otherwise default to false (homologation)
+    const production = process.env.AFIP_PRODUCTION === 'true';
 
     if (!cuit || !cert || !key) {
         throw new Error(`Configuración de ARCA (AFIP) incompleta para ${person.toUpperCase()}. Faltan CUIT o Certificados.`);
