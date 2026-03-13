@@ -48,35 +48,32 @@ function getAfipInstance(person = 'tomi') {
  * Creates an Electronic Invoice (Factura C) in AFIP.
  */
 export async function createElectronicInvoice(venta, personOverride = null) {
+    const person = personOverride || getAfipPersonFromAccount(venta.cuenta_destino);
+
+    // TIME HACK: Overriding global Date.now temporarily to fix "Clock Drift" (same as the Python fix)
+    // We make AFIP believe we are 5 minutes in the past so the ticket is always valid.
+    const originalNow = Date.now;
+    Date.now = () => originalNow() - 300000; // 5 minutes ago
+
     try {
-        const person = personOverride || getAfipPersonFromAccount(venta.cuenta_destino);
         const afip = getAfipInstance(person);
         const puntoVenta = parseInt(process.env[`AFIP_POS_${person.toUpperCase()}`] || '1');
+        const type = 11; // Factura C
 
-        // 1. Determine Invoice Type (Factura C = 11 for Monotributistas)
-        const type = 11;
+        // Restore date now right after instance creation to avoid side effects
+        Date.now = originalNow;
 
-        // 2. Get the next invoice number
         const lastVoucher = await afip.ElectronicBilling.getLastVoucher(puntoVenta, type);
         const nextVoucher = lastVoucher + 1;
-
-        // 3. Prepare the data
-        // For simplified use, we assume CONSUMIDOR FINAL (DocType 99, DocNumber 0) if no data
-        let docType = 99;
-        let docNumber = 0;
-
-        // If we have CUIT/DNI of client, we should use it here.
-        // For now, let's stick to the basic requirements.
-
         const amount = venta.medio_pago === 'DIVIDIR_PAGOS' ? venta.monto_otro : venta.total;
 
         const data = {
-            CantReg: 1,  // Quantity of vouchers
+            CantReg: 1,
             PtoVta: puntoVenta,
             CbteTipo: type,
-            Concepto: 1, // Products
-            DocTipo: docType,
-            DocNro: docNumber,
+            Concepto: 1,
+            DocTipo: 99,
+            DocNro: 0,
             CbteDesde: nextVoucher,
             CbteHasta: nextVoucher,
             CbteFch: parseInt(new Date().toISOString().slice(0, 10).replace(/-/g, '')),
@@ -90,7 +87,6 @@ export async function createElectronicInvoice(venta, personOverride = null) {
             MonCotiz: 1,
         };
 
-        // 4. Create the voucher
         const res = await afip.ElectronicBilling.createVoucher(data);
 
         return {
@@ -101,22 +97,28 @@ export async function createElectronicInvoice(venta, personOverride = null) {
             puntoVenta: puntoVenta
         };
     } catch (err) {
+        // Ensure date is restored in case of early error
+        Date.now = originalNow;
+
         console.error("--- DEBUG ARCA ERROR START ---");
-        console.error("Person:", personOverride || "n/a");
+        console.error("Person:", person.toUpperCase());
         console.error(err);
 
-        // Extract the most detailed message possible from the AFIP SDK
-        let errMsg = err.message || "Error desconocido en ARCA";
+        let errMsg = err.message || "Error desconocido";
 
-        // Many AFIP errors come inside a soap "faultstring" or "err" object
+        // Detailed fault extraction
         if (err.err && err.err.faultstring) {
             errMsg = `AFIP Fault: ${err.err.faultstring}`;
         } else if (err.response && err.response.data) {
-            errMsg = `AFIP Response: ${JSON.stringify(err.response.data)}`;
+            // If it's an Axios/HTTP error, extract the body
+            errMsg = `HTTP Error: ${err.message}`;
+            if (typeof err.response.data === 'string' && err.response.data.includes('faultstring')) {
+                const match = err.response.data.match(/<faultstring>(.*)<\/faultstring>/);
+                if (match) errMsg = `AFIP: ${match[1]}`;
+            }
         }
 
         console.error("--- DEBUG ARCA ERROR END ---");
-
         return { success: false, message: errMsg };
     }
 }
