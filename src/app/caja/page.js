@@ -58,7 +58,7 @@ export default function CajaPage() {
                     to: formData.haciaCuenta,
                     amount: montoNum,
                     reason: formData.motivo,
-                    person: formData.persona
+                    person: formData.persona.trim().toUpperCase()
                 })
 
             } else if (activeTab === 'GASTO') {
@@ -198,7 +198,7 @@ export default function CajaPage() {
                         </div>
                         <div>
                             <label style={labelStyle}>Responsable:</label>
-                            <input type="text" list="personas-list" required value={formData.persona} onChange={e => setFormData({ ...formData, persona: e.target.value })} style={inputStyle} />
+                            <input type="text" list="personas-list" required value={formData.persona} onChange={e => setFormData({ ...formData, persona: e.target.value.toUpperCase() })} style={{ ...inputStyle, textTransform: 'uppercase' }} />
                         </div>
                     </div>
 
@@ -240,6 +240,7 @@ export default function CajaPage() {
                                     <option value="FLETES">Fletes / Viáticos 🚚</option>
                                     <option value="PAGO_CAROLINA">Pago a Carolina 👵</option>
                                     <option value="PAGO_PROVEEDOR">Pago a Proveedor 📦</option>
+                                    <option value="RETIRO_PERSONAL">Retiro Personal / Sueldo 👤</option>
                                 </select>
                             </div>
                         </>
