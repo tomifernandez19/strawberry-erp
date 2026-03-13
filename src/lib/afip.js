@@ -51,11 +51,14 @@ function getAfipInstance(person = 'tomi') {
         cert: certPath,
         key: keyPath,
         production: production,
-        ta_folder: taFolder,
-        // Common ways to pass timeout to underlying clients in various SDK versions
-        timeout: 60000,
-        http_options: { timeout: 60000 }
+        ta_folder: taFolder
     });
+
+    // CRITICAL: The SDK has a hardcoded 30s timeout in its internal AdminClient (axios).
+    // We override it here to allow for slower AFIP responses.
+    if (instance.AdminClient) {
+        instance.AdminClient.defaults.timeout = 120000; // 120 seconds
+    }
 
     afipInstances[person] = instance;
     return instance;
@@ -103,6 +106,7 @@ export async function createElectronicInvoice(venta, personOverride = null) {
             ImpTrib: 0,
             MonId: 'PES',
             MonCotiz: 1,
+            CondicionIVAReceptorId: 1, // 1 = Consumidor Final (Mandatory from 2025 according to RG 5616)
         };
 
         console.log(`[AFIP] Creating voucher ${nextVoucher}...`);
