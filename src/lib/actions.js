@@ -1,5 +1,6 @@
 'use server'
 import { createClient } from './supabase/server'
+import { createElectronicInvoice as createInvoiceARCA, generateInvoicePDF } from './afip'
 
 /**
  * Creates a new purchase, creates models/variants if they don't exist,
@@ -1811,6 +1812,7 @@ export async function getPendingInvoicesList() {
             .from('ventas')
             .select('*, profiles(nombre), unidades(*, variantes(*, modelos(*)))')
             .eq('facturado', false)
+            .not('medio_pago', 'in', '("EFECTIVO", "MAYORISTA_EFECTIVO", "TRANSFERENCIA_PROVEEDOR")')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -2067,4 +2069,45 @@ export async function recordTransfer({ from, to, amount, reason, person }) {
     if (inErr) throw inErr;
 
     return { success: true };
+}
+
+/**
+ * Server Action to generate an electronic invoice via ARCA (AFIP)
+ */
+export async function generateInvoice(ventaId) {
+    const { createClient } = require('@/lib/supabase/server')
+    const supabase = createClient();
+    try {
+        // Fetch full venta data
+        const { data: venta, error: vErr } = await supabase
+            .from('ventas')
+            .select('*, unidades(*, variantes(*, modelos(*)))')
+            .eq('id', ventaId)
+            .single();
+
+        if (vErr) throw vErr;
+
+        // Call AFIP logic (this runs on server)
+        const res = await createInvoiceARCA(venta);
+
+        if (res.success) {
+            // Generate PDF string
+            const pdf = generateInvoicePDF(venta, res);
+
+            // Mark as invoiced in DB
+            const { error: updErr } = await supabase
+                .from('ventas')
+                .update({ facturado: true, cae: res.cae })
+                .eq('id', ventaId);
+
+            if (updErr) console.warn("Could not mark as invoiced in DB, but ARCA was successful.");
+
+            return { success: true, pdf };
+        } else {
+            return { success: false, message: res.message };
+        }
+    } catch (err) {
+        console.error("generateInvoice error:", err);
+        return { success: false, message: err.message };
+    }
 }

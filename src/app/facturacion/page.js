@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getPendingInvoicesList, markAsInvoiced } from '@/lib/actions'
-import { createElectronicInvoice, generateInvoicePDF, getAfipPersonFromAccount } from '@/lib/afip'
+import { getPendingInvoicesList, markAsInvoiced, generateInvoice } from '@/lib/actions'
+import { getAfipPersonFromAccount } from '@/lib/afip'
 import Link from 'next/link'
 
 export default function FacturacionPage() {
@@ -39,19 +39,17 @@ export default function FacturacionPage() {
         if (!confirm('¿Generar Factura Electrónica C en ARCA (AFIP)?')) return
         setGenerating(venta.id)
         try {
-            const res = await createElectronicInvoice(venta)
+            const res = await generateInvoice(venta.id)
             if (res.success) {
-                const pdf = generateInvoicePDF(venta, res)
                 // Offer download/open
                 const win = window.open();
-                if (win) win.document.write(`<iframe src="${pdf}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`)
+                if (win) win.document.write(`<iframe src="${res.pdf}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`)
 
-                // Mark as invoiced in DB too
-                await markAsInvoiced(venta.id)
+                // Update UI list
                 setInvoices(prev => prev.filter(v => v.id !== venta.id))
             } else {
                 const person = getAfipPersonFromAccount(venta.cuenta_destino).toUpperCase();
-                alert(`Error ARCA: ${res.message}\n\nNota: Verificá que el servidor tenga configurada la cuenta de ${person} en .env.local`)
+                alert(`Error ARCA: ${res.message}\n\nNota: Si estás en Vercel, recordá cargar los Certificados en el Dashboard de Vercel.`)
             }
         } catch (err) {
             alert(err.message)
