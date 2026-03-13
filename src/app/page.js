@@ -13,6 +13,7 @@ export default function HomePage() {
     const [pendingLocation, setPendingLocation] = useState(0)
     const [pendingImages, setPendingImages] = useState(0)
     const [showCashDetail, setShowCashDetail] = useState(false)
+    const [detailType, setDetailType] = useState('LOCAL') // 'LOCAL' or 'ALL'
     const [recentMovements, setRecentMovements] = useState([])
     const [loadingMovements, setLoadingMovements] = useState(false)
     const [invoiceCounts, setInvoiceCounts] = useState({ sofi: 0, tomi: 0, lucas: 0, total: 0 })
@@ -81,10 +82,12 @@ export default function HomePage() {
         }
     }, [isAdmin, user])
 
-    async function fetchCashDetail() {
+    async function fetchCashDetail(type = 'LOCAL') {
         setLoadingMovements(true)
+        setDetailType(type)
         setShowCashDetail(true)
-        const data = await getRecentUnifiedCaja()
+        const account = type === 'LOCAL' ? 'CAJA_LOCAL' : null
+        const data = await getRecentUnifiedCaja(account)
         setRecentMovements(data || [])
         setLoadingMovements(false)
     }
@@ -238,22 +241,41 @@ export default function HomePage() {
             </section>
 
             {isAdmin && (
-                <Link href="/caja" style={{ textDecoration: 'none', color: 'inherit' }} className="mt-md">
-                    <section className="card" style={{
-                        border: '1px solid rgba(59, 130, 246, 0.3)',
-                        background: 'rgba(59, 130, 246, 0.05)',
+                <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <section onClick={() => fetchCashDetail('ALL')} className="card" style={{
+                        border: '1px solid rgba(139, 92, 246, 0.3)',
+                        background: 'rgba(139, 92, 246, 0.05)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        padding: '12px 20px'
+                        padding: '12px 20px',
+                        cursor: 'pointer',
+                        marginBottom: 0
                     }}>
                         <div>
-                            <h4 style={{ fontSize: '0.75rem', opacity: 0.8 }}>Movimientos de Caja</h4>
-                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Retiros y depósitos manuales</p>
+                            <h4 style={{ fontSize: '0.7rem', opacity: 0.8 }}>Movimientos Caja</h4>
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Historial Completo</p>
                         </div>
                         <span style={{ fontSize: '1.2rem' }}>🏦</span>
                     </section>
-                </Link>
+
+                    <Link href="/caja" style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <section className="card" style={{
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 20px',
+                            marginBottom: 0
+                        }}>
+                            <div>
+                                <h4 style={{ fontSize: '0.7rem', opacity: 0.8 }}>Gestión</h4>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Ir a Carga</p>
+                            </div>
+                            <span style={{ fontSize: '1.2rem' }}>⚙️</span>
+                        </section>
+                    </Link>
+                </div>
             )}
 
             <div className="grid">
@@ -261,7 +283,7 @@ export default function HomePage() {
                     <section
                         className="card"
                         style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', cursor: 'pointer', marginBottom: 0, padding: '15px' }}
-                        onClick={fetchCashDetail}
+                        onClick={() => fetchCashDetail('LOCAL')}
                     >
                         <h4 style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--accent)' }}>Caja en Local</h4>
                         <div style={{ marginTop: '5px' }}>
@@ -335,7 +357,7 @@ export default function HomePage() {
                 }}>
                     <div className="card" style={{ width: '100%', maxWidth: '500px', maxHeight: '80vh', overflowY: 'auto' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                            <h3>Movimientos de Efectivo</h3>
+                            <h3>{detailType === 'LOCAL' ? 'Movimientos Efectivo Local' : 'Auditoría de Cuentas'}</h3>
                             <button onClick={() => setShowCashDetail(false)} className="btn-secondary" style={{ padding: '4px 12px' }}>Cerrar</button>
                         </div>
 

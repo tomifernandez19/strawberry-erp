@@ -685,25 +685,31 @@ export async function getDailySummary(onlyUserId = null) {
 
 /**
  * Fetches recent cash movements (Manual + Sales) for detail view.
+ * @param {string} accountId - Optional account filter (e.g., 'CAJA_LOCAL')
  */
-export async function getRecentUnifiedCaja() {
+export async function getRecentUnifiedCaja(accountId = null) {
     const supabase = createClient();
 
-    // 1. Manual Movements for all accounts
-    const { data: manual } = await supabase
-        .from('movimientos_caja')
-        .select('*')
+    let query = supabase.from('movimientos_caja').select('*');
+    if (accountId) query = query.eq('cuenta', accountId);
+
+    const { data: manual } = await query
         .order('created_at', { ascending: false })
         .limit(20);
 
     // 2. Sales with cash strictly (Cash or Wholesale Cash)
-    const { data: sales } = await supabase
-        .from('ventas')
-        .select('id, created_at, total, monto_efectivo, medio_pago')
-        .in('medio_pago', ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'])
-        .gt('monto_efectivo', 0)
-        .order('created_at', { ascending: false })
-        .limit(15);
+    // Only include sales if we are looking at all accounts OR specifically CAJA_LOCAL
+    let sales = [];
+    if (!accountId || accountId === 'CAJA_LOCAL') {
+        const { data: salesData } = await supabase
+            .from('ventas')
+            .select('id, created_at, total, monto_efectivo, medio_pago')
+            .in('medio_pago', ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'])
+            .gt('monto_efectivo', 0)
+            .order('created_at', { ascending: false })
+            .limit(15);
+        sales = salesData || [];
+    }
 
     // 3. Merge and Sort
     const unified = [
@@ -717,7 +723,7 @@ export async function getRecentUnifiedCaja() {
             cuenta: m.cuenta,
             tag: 'MANUAL'
         })),
-        ...(sales || []).map(s => ({
+        ...sales.map(s => ({
             id: s.id,
             created_at: s.created_at,
             monto: s.monto_efectivo,
@@ -728,7 +734,7 @@ export async function getRecentUnifiedCaja() {
             tag: 'VENTA'
         }))
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .slice(0, 15);
+        .slice(0, 20);
 
     return unified;
 }
