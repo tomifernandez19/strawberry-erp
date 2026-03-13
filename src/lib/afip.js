@@ -28,15 +28,16 @@ function getAfipInstance(person = 'tomi') {
         throw new Error(`Configuración de ARCA (AFIP) incompleta para ${person.toUpperCase()}. Faltan CUIT o Certificados.`);
     }
 
-    // Handle newlines if they come as literal \n from .env
-    cert = cert.replace(/\\n/g, '\n');
-    key = key.replace(/\\n/g, '\n');
+    // SANITIZATION: Remove accidental quotes and handle newlines (Vercel compatibility)
+    cert = cert.replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
+    key = key.replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
 
     return new Afip({
         CUIT: parseInt(cuit),
         cert: cert,
         key: key,
-        production: production
+        production: production,
+        ta_folder: '/tmp/' // CRITICAL for Vercel/Serverless: Use writable directory for tokens
     });
 }
 
