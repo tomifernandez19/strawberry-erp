@@ -80,13 +80,22 @@ export async function createPurchase({ nro_remito, items, supplier_type = 'CAROL
                     .single()
                 if (vErr) throw new Error(vErr.message)
                 variante = newVar
-            } else if (imagen_url && !variante.imagen_url) {
-                // Update image if existing variant doesn't have one
+            } else {
+                // ALWAYS update prices and image based on the latest purchase
+                const rawPrecioLista = costo_unitario * 2.42;
+                const precioLista = roundListPrice(rawPrecioLista);
+                const precioEfectivo = (costo_unitario * 2) + 3000;
+
                 const { error: updErr } = await supabase
                     .from('variantes')
-                    .update({ imagen_url })
+                    .update({
+                        precio_efectivo: precioEfectivo,
+                        precio_lista: precioLista,
+                        costo_promedio: costo_unitario,
+                        imagen_url: imagen_url || variante.imagen_url
+                    })
                     .eq('id', variante.id)
-                if (updErr) console.warn("Could not update image:", updErr.message)
+                if (updErr) console.warn("Could not update variant details:", updErr.message)
             }
 
             processedItems.push({ ...item, variante_id: variante.id })
@@ -2164,7 +2173,8 @@ export async function fixProveedorPrices() {
             .select(`
                 id, 
                 costo_promedio,
-                precio_lista
+                precio_lista,
+                precio_efectivo
             `)
             .not('costo_promedio', 'is', null);
 
@@ -2191,13 +2201,18 @@ export async function fixProveedorPrices() {
         let count = 0;
         for (const v of variants) {
             if (proveedorVariantIds.has(v.id)) {
-                const currentRaw = v.costo_promedio * 2.42;
-                const newPrice = roundListPrice(currentRaw);
+                // Recalculate BOTH prices to ensure total consistency
+                const rawPrecioLista = v.costo_promedio * 2.42;
+                const newPriceLista = roundListPrice(rawPrecioLista);
+                const newPriceEfectivo = (v.costo_promedio * 2) + 3000;
 
-                if (newPrice !== v.precio_lista) {
+                if (newPriceLista !== v.precio_lista || newPriceEfectivo !== v.precio_efectivo) {
                     const { error: updErr } = await supabase
                         .from('variantes')
-                        .update({ precio_lista: newPrice })
+                        .update({
+                            precio_lista: newPriceLista,
+                            precio_efectivo: newPriceEfectivo
+                        })
                         .eq('id', v.id);
                     if (!updErr) count++;
                 }

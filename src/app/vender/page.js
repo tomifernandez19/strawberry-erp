@@ -280,9 +280,13 @@ export default function VenderPage() {
                                 value={medioPago}
                                 onChange={(e) => setMedioPago(e.target.value)}
                                 className="input-field"
+                                style={{
+                                    borderColor: (items.length > 1 && medioPago !== 'MAYORISTA_EFECTIVO') ? 'var(--accent)' : 'var(--card-border)',
+                                    borderWidth: (items.length > 1 && medioPago !== 'MAYORISTA_EFECTIVO') ? '2px' : '1px'
+                                }}
                             >
                                 <option value="EFECTIVO">Efectivo 💵</option>
-                                <option value="MAYORISTA_EFECTIVO">Mayorista Efectivo 📦</option>
+                                <option value="MAYORISTA_EFECTIVO">Mayorista Efectivo 📦 {items.length > 1 ? '(RECOMENDADO)' : ''}</option>
                                 <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
                                 <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
                                 <option value="TRANSFERENCIA_PROVEEDOR">Transferencia Proveedor 🚚</option>
@@ -291,6 +295,11 @@ export default function VenderPage() {
                                 <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
                                 <option value="DIVIDIR_PAGOS">Dividir Pago (Efe + Otro) ⚖️</option>
                             </select>
+                            {items.length > 1 && medioPago !== 'MAYORISTA_EFECTIVO' && (
+                                <p style={{ fontSize: '0.7rem', color: 'var(--accent)', marginTop: '4px', fontWeight: 'bold' }}>
+                                    💡 Llevando {items.length} productos aplica precio Mayorista.
+                                </p>
+                            )}
                         </div>
 
                         {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(medioPago) && (
