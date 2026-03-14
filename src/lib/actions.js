@@ -372,30 +372,36 @@ export async function getProductDetailsByQR(qrCode) {
         throw new Error('Código QR no encontrado en el sistema.')
     }
 
-    // 2. Aggregate stock across all models with the same description AND color
+    // 2. Aggregate stock and find the LATEST variant for pricing
     // This handles the case where "MAITE NEGRO" exists in two different models (old vs new season)
     const desc = unidad.variantes?.modelos?.descripcion;
     const color = unidad.variantes?.color;
 
     let siblingUnits = [];
+    let latestVariant = unidad.variantes; // Default to scanned one
+
     if (desc && color) {
-        // Step A: Find all variant IDs that match the desc and color across any model
+        // Step A: Find all variants that match the desc and color across any model, ordered by newest
         const { data: matchingVariants } = await supabase
             .from('variantes')
-            .select('id, modelos!inner(descripcion)')
+            .select('*, modelos!inner(descripcion)')
             .ilike('modelos.descripcion', desc)
-            .eq('color', color);
+            .eq('color', color)
+            .order('created_at', { ascending: false });
 
-        const variantIds = (matchingVariants || []).map(v => v.id);
+        if (matchingVariants && matchingVariants.length > 0) {
+            latestVariant = matchingVariants[0]; // Use newest for pricing/display
+            const variantIds = matchingVariants.map(v => v.id);
 
-        // Step B: Get all available units for those variants
-        const { data: units } = await supabase
-            .from('unidades')
-            .select('talle_especifico')
-            .in('variante_id', variantIds)
-            .eq('estado', 'DISPONIBLE');
+            // Step B: Get all available units for those variants
+            const { data: units } = await supabase
+                .from('unidades')
+                .select('talle_especifico')
+                .in('variante_id', variantIds)
+                .eq('estado', 'DISPONIBLE');
 
-        siblingUnits = units || [];
+            siblingUnits = units || [];
+        }
     }
 
     // Count stock by size
@@ -407,8 +413,8 @@ export async function getProductDetailsByQR(qrCode) {
 
     return {
         unit: unidad,
-        model: unidad.variantes.modelos,
-        variant: unidad.variantes,
+        model: latestVariant.modelos,
+        variant: latestVariant,
         stockBySize: Object.entries(stockBySize)
             .map(([talle, qty]) => ({ talle, qty }))
             .sort((a, b) => String(a.talle).localeCompare(String(b.talle), undefined, { numeric: true }))
