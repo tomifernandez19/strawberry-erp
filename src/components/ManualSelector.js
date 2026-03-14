@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { getSearchSpecs, findUnitBySpecs } from '@/lib/actions'
 
-export default function ManualSelector({ onSelect, loading: externalLoading }) {
+export default function ManualSelector({ onSelect, loading: externalLoading, excludeQrs = [] }) {
     const [specs, setSpecs] = useState([])
     const [selection, setSelection] = useState({ model: '', color: '', size: '' })
     const [loading, setLoading] = useState(true)
@@ -23,7 +23,7 @@ export default function ManualSelector({ onSelect, loading: externalLoading }) {
 
         setSearching(true)
         try {
-            const qrCode = await findUnitBySpecs(selection.model, selection.color, selection.size)
+            const qrCode = await findUnitBySpecs(selection.model, selection.color, selection.size, excludeQrs)
             onSelect(qrCode)
         } catch (err) {
             alert(err.message)

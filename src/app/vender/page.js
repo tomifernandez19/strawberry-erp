@@ -215,7 +215,7 @@ export default function VenderPage() {
                     </div>
                 </div>
 
-                <ManualSelector onSelect={addItem} loading={loading} />
+                <ManualSelector onSelect={addItem} loading={loading} excludeQrs={items.map(it => it.codigo_qr)} />
             </div>
 
             {items.length > 0 && (

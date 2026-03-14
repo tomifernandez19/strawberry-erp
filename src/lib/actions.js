@@ -13,6 +13,22 @@ function roundListPrice(price) {
 }
 
 /**
+ * Helper to get the most recent pricing for any model/color combination.
+ */
+async function getLatestPricing(supabase, description, color) {
+    if (!description || !color) return null;
+    const { data } = await supabase
+        .from('variantes')
+        .select('precio_lista, precio_efectivo, modelos!inner(descripcion)')
+        .ilike('modelos.descripcion', description)
+        .eq('color', color)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    return data;
+}
+
+/**
  * Creates a new purchase, creates models/variants if they don't exist,
  * and generates the units ready for QR assignment.
  */
@@ -258,6 +274,13 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
             return { success: false, message: 'Datos del producto incompletos en la base de datos.' };
         }
 
+        // Apply LATEST pricing if available (e.g. if this is an old season unit)
+        const latest = await getLatestPricing(supabase, unidad.variantes.modelos.descripcion, unidad.variantes.color);
+        if (latest) {
+            unidad.variantes.precio_lista = latest.precio_lista;
+            unidad.variantes.precio_efectivo = latest.precio_efectivo;
+        }
+
         // Return a plain object to avoid serialization issues
         return {
             success: true,
@@ -303,16 +326,18 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     if (medio_pago === 'DIVIDIR_PAGOS') {
         calculatedTotal = Number(monto_efectivo) + Number(monto_otro);
     } else {
-        units.forEach(unidad => {
-            const baseEfectivo = unidad.variantes.precio_efectivo;
-            const baseLista = unidad.variantes.precio_lista;
+        for (const unidad of units) {
+            // Apply LATEST pricing for calculating totals
+            const latest = await getLatestPricing(supabase, unidad.variantes.modelos.descripcion, unidad.variantes.color);
+            const baseEfectivo = latest ? latest.precio_efectivo : unidad.variantes.precio_efectivo;
+            const baseLista = latest ? latest.precio_lista : unidad.variantes.precio_lista;
 
             let itemPrice = baseLista;
             if (['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio_pago)) {
                 itemPrice = baseEfectivo;
             }
             calculatedTotal += itemPrice;
-        });
+        }
     }
 
     // Apply Discount or Surcharge
@@ -1080,8 +1105,9 @@ export async function signOutAction() {
     await supabase.auth.signOut();
 }
 
-export async function findUnitBySpecs(modelDescription, color, talle, sku = null) {
+export async function findUnitBySpecs(modelDescription, color, talle, excludeQrs = []) {
     const supabase = createClient();
+    const cleanExclude = Array.isArray(excludeQrs) ? excludeQrs : [];
 
     // 0. Robust Model Name Extraction
     // Tiendanube name examples: "JUSTI (NEGRO, 35)", "SABADELL - CAMEL", "SHARON"
@@ -1146,18 +1172,22 @@ export async function findUnitBySpecs(modelDescription, color, talle, sku = null
         throw new Error(`No se encontró la variante "${cleanColor}" para el modelo encontrado`);
     }
 
-    // 3. Find FIRST available unit among ALL matching variants
-    const { data: unit, error: uError } = await supabase
+    // 3. Find FIRST available unit among ALL matching variants (excluding those already in cart)
+    let query = supabase
         .from('unidades')
         .select('codigo_qr')
         .in('variante_id', matchingVariantIds)
         .eq('talle_especifico', cleanTalle)
-        .eq('estado', 'DISPONIBLE')
-        .limit(1)
-        .maybeSingle();
+        .eq('estado', 'DISPONIBLE');
+
+    if (cleanExclude.length > 0) {
+        query = query.not('codigo_qr', 'in', `(${cleanExclude.join(',')})`);
+    }
+
+    const { data: unit, error: uError } = await query.limit(1).maybeSingle();
 
     if (uError || !unit) {
-        throw new Error(`STOCK AGOTADO: No hay stock disponible de ${baseModelName} talle ${cleanTalle}`);
+        throw new Error(`STOCK AGOTADO: No hay más stock disponible de ${baseModelName} talle ${cleanTalle}`);
     }
 
     return unit.codigo_qr;
