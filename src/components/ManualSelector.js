@@ -23,10 +23,14 @@ export default function ManualSelector({ onSelect, loading: externalLoading, exc
 
         setSearching(true)
         try {
-            const qrCode = await findUnitBySpecs(selection.model, selection.color, selection.size, excludeQrs)
-            onSelect(qrCode)
+            const result = await findUnitBySpecs(selection.model, selection.color, selection.size, excludeQrs)
+            if (result.success) {
+                onSelect(result.qr_code)
+            } else {
+                alert(result.message)
+            }
         } catch (err) {
-            alert(err.message)
+            alert("Error de conexión: " + err.message)
         } finally {
             setSearching(false)
         }

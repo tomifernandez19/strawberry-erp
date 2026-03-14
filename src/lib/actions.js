@@ -1188,13 +1188,13 @@ export async function findUnitBySpecs(modelDescription, color, talle, excludeQrs
         const { data: unit, error: uError } = await query.limit(1).maybeSingle();
 
         if (uError || !unit) {
-            throw new Error(`STOCK AGOTADO: No hay más stock disponible de ${baseModelName} talle ${cleanTalle}`);
+            return { success: false, message: `STOCK AGOTADO: No hay más stock disponible de ${baseModelName} talle ${cleanTalle}` };
         }
 
-        return unit.codigo_qr;
+        return { success: true, qr_code: unit.codigo_qr };
     } catch (err) {
         console.error("findUnitBySpecs Error:", err.message);
-        throw err; // Re-throw to be caught by the component
+        return { success: false, message: "Error al buscar unidad: " + err.message };
     }
 }
 
