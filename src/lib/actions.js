@@ -1865,7 +1865,6 @@ export async function getPendingInvoicesSummary() {
  * Marks a sale as invoiced.
  */
 export async function markAsInvoiced(ventaId) {
-    const { createClient } = require('@/lib/supabase/server')
     const supabase = createClient();
     try {
         const { error } = await supabase
@@ -1883,7 +1882,6 @@ export async function markAsInvoiced(ventaId) {
  * Gets the list of pending invoices.
  */
 export async function getPendingInvoicesList() {
-    const { createClient } = require('@/lib/supabase/server')
     const supabase = createClient();
     try {
         const { data, error } = await supabase
@@ -2196,7 +2194,7 @@ export async function sendToInvoiceSheet(ventaId) {
             .update({ facturado: true, cae: 'EN_PLANILLA' }) // Placeholder to know it's in progress
             .eq('id', ventaId);
 
-        if (updErr) console.warn("Could not mark as sent to sheet in DB, but sheet was updated.");
+        if (updErr) throw updErr;
 
         return { success: true };
     } catch (err) {
