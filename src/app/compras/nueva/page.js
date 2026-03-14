@@ -15,7 +15,7 @@ export default function NuevaCompraPage() {
         supplier_type: 'CAROLINA'
     })
     const [items, setItems] = useState([
-        { variante_id: '', cantidad: 1, costo_unitario: 0, descripcion: '', color: '', codigo_proveedor: '', curva: '35-39(37)' }
+        { variante_id: '', cantidad: 6, costo_unitario: 0, descripcion: '', color: '', codigo_proveedor: '', curva: '35-39(37)' }
     ])
     const [loading, setLoading] = useState(false)
 
@@ -173,7 +173,7 @@ export default function NuevaCompraPage() {
     }
 
     const addItem = () => {
-        setItems([...items, { variante_id: '', cantidad: 1, costo_unitario: 0, curva: '35-39(37)', localImage: null, descripcion: '', color: '', codigo_proveedor: '' }])
+        setItems([...items, { variante_id: '', cantidad: 6, costo_unitario: 0, curva: '35-39(37)', localImage: null, descripcion: '', color: '', codigo_proveedor: '' }])
     }
 
     const removeItem = (index) => {
@@ -211,8 +211,15 @@ export default function NuevaCompraPage() {
 
         // Auto-set quantity to 6 ONLY for full curves
         const curves = ['35-39(37)', '36-40(38)', '35-39(38)', '36-40(37)'];
-        if (field === 'curva' && curves.includes(value)) {
-            newItems[index].cantidad = 6
+        if (field === 'curva') {
+            if (curves.includes(value)) {
+                newItems[index].cantidad = 6
+            } else if (value !== 'manual' && value !== '') {
+                // If it's a single size ("35", "36", etc.), set quantity to 1 by default
+                // unless it was already higher
+                if (newItems[index].cantidad > 10) { /* keep it? maybe better to reset */ }
+                newItems[index].cantidad = 1
+            }
         }
 
         setItems(newItems)
