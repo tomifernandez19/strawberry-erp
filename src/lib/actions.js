@@ -1105,92 +1105,97 @@ export async function signOutAction() {
     await supabase.auth.signOut();
 }
 
-export async function findUnitBySpecs(modelDescription, color, talle, excludeQrs = []) {
+export async function findUnitBySpecs(modelDescription, color, talle, excludeQrs = [], sku = null) {
     const supabase = createClient();
-    const cleanExclude = Array.isArray(excludeQrs) ? excludeQrs : [];
+    try {
+        const cleanExclude = Array.isArray(excludeQrs) ? excludeQrs : [];
 
-    // 0. Robust Model Name Extraction
-    // Tiendanube name examples: "JUSTI (NEGRO, 35)", "SABADELL - CAMEL", "SHARON"
-    let baseModelName = (modelDescription || '').split(' (')[0].split(' - ')[0].trim();
+        // 0. Robust Model Name Extraction
+        // Tiendanube name examples: "JUSTI (NEGRO, 35)", "SABADELL - CAMEL", "SHARON"
+        let baseModelName = (modelDescription || '').split(' (')[0].split(' - ')[0].trim();
 
-    const cleanColor = (color || '').trim();
-    const cleanTalle = String(talle || '').trim();
+        const cleanColor = (color || '').trim();
+        const cleanTalle = String(talle || '').trim();
 
-    console.log(`[Matching] Attempting: ${baseModelName} | ${cleanColor} | T${cleanTalle} | SKU: ${sku}`);
+        console.log(`[Matching] Attempting: ${baseModelName} | ${cleanColor} | T${cleanTalle} | SKU: ${sku} | Exclude: ${cleanExclude.length}`);
 
-    // 1. Get variants
-    // Priority 1: Match model by SKU (Supplier Code part)
-    let variants = [];
-    if (sku) {
-        const skuParts = sku.split('-');
-        const supplierCodeFromSku = skuParts[0]; // "LE61JUSTI"
+        // 1. Get variants
+        // Priority 1: Match model by SKU (Supplier Code part)
+        let variants = [];
+        if (sku) {
+            const skuParts = sku.split('-');
+            const supplierCodeFromSku = skuParts[0]; // "LE61JUSTI"
 
-        const { data: skuVariants } = await supabase
-            .from('variantes')
-            .select(`
-                id, color,
-                modelos!inner(id, descripcion, codigo_proveedor)
-            `)
-            .eq('modelos.codigo_proveedor', supplierCodeFromSku);
+            const { data: skuVariants } = await supabase
+                .from('variantes')
+                .select(`
+                    id, color,
+                    modelos!inner(id, descripcion, codigo_proveedor)
+                `)
+                .eq('modelos.codigo_proveedor', supplierCodeFromSku);
 
-        if (skuVariants && skuVariants.length > 0) {
-            variants = skuVariants;
-            console.log(`[Matching] Found ${variants.length} variants by SKU Supplier Code: ${supplierCodeFromSku}`);
+            if (skuVariants && skuVariants.length > 0) {
+                variants = skuVariants;
+                console.log(`[Matching] Found ${variants.length} variants by SKU Supplier Code: ${supplierCodeFromSku}`);
+            }
         }
-    }
 
-    // Priority 2: Match model by Name if SKU search failed
-    if (variants.length === 0) {
-        const { data: nameVariants } = await supabase
-            .from('variantes')
-            .select(`
-                id, color,
-                modelos!inner(id, descripcion, codigo_proveedor)
-            `)
-            .ilike('modelos.descripcion', baseModelName);
+        // Priority 2: Match model by Name if SKU search failed
+        if (variants.length === 0) {
+            const { data: nameVariants } = await supabase
+                .from('variantes')
+                .select(`
+                    id, color,
+                    modelos!inner(id, descripcion, codigo_proveedor)
+                `)
+                .ilike('modelos.descripcion', baseModelName);
 
-        variants = nameVariants || [];
-        if (variants.length > 0) {
-            console.log(`[Matching] Found ${variants.length} variants by Model Name: ${baseModelName}`);
+            variants = nameVariants || [];
+            if (variants.length > 0) {
+                console.log(`[Matching] Found ${variants.length} variants by Model Name: ${baseModelName}`);
+            }
         }
+
+        if (variants.length === 0) {
+            throw new Error(`No se encontró el modelo "${baseModelName}" en el sistema`);
+        }
+
+        // 2. Find ALL matching variants for the requested color
+        const matchingVariantIds = variants
+            .filter(v =>
+                v.color.toLowerCase() === cleanColor.toLowerCase() ||
+                v.color.toLowerCase().includes(cleanColor.toLowerCase()) ||
+                cleanColor.toLowerCase().includes(v.color.toLowerCase())
+            )
+            .map(v => v.id);
+
+        if (matchingVariantIds.length === 0) {
+            throw new Error(`No se encontró la variante "${cleanColor}" para el modelo encontrado`);
+        }
+
+        // 3. Find FIRST available unit among ALL matching variants (excluding those already in cart)
+        let query = supabase
+            .from('unidades')
+            .select('codigo_qr')
+            .in('variante_id', matchingVariantIds)
+            .eq('talle_especifico', cleanTalle)
+            .eq('estado', 'DISPONIBLE');
+
+        if (cleanExclude.length > 0) {
+            query = query.not('codigo_qr', 'in', cleanExclude);
+        }
+
+        const { data: unit, error: uError } = await query.limit(1).maybeSingle();
+
+        if (uError || !unit) {
+            throw new Error(`STOCK AGOTADO: No hay más stock disponible de ${baseModelName} talle ${cleanTalle}`);
+        }
+
+        return unit.codigo_qr;
+    } catch (err) {
+        console.error("findUnitBySpecs Error:", err.message);
+        throw err; // Re-throw to be caught by the component
     }
-
-    if (variants.length === 0) {
-        throw new Error(`No se encontró el modelo "${baseModelName}" o SKU "${sku}" en el ERP`);
-    }
-
-    // 2. Find ALL matching variants for the requested color
-    const matchingVariantIds = variants
-        .filter(v =>
-            v.color.toLowerCase() === cleanColor.toLowerCase() ||
-            v.color.toLowerCase().includes(cleanColor.toLowerCase()) ||
-            cleanColor.toLowerCase().includes(v.color.toLowerCase())
-        )
-        .map(v => v.id);
-
-    if (matchingVariantIds.length === 0) {
-        throw new Error(`No se encontró la variante "${cleanColor}" para el modelo encontrado`);
-    }
-
-    // 3. Find FIRST available unit among ALL matching variants (excluding those already in cart)
-    let query = supabase
-        .from('unidades')
-        .select('codigo_qr')
-        .in('variante_id', matchingVariantIds)
-        .eq('talle_especifico', cleanTalle)
-        .eq('estado', 'DISPONIBLE');
-
-    if (cleanExclude.length > 0) {
-        query = query.not('codigo_qr', 'in', `(${cleanExclude.join(',')})`);
-    }
-
-    const { data: unit, error: uError } = await query.limit(1).maybeSingle();
-
-    if (uError || !unit) {
-        throw new Error(`STOCK AGOTADO: No hay más stock disponible de ${baseModelName} talle ${cleanTalle}`);
-    }
-
-    return unit.codigo_qr;
 }
 
 export async function getSearchSpecs() {
