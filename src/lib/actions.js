@@ -2166,21 +2166,21 @@ export async function sendToInvoiceSheet(ventaId) {
         const amount = venta.medio_pago === 'DIVIDIR_PAGOS' ? venta.monto_otro : venta.total;
 
         // Determine emisor (taxpayer)
-        let emisor = 'tomi'; // Default to tomi
-        const account = venta.cuenta_destino || '';
+        let emisor = 'tomi'; // Default fallback
+        const account = (venta.cuenta_destino || '').toUpperCase();
         const method = (venta.medio_pago || '').toUpperCase();
 
-        // Exact rules provided by the user:
-        // - Transferencia Tomi or Tiendanube -> tomi
-        // - Transferencia Lucas -> lucas
-        // - Tarjeta Debito, Tarjeta Credito, QR -> sofi
-        if (method.includes('TARJETA') || method.includes('QR') || account === 'SOFI_MP') {
+        console.log(`[Billing Debug] Venta ID: ${ventaId} | Account: ${account} | Method: ${method}`);
+
+        if (method.includes('TARJETA') || method.includes('QR') || account.includes('SOFI')) {
             emisor = 'sofi';
-        } else if (method.includes('LUCAS') || account === 'LUCAS') {
+        } else if (method.includes('LUCAS') || account.includes('LUCAS')) {
             emisor = 'lucas';
-        } else if (method.includes('TOMI') || method.includes('TIENDANUBE') || account === 'TOMI') {
+        } else {
             emisor = 'tomi';
         }
+
+        console.log(`[Billing Debug] Final Emisor: ${emisor}`);
 
         const sheetData = {
             id: venta.id,
