@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { syncProductToTiendanube, getAvailableStockDetailed } from '@/lib/actions'
+import { syncProductToTiendanube, getAvailableStockDetailed, fixProveedorPrices } from '@/lib/actions'
 import { useAuth } from '@/lib/context/AuthContext'
 
 export default function InventarioPage() {
@@ -9,6 +9,7 @@ export default function InventarioPage() {
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(null)
     const [search, setSearch] = useState('')
+    const [fixing, setFixing] = useState(false)
 
     useEffect(() => {
         fetchStock()
@@ -64,6 +65,24 @@ export default function InventarioPage() {
         }
     }
 
+    const handleFixPrices = async () => {
+        if (!confirm('¿Estás seguro de recalcular los precios de lista de todos los productos de "Proveedor"? (Redondeo a mil con salto en 100)')) return
+        setFixing(true);
+        try {
+            const result = await fixProveedorPrices();
+            if (result.success) {
+                alert(`✅ Se actualizaron ${result.updated} variantes.`);
+                fetchStock();
+            } else {
+                alert('❌ Error: ' + result.message);
+            }
+        } catch (e) {
+            alert('❌ Error: ' + e.message);
+        } finally {
+            setFixing(false);
+        }
+    }
+
     const filteredStock = stock.filter(item =>
         item.modelo.descripcion.toLowerCase().includes(search.toLowerCase())
     )
@@ -73,6 +92,16 @@ export default function InventarioPage() {
             <header className="text-center">
                 <h1>Inventario</h1>
                 <p style={{ opacity: 0.7 }}>Stock disponible por modelo</p>
+                {isAdmin && (
+                    <button
+                        className="btn-secondary mt-md"
+                        style={{ fontSize: '0.7rem', padding: '6px 12px' }}
+                        onClick={handleFixPrices}
+                        disabled={fixing}
+                    >
+                        {fixing ? '⌛ Recalculando...' : '⚙️ Recalcular Precios Listas (Proveedor)'}
+                    </button>
+                )}
             </header>
 
             <div className="card" style={{ padding: 'var(--spacing-md)' }}>

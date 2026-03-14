@@ -2,6 +2,17 @@
 import { createClient } from './supabase/server'
 
 /**
+ * Rounds the list price to the nearest thousand with a 100-skip threshold.
+ * If remainder < 100, round down to thousand.
+ * If remainder >= 100, round up to thousand.
+ */
+function roundListPrice(price) {
+    const thousand = Math.floor(price / 1000) * 1000;
+    const remainder = price % 1000;
+    return remainder < 100 ? thousand : thousand + 1000;
+}
+
+/**
  * Creates a new purchase, creates models/variants if they don't exist,
  * and generates the units ready for QR assignment.
  */
@@ -50,7 +61,8 @@ export async function createPurchase({ nro_remito, items, supplier_type = 'CAROL
                 .single()
 
             if (!variante) {
-                const precioLista = Math.round(costo_unitario * 2.42);
+                const rawPrecioLista = costo_unitario * 2.42;
+                const precioLista = roundListPrice(rawPrecioLista);
                 const precioEfectivo = (costo_unitario * 2) + 3000;
 
                 const { data: newVar, error: vErr } = await supabase
@@ -2135,6 +2147,66 @@ export async function sendToInvoiceSheet(ventaId) {
         return { success: true };
     } catch (err) {
         console.error("sendToInvoiceSheet error:", err);
+        return { success: false, message: err.message };
+    }
+}
+
+/**
+ * One-time action to fix prices for variants purchased from 'Proveedor'
+ * applying the new rounding logic.
+ */
+export async function fixProveedorPrices() {
+    const supabase = createClient();
+    try {
+        // 1. Find all variants
+        const { data: variants, error } = await supabase
+            .from('variantes')
+            .select(`
+                id, 
+                costo_promedio,
+                precio_lista
+            `)
+            .not('costo_promedio', 'is', null);
+
+        if (error) throw error;
+
+        // 2. Find all purchases from 'Proveedor'
+        const { data: proveedorPurchases } = await supabase
+            .from('compras')
+            .select('id')
+            .eq('propietario', 'Proveedor');
+
+        const purchaseIds = (proveedorPurchases || []).map(p => p.id);
+
+        if (purchaseIds.length === 0) return { success: true, updated: 0 };
+
+        // 3. Find variants involved in those purchases
+        const { data: proveedorDetail } = await supabase
+            .from('detalle_compras')
+            .select('variante_id')
+            .in('compra_id', purchaseIds);
+
+        const proveedorVariantIds = new Set((proveedorDetail || []).map(d => d.variante_id));
+
+        let count = 0;
+        for (const v of variants) {
+            if (proveedorVariantIds.has(v.id)) {
+                const currentRaw = v.costo_promedio * 2.42;
+                const newPrice = roundListPrice(currentRaw);
+
+                if (newPrice !== v.precio_lista) {
+                    const { error: updErr } = await supabase
+                        .from('variantes')
+                        .update({ precio_lista: newPrice })
+                        .eq('id', v.id);
+                    if (!updErr) count++;
+                }
+            }
+        }
+
+        return { success: true, updated: count };
+    } catch (err) {
+        console.error("fixProveedorPrices Error:", err);
         return { success: false, message: err.message };
     }
 }
