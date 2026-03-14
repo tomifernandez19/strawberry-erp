@@ -379,10 +379,10 @@ export async function getProductDetailsByQR(qrCode) {
 
     let siblingUnits = [];
     if (desc && color) {
-        // Step A: Find all variant IDs that match the desc and color
+        // Step A: Find all variant IDs that match the desc and color across any model
         const { data: matchingVariants } = await supabase
             .from('variantes')
-            .select('id')
+            .select('id, modelos!inner(descripcion)')
             .ilike('modelos.descripcion', desc)
             .eq('color', color);
 
