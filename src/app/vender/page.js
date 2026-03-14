@@ -399,6 +399,7 @@ export default function VenderPage() {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                 <label style={{ fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.8 }}>¿Cuánto le vas a cobrar? ($)</label>
                                 {montoDescuento > 0 && <span className="badge" style={{ backgroundColor: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>-{currentPct}% OFF</span>}
+                                {montoDescuento < 0 && <span className="badge" style={{ backgroundColor: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>+{Math.abs(currentPct)}% REC</span>}
                             </div>
 
                             <div className="grid" style={{ gap: '10px' }}>
@@ -409,15 +410,14 @@ export default function VenderPage() {
                                         className="input-field"
                                         placeholder={`Base: $${baseTotal}`}
                                         style={{ margin: 0, paddingLeft: '30px', fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}
-                                        value={finalTotal || ''}
+                                        value={finalTotal}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             if (!val) {
                                                 setMontoDescuento(0);
                                             } else {
                                                 const final = parseFloat(val);
-                                                if (final >= baseTotal) setMontoDescuento(0);
-                                                else setMontoDescuento(baseTotal - final);
+                                                setMontoDescuento(baseTotal - final);
                                             }
                                         }}
                                     />
