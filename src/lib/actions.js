@@ -1142,17 +1142,18 @@ export async function findUnitBySpecs(modelDescription, color, talle, excludeQrs
 
         // Priority 2: Match model by Name if SKU search failed
         if (variants.length === 0) {
+            // Find all models where the description contains the base name
             const { data: nameVariants } = await supabase
                 .from('variantes')
                 .select(`
                     id, color,
                     modelos!inner(id, descripcion, codigo_proveedor)
                 `)
-                .ilike('modelos.descripcion', baseModelName);
+                .ilike('modelos.descripcion', `%${baseModelName}%`);
 
             variants = nameVariants || [];
             if (variants.length > 0) {
-                console.log(`[Matching] Found ${variants.length} variants by Model Name: ${baseModelName}`);
+                console.log(`[Matching] Found ${variants.length} variants related to: ${baseModelName}`);
             }
         }
 
