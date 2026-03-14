@@ -1174,22 +1174,24 @@ export async function findUnitBySpecs(modelDescription, color, talle, excludeQrs
             throw new Error(`No se encontró la variante "${cleanColor}" para el modelo encontrado`);
         }
 
-        // 3. Find FIRST available unit among ALL matching variants (excluding those already in cart)
-        let query = supabase
+        // 3. Find FIRST available unit among ALL matching variants
+        const { data: units, error: uError } = await supabase
             .from('unidades')
             .select('codigo_qr')
             .in('variante_id', matchingVariantIds)
             .eq('talle_especifico', cleanTalle)
-            .eq('estado', 'DISPONIBLE');
+            .eq('estado', 'DISPONIBLE')
+            .limit(20);
 
-        if (cleanExclude.length > 0) {
-            query = query.not('codigo_qr', 'in', cleanExclude);
+        if (uError || !units || units.length === 0) {
+            return { success: false, message: `STOCK AGOTADO: No hay stock disponible de ${baseModelName} talle ${cleanTalle}` };
         }
 
-        const { data: unit, error: uError } = await query.limit(1).maybeSingle();
+        // Filter out those already in cart in JavaScript to avoid PostgREST hyphen issues
+        const unit = units.find(u => !cleanExclude.includes(u.codigo_qr));
 
-        if (uError || !unit) {
-            return { success: false, message: `STOCK AGOTADO: No hay más stock disponible de ${baseModelName} talle ${cleanTalle}` };
+        if (!unit) {
+            return { success: false, message: `STOCK AGOTADO: Ya agregaste todas las unidades disponibles de ${baseModelName} talle ${cleanTalle}` };
         }
 
         return { success: true, qr_code: unit.codigo_qr };
