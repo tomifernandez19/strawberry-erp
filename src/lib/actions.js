@@ -2167,8 +2167,16 @@ export async function sendToInvoiceSheet(ventaId) {
 
         // Determine emisor (taxpayer)
         let emisor = 'tomi';
-        if (venta.cuenta_destino === 'SOFI_MP') emisor = 'sofi';
-        else if (venta.cuenta_destino === 'LUCAS') emisor = 'lucas';
+        const account = venta.cuenta_destino;
+        const method = venta.medio_pago;
+
+        if (account === 'SOFI_MP' || ['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(method)) {
+            emisor = 'sofi';
+        } else if (account === 'LUCAS' || method === 'TRANSFERENCIA_LUCAS') {
+            emisor = 'lucas';
+        } else if (account === 'TOMI' || method === 'TRANSFERENCIA_TOMI' || ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_PROVEEDOR'].includes(method)) {
+            emisor = 'tomi';
+        }
 
         const sheetData = {
             id: venta.id,
