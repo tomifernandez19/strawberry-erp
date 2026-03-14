@@ -28,6 +28,9 @@ export async function appendToSheet(data) {
         throw new Error('Worksheet "facturacion" not found in spreadsheet.');
     }
 
+    const headers = sheet.headerValues;
+    const emisorKey = headers.find(h => h.toLowerCase() === 'emisor') || 'emisor';
+
     await sheet.addRow({
         id: data.id,
         fecha: data.fecha,
@@ -36,6 +39,7 @@ export async function appendToSheet(data) {
         nro_doc: data.nro_doc,
         total: data.total,
         medio_pago: data.medio_pago,
+        [emisorKey]: data.emisor,
         estado: 'pendiente',
         cae: '',
         nro_cbte: '',

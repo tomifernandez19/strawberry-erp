@@ -1,5 +1,6 @@
 'use server'
 import { createClient } from './supabase/server'
+import { appendToSheet } from './sheets'
 
 /**
  * Rounds the list price to the nearest thousand with a 100-skip threshold.
@@ -2150,8 +2151,6 @@ export async function recordTransfer({ from, to, amount, reason, person }) {
 
 
 export async function sendToInvoiceSheet(ventaId) {
-    const { createClient } = require('@/lib/supabase/server')
-    const { appendToSheet } = require('./sheets')
     const supabase = createClient();
 
     try {
@@ -2170,8 +2169,6 @@ export async function sendToInvoiceSheet(ventaId) {
         const account = (venta.cuenta_destino || '').toUpperCase();
         const method = (venta.medio_pago || '').toUpperCase();
 
-        console.log(`[Billing Debug] Venta ID: ${ventaId} | Account: ${account} | Method: ${method}`);
-
         if (method.includes('TARJETA') || method.includes('QR') || account.includes('SOFI')) {
             emisor = 'sofi';
         } else if (method.includes('LUCAS') || account.includes('LUCAS')) {
@@ -2179,8 +2176,6 @@ export async function sendToInvoiceSheet(ventaId) {
         } else {
             emisor = 'tomi';
         }
-
-        console.log(`[Billing Debug] Final Emisor: ${emisor}`);
 
         const sheetData = {
             id: venta.id,
