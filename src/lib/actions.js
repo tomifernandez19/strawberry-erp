@@ -356,10 +356,12 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
 
 /**
  * Fetches full product details and stock status for a model based on a single unit's QR.
+ * Aggregates stock across all variants with the same description and color.
  */
 export async function getProductDetailsByQR(qrCode) {
     const supabase = createClient();
-    // 1. Find the specific unit
+
+    // 1. Find the specific unit scanned
     const { data: unidad, error: unitError } = await supabase
         .from('unidades')
         .select('*, variantes(*, modelos(*))')
@@ -370,24 +372,46 @@ export async function getProductDetailsByQR(qrCode) {
         throw new Error('Código QR no encontrado en el sistema.')
     }
 
-    // 2. Get all variants for this model to show available sizes
-    const { data: siblingUnits, error: siblingsError } = await supabase
-        .from('unidades')
-        .select('talle_especifico, estado')
-        .eq('variante_id', unidad.variante_id)
-        .eq('estado', 'DISPONIBLE')
+    // 2. Aggregate stock across all models with the same description AND color
+    // This handles the case where "MAITE NEGRO" exists in two different models (old vs new season)
+    const desc = unidad.variantes?.modelos?.descripcion;
+    const color = unidad.variantes?.color;
+
+    let siblingUnits = [];
+    if (desc && color) {
+        // Step A: Find all variant IDs that match the desc and color
+        const { data: matchingVariants } = await supabase
+            .from('variantes')
+            .select('id')
+            .ilike('modelos.descripcion', desc)
+            .eq('color', color);
+
+        const variantIds = (matchingVariants || []).map(v => v.id);
+
+        // Step B: Get all available units for those variants
+        const { data: units } = await supabase
+            .from('unidades')
+            .select('talle_especifico')
+            .in('variante_id', variantIds)
+            .eq('estado', 'DISPONIBLE');
+
+        siblingUnits = units || [];
+    }
 
     // Count stock by size
     const stockBySize = siblingUnits.reduce((acc, curr) => {
-        acc[curr.talle_especifico] = (acc[curr.talle_especifico] || 0) + 1
-        return acc
-    }, {})
+        const talle = curr.talle_especifico;
+        acc[talle] = (acc[talle] || 0) + 1;
+        return acc;
+    }, {});
 
     return {
         unit: unidad,
         model: unidad.variantes.modelos,
         variant: unidad.variantes,
-        stockBySize: Object.entries(stockBySize).map(([talle, qty]) => ({ talle, qty }))
+        stockBySize: Object.entries(stockBySize)
+            .map(([talle, qty]) => ({ talle, qty }))
+            .sort((a, b) => String(a.talle).localeCompare(String(b.talle), undefined, { numeric: true }))
     }
 }
 
@@ -1082,35 +1106,24 @@ export async function findUnitBySpecs(modelDescription, color, talle, sku = null
         throw new Error(`No se encontró el modelo "${baseModelName}" o SKU "${sku}" en el ERP`);
     }
 
-    // 2. Find the best matching variant among those found
-    let matchingVariant = null;
-
-    // A. Priority: Exact SKU match
-    if (sku) {
-        matchingVariant = variants.find(v => {
-            const expectedSku = `${v.modelos.codigo_proveedor}-${v.color.substring(0, 3)}-${cleanTalle}`.toUpperCase();
-            return sku.toUpperCase() === expectedSku;
-        });
-    }
-
-    // B. Secondary: Color Name match
-    if (!matchingVariant) {
-        matchingVariant = variants.find(v =>
+    // 2. Find ALL matching variants for the requested color
+    const matchingVariantIds = variants
+        .filter(v =>
             v.color.toLowerCase() === cleanColor.toLowerCase() ||
             v.color.toLowerCase().includes(cleanColor.toLowerCase()) ||
             cleanColor.toLowerCase().includes(v.color.toLowerCase())
-        );
-    }
+        )
+        .map(v => v.id);
 
-    if (!matchingVariant) {
+    if (matchingVariantIds.length === 0) {
         throw new Error(`No se encontró la variante "${cleanColor}" para el modelo encontrado`);
     }
 
-    // 3. Find available unit
+    // 3. Find FIRST available unit among ALL matching variants
     const { data: unit, error: uError } = await supabase
         .from('unidades')
         .select('codigo_qr')
-        .eq('variante_id', matchingVariant.id)
+        .in('variante_id', matchingVariantIds)
         .eq('talle_especifico', cleanTalle)
         .eq('estado', 'DISPONIBLE')
         .limit(1)
