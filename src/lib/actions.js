@@ -2177,7 +2177,7 @@ export async function sendToInvoiceSheet(ventaId) {
             tipo_doc: 'CF',
             nro_doc: '0',
             total: amount,
-            medio_pago: venta.medio_pago,
+            medio_pago: 'TARJETA',
             emisor: emisor
         };
 
