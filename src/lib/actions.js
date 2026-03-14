@@ -294,8 +294,8 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
         });
     }
 
-    // Apply Discount
-    if (monto_descuento_fijo > 0) {
+    // Apply Discount or Surcharge
+    if (monto_descuento_fijo !== 0) {
         calculatedTotal = Math.max(0, calculatedTotal - Number(monto_descuento_fijo));
     } else if (descuento > 0) {
         calculatedTotal = Math.round(calculatedTotal * (1 - (descuento / 100)));
@@ -2087,6 +2087,11 @@ export async function sendToInvoiceSheet(ventaId) {
 
         const amount = venta.medio_pago === 'DIVIDIR_PAGOS' ? venta.monto_otro : venta.total;
 
+        // Determine emisor (taxpayer)
+        let emisor = 'tomi';
+        if (venta.cuenta_destino === 'SOFI_MP') emisor = 'sofi';
+        else if (venta.cuenta_destino === 'LUCAS') emisor = 'lucas';
+
         const sheetData = {
             id: venta.id,
             fecha: new Date(venta.created_at).toLocaleString('es-AR'),
@@ -2095,6 +2100,7 @@ export async function sendToInvoiceSheet(ventaId) {
             nro_doc: '0',
             total: amount,
             medio_pago: venta.medio_pago,
+            emisor: emisor
         };
 
         await appendToSheet(sheetData);
