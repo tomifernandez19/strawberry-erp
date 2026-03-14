@@ -2166,15 +2166,19 @@ export async function sendToInvoiceSheet(ventaId) {
         const amount = venta.medio_pago === 'DIVIDIR_PAGOS' ? venta.monto_otro : venta.total;
 
         // Determine emisor (taxpayer)
-        let emisor = 'tomi';
-        const account = venta.cuenta_destino;
-        const method = venta.medio_pago;
+        let emisor = 'tomi'; // Default to tomi
+        const account = venta.cuenta_destino || '';
+        const method = (venta.medio_pago || '').toUpperCase();
 
-        if (account === 'SOFI_MP' || ['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(method)) {
+        // Exact rules provided by the user:
+        // - Transferencia Tomi or Tiendanube -> tomi
+        // - Transferencia Lucas -> lucas
+        // - Tarjeta Debito, Tarjeta Credito, QR -> sofi
+        if (method.includes('TARJETA') || method.includes('QR') || account === 'SOFI_MP') {
             emisor = 'sofi';
-        } else if (account === 'LUCAS' || method === 'TRANSFERENCIA_LUCAS') {
+        } else if (method.includes('LUCAS') || account === 'LUCAS') {
             emisor = 'lucas';
-        } else if (account === 'TOMI' || method === 'TRANSFERENCIA_TOMI' || ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_PROVEEDOR'].includes(method)) {
+        } else if (method.includes('TOMI') || method.includes('TIENDANUBE') || account === 'TOMI') {
             emisor = 'tomi';
         }
 
