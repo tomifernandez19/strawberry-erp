@@ -952,43 +952,47 @@ export async function getCapitalContributionsReport() {
     };
 }
 export async function deleteSale(saleId) {
-    if (!saleId) throw new Error("ID de venta no proporcionado");
+    if (!saleId) return { success: false, message: "ID de venta no proporcionado" };
 
     const supabase = createClient();
 
-    // 1. Revert all units associated with this sale to DISPONIBLE
-    const { error: unitError } = await supabase
-        .from('unidades')
-        .update({
-            estado: 'DISPONIBLE',
-            venta_id: null,
-            fecha_venta: null
-        })
-        .eq('venta_id', saleId);
+    try {
+        // 1. Revert all units associated with this sale to DISPONIBLE
+        const { error: unitError } = await supabase
+            .from('unidades')
+            .update({
+                estado: 'DISPONIBLE',
+                venta_id: null,
+                fecha_venta: null
+            })
+            .eq('venta_id', saleId);
 
-    if (unitError) {
-        console.error("[deleteSale] Unit Revert Error:", unitError);
-        throw new Error("No se pudieron liberar los productos de esta venta.");
+        if (unitError) {
+            console.error("[deleteSale] Unit Revert Error:", unitError);
+            return { success: false, message: "No se pudieron liberar los productos de esta venta." };
+        }
+
+        // 2. Delete the sale record itself
+        const { data: deleted, error: saleError } = await supabase
+            .from('ventas')
+            .delete()
+            .eq('id', saleId)
+            .select();
+
+        if (saleError) {
+            console.error("[deleteSale] Sale Delete Error:", saleError);
+            return { success: false, message: "Error de base de datos al borrar venta: " + saleError.message };
+        }
+
+        if (!deleted || deleted.length === 0) {
+            return { success: false, message: "No se pudo eliminar el registro de la venta. Es posible que no tengas permisos o ya se haya borrado." };
+        }
+
+        return { success: true };
+    } catch (err) {
+        console.error("[deleteSale] Unexpected error:", err);
+        return { success: false, message: "Error inesperado al anular la venta." };
     }
-
-    // 2. Delete the sale record itself
-    const { data: deleted, error: saleError } = await supabase
-        .from('ventas')
-        .delete()
-        .eq('id', saleId)
-        .select();
-
-    if (saleError) {
-        console.error("[deleteSale] Sale Delete Error:", saleError);
-        throw new Error("Error de base de datos al borrar venta: " + saleError.message);
-    }
-
-    if (!deleted || deleted.length === 0) {
-        console.error("[deleteSale] Row not found or RLS blocked delete for ID:", saleId);
-        throw new Error("No se pudo eliminar el registro de la venta. Es posible que no tengas permisos suficientes o la venta ya no exista.");
-    }
-
-    return true;
 }
 
 /**

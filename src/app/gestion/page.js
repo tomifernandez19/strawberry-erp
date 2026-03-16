@@ -124,12 +124,19 @@ export default function GestionPage() {
 
     const handleDeleteSale = async (saleId) => {
         if (!confirm('¿Seguro quieres anular esta venta? El producto volverá a estar disponible.')) return
+        setLoading(true)
         try {
-            await deleteSale(saleId)
-            fetchVentas()
-            fetchCounters()
+            const res = await deleteSale(saleId)
+            if (res.success) {
+                fetchVentas()
+                fetchCounters()
+            } else {
+                alert(res.message)
+            }
         } catch (err) {
-            alert(err.message)
+            alert("Error de conexión: " + err.message)
+        } finally {
+            setLoading(false)
         }
     }
 
