@@ -148,8 +148,8 @@ export default function VenderPage() {
         let baseTotal = totalLista
         const esEfeOTra = ['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago)
 
-        // When splitting, user wants to use List Price as base, so no discount for the cash part unless manually applied
-        if (medioPago === 'DIVIDIR_PAGOS') baseTotal = totalLista
+        // When splitting, base total is the sum of both parts (initialized to totalLista)
+        if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || totalLista
         else if (esEfeOTra) baseTotal = totalEfectivo
         else if (medioPago === 'MAYORISTA_EFECTIVO') baseTotal = totalMayorista
 
@@ -389,13 +389,13 @@ export default function VenderPage() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Monto Restante (Auto):</label>
+                                    <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>Monto Restante:</label>
                                     <input
                                         type="number"
                                         value={montoOtro}
-                                        readOnly
+                                        onChange={(e) => setMontoOtro(e.target.value)}
                                         className="input-field"
-                                        style={{ backgroundColor: 'rgba(255,255,255,0.05)', cursor: 'not-allowed', color: 'var(--accent)', fontWeight: 'bold' }}
+                                        style={{ color: 'var(--accent)', fontWeight: 'bold' }}
                                     />
                                 </div>
                                 {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(otroMedioPago) && (
