@@ -17,6 +17,7 @@ export default function GestionPage() {
     const [loading, setLoading] = useState(false)
     const [editingVariant, setEditingVariant] = useState(null)
     const [activatingTN, setActivatingTN] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -262,100 +263,125 @@ export default function GestionPage() {
             <nav style={{ display: 'flex', gap: '8px', marginTop: '20px', overflowX: 'auto', paddingBottom: '5px' }}>
                 <button
                     className={tab === 'ventas' ? 'btn-primary' : 'btn-secondary'}
-                    onClick={() => setTab('ventas')}
+                    onClick={() => { setTab('ventas'); setSearchQuery(''); }}
                     style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
                 >
                     Ventas
                 </button>
                 <button
                     className={tab === 'stock' ? 'btn-primary' : 'btn-secondary'}
-                    onClick={() => setTab('stock')}
+                    onClick={() => { setTab('stock'); setSearchQuery(''); }}
                     style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
                 >
                     Precio/Stock
                 </button>
                 <button
                     className={tab === 'imagenes' ? 'btn-primary' : 'btn-secondary'}
-                    onClick={() => setTab('imagenes')}
+                    onClick={() => { setTab('imagenes'); setSearchQuery(''); }}
                     style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
                 >
                     Cargar Fotos
                 </button>
             </nav>
 
+            <div className="card mt-md" style={{ padding: '10px' }}>
+                <input
+                    type="text"
+                    placeholder={`Buscar en ${tab === 'ventas' ? 'ventas' : tab === 'stock' ? 'stock' : 'fotos'}...`}
+                    className="input-field"
+                    style={{ margin: 0, fontSize: '0.9rem' }}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+            </div>
+
             <section className="mt-lg">
                 {loading ? (
                     <p className="text-center">Cargando...</p>
                 ) : tab === 'ventas' ? (
                     <div className="grid" style={{ gap: '15px' }}>
-                        {ventas.map(v => {
-                            const sale = v.ventas;
-                            return (
-                                <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <h4 style={{ margin: 0 }}>{v.variantes?.modelos?.descripcion || 'Sin descripción'}</h4>
-                                            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                                                {new Date(v.fecha_venta).toLocaleString()} • {v.estado === 'VENDIDO_ONLINE' ? 'TIENDANUBE' : (sale?.medio_pago || 'S/D')}
-                                            </p>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '5px' }}>
-                                                <div>
-                                                    <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: 0 }}>
-                                                        Neto: $ {(sale?.monto_neto || sale?.total || 0).toLocaleString()}
-                                                    </p>
-                                                    <p style={{ fontSize: '0.65rem', opacity: 0.4, margin: 0 }}>
-                                                        Lista: $ {(sale?.total || 0).toLocaleString()}
-                                                    </p>
+                        {ventas
+                            .filter(v => {
+                                const q = searchQuery.toLowerCase();
+                                return (v.variantes?.modelos?.descripcion || '').toLowerCase().includes(q) ||
+                                    (v.variantes?.color || '').toLowerCase().includes(q) ||
+                                    (v.codigo_qr || '').toLowerCase().includes(q);
+                            })
+                            .map(v => {
+                                const sale = v.ventas;
+                                return (
+                                    <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <div style={{ flex: 1 }}>
+                                                <h4 style={{ margin: 0 }}>{v.variantes?.modelos?.descripcion || 'Sin descripción'}</h4>
+                                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
+                                                    {new Date(v.fecha_venta).toLocaleString()} • {v.estado === 'VENDIDO_ONLINE' ? 'TIENDANUBE' : (sale?.medio_pago || 'S/D')}
+                                                </p>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '5px' }}>
+                                                    <div>
+                                                        <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: 0 }}>
+                                                            Neto: $ {(sale?.monto_neto || sale?.total || 0).toLocaleString()}
+                                                        </p>
+                                                        <p style={{ fontSize: '0.65rem', opacity: 0.4, margin: 0 }}>
+                                                            Lista: $ {(sale?.total || 0).toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                    {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 8px', background: '#eab308', color: 'black' }}>ONLINE</span>}
                                                 </div>
-                                                {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 8px', background: '#eab308', color: 'black' }}>ONLINE</span>}
                                             </div>
+                                            {sale && (
+                                                <button
+                                                    onClick={() => handleDeleteSale(sale.id)}
+                                                    style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                                >
+                                                    Anular ✕
+                                                </button>
+                                            )}
                                         </div>
-                                        {sale && (
-                                            <button
-                                                onClick={() => handleDeleteSale(sale.id)}
-                                                style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
-                                            >
-                                                Anular ✕
-                                            </button>
-                                        )}
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
                     </div>
                 ) : tab === 'stock' ? (
                     <div className="grid" style={{ gap: '15px' }}>
-                        {stock.map(u => (
-                            <div key={u.id} className="card" style={{ padding: '15px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                        {u.variantes?.imagen_url && (
-                                            <img src={u.variantes.imagen_url} alt="Prod" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px' }} />
-                                        )}
-                                        <div>
-                                            <h4 style={{ margin: 0 }}>{u.variantes?.modelos?.descripcion}</h4>
-                                            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                                                QR: {u.codigo_qr} • Talle: {u.talle_especifico} • {u.variantes?.color}
-                                            </p>
+                        {stock
+                            .filter(u => {
+                                const q = searchQuery.toLowerCase();
+                                return (u.variantes?.modelos?.descripcion || '').toLowerCase().includes(q) ||
+                                    (u.variantes?.color || '').toLowerCase().includes(q) ||
+                                    (u.codigo_qr || '').toLowerCase().includes(q);
+                            })
+                            .map(u => (
+                                <div key={u.id} className="card" style={{ padding: '15px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                            {u.variantes?.imagen_url && (
+                                                <img src={u.variantes.imagen_url} alt="Prod" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px' }} />
+                                            )}
+                                            <div>
+                                                <h4 style={{ margin: 0 }}>{u.variantes?.modelos?.descripcion}</h4>
+                                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
+                                                    QR: {u.codigo_qr} • Talle: {u.talle_especifico} • {u.variantes?.color}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => setEditingVariant(u.variantes)}
+                                                style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                            >
+                                                Precio
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteUnit(u.id)}
+                                                style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                            >
+                                                Eliminar
+                                            </button>
                                         </div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button
-                                            onClick={() => setEditingVariant(u.variantes)}
-                                            style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}
-                                        >
-                                            Precio
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteUnit(u.id)}
-                                            style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer' }}
-                                        >
-                                            Eliminar
-                                        </button>
-                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
                     </div>
                 ) : (
                     <div className="grid" style={{ gap: '15px' }}>
@@ -364,26 +390,32 @@ export default function GestionPage() {
                                 <p>✅ Todos los productos tienen foto</p>
                             </div>
                         ) : (
-                            missingImages.map(v => (
-                                <div key={v.id} className="card" style={{ padding: '15px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <h4 style={{ margin: 0 }}>{v.modelos?.descripcion}</h4>
-                                            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{v.color}</p>
+                            missingImages
+                                .filter(v => {
+                                    const q = searchQuery.toLowerCase();
+                                    return (v.modelos?.descripcion || '').toLowerCase().includes(q) ||
+                                        (v.color || '').toLowerCase().includes(q);
+                                })
+                                .map(v => (
+                                    <div key={v.id} className="card" style={{ padding: '15px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <h4 style={{ margin: 0 }}>{v.modelos?.descripcion}</h4>
+                                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{v.color}</p>
+                                            </div>
+                                            <label className="btn-primary" style={{ cursor: 'pointer', padding: '10px 15px', fontSize: '0.85rem' }}>
+                                                📷 Subir Foto
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    capture="environment"
+                                                    style={{ display: 'none' }}
+                                                    onChange={(e) => handleImageUpload(v.id, e)}
+                                                />
+                                            </label>
                                         </div>
-                                        <label className="btn-primary" style={{ cursor: 'pointer', padding: '10px 15px', fontSize: '0.85rem' }}>
-                                            📷 Subir Foto
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                capture="environment"
-                                                style={{ display: 'none' }}
-                                                onChange={(e) => handleImageUpload(v.id, e)}
-                                            />
-                                        </label>
                                     </div>
-                                </div>
-                            ))
+                                ))
                         )}
                     </div>
                 )}
