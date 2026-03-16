@@ -1053,13 +1053,18 @@ export async function reconcileSale(saleId, { monto_neto, dias_acreditacion }) {
  */
 export async function deleteUnit(unitId) {
     const supabase = createClient();
-    const { error } = await supabase
-        .from('unidades')
-        .delete()
-        .eq('id', unitId);
+    try {
+        const { error } = await supabase
+            .from('unidades')
+            .delete()
+            .eq('id', unitId);
 
-    if (error) throw error;
-    return true;
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        console.error("[deleteUnit] Error:", err);
+        return { success: false, message: "No se pudo eliminar la unidad: " + err.message };
+    }
 }
 
 /**
@@ -1067,13 +1072,18 @@ export async function deleteUnit(unitId) {
  */
 export async function updateVariant(variantId, updates) {
     const supabase = createClient();
-    const { error } = await supabase
-        .from('variantes')
-        .update(updates)
-        .eq('id', variantId);
+    try {
+        const { error } = await supabase
+            .from('variantes')
+            .update(updates)
+            .eq('id', variantId);
 
-    if (error) throw error;
-    return true;
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        console.error("[updateVariant] Error:", err);
+        return { success: false, message: "No se pudieron actualizar los precios: " + err.message };
+    }
 }
 
 /**
@@ -1835,7 +1845,6 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
  * Gets a summary of pending invoices grouped by responsible person.
  */
 export async function getPendingInvoicesSummary() {
-    const { createClient } = require('@/lib/supabase/server')
     const supabase = createClient();
     try {
         const { data, error } = await supabase
@@ -1861,6 +1870,7 @@ export async function getPendingInvoicesSummary() {
 
         return { success: true, count: summary };
     } catch (err) {
+        console.error("[getPendingInvoicesSummary] Error:", err);
         return { success: false, message: err.message };
     }
 }
