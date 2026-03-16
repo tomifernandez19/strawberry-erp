@@ -148,9 +148,10 @@ export default function VenderPage() {
         let baseTotal = totalLista
         const esEfeOTra = ['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago)
 
-        if (esEfeOTra) baseTotal = totalEfectivo
+        // When splitting, user wants to use List Price as base, so no discount for the cash part unless manually applied
+        if (medioPago === 'DIVIDIR_PAGOS') baseTotal = totalLista
+        else if (esEfeOTra) baseTotal = totalEfectivo
         else if (medioPago === 'MAYORISTA_EFECTIVO') baseTotal = totalMayorista
-        else if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || 0
 
         let finalTotal = baseTotal - montoDescuento
         const currentPct = baseTotal > 0 ? Math.round((montoDescuento / baseTotal) * 100) : 0
@@ -362,15 +363,14 @@ export default function VenderPage() {
                                             setMontoEfectivo(val);
                                             if (val && !isNaN(val)) {
                                                 const efeAmount = parseFloat(val);
-                                                const portionOfCashPrice = efeAmount / totalEfectivo;
-                                                const remainingListPrice = Math.round(totalLista * (1 - portionOfCashPrice));
-                                                setMontoOtro(remainingListPrice > 0 ? remainingListPrice : 0);
+                                                const remaining = Math.max(0, totalLista - efeAmount);
+                                                setMontoOtro(remaining);
                                             } else {
                                                 setMontoOtro('');
                                             }
                                         }}
                                         className="input-field"
-                                        placeholder={`Máx: $${totalEfectivo}`}
+                                        placeholder={`Total Lista: $${totalLista}`}
                                     />
                                 </div>
                                 <div>
@@ -380,10 +380,12 @@ export default function VenderPage() {
                                         onChange={(e) => setOtroMedioPago(e.target.value)}
                                         className="input-field"
                                     >
-                                        <option value="TARJETA_DEBITO">Tarjeta Débito 💳</option>
-                                        <option value="TARJETA_CREDITO">Tarjeta Crédito 💳</option>
-                                        <option value="TRANSFERENCIA">Transferencia 📱</option>
-                                        <option value="QR_LISTA">QR Pago / Otros 🔘</option>
+                                        <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
+                                        <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
+                                        <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
+                                        <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
+                                        <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
+                                        <option value="TRANSFERENCIA_PROVEEDOR">Transferencia Proveedor 🚚</option>
                                     </select>
                                 </div>
                                 <div>
