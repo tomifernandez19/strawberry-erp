@@ -513,7 +513,7 @@ export default function GestionPage() {
 
                         <div className="grid" style={{ gap: '15px' }}>
                             <div>
-                                <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>PRECIO EFECTIVO (Billetes 💵):</label>
+                                <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>EFECTIVO / TRANSFERENCIA 💵:</label>
                                 <input
                                     type="number"
                                     className="input-field"
@@ -525,11 +525,11 @@ export default function GestionPage() {
                                     }}
                                     autoFocus
                                 />
-                                <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Este es el que usás para cobrar en mano.</p>
+                                <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Este es el precio final para billetes o transferencias.</p>
                             </div>
 
                             <div>
-                                <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>PRECIO LISTA (Tarjetas 💳):</label>
+                                <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>PRECIO LISTA (TARJETAS 💳):</label>
                                 <input
                                     type="number"
                                     className="input-field"
@@ -541,13 +541,8 @@ export default function GestionPage() {
                                         setEditPrices({ lista: lista, efectivo: efe });
                                     }}
                                 />
-                                <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Equivale a sumar el 21% al efectivo.</p>
+                                <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Es el precio base con el 21% incluido para cobrar con tarjeta.</p>
                             </div>
-                        </div>
-
-                        <div className="card mt-md" style={{ background: 'rgba(255,255,255,0.02)', padding: '10px' }}>
-                            <p style={{ fontSize: '0.65rem', opacity: 0.5, margin: 0 }}>Transferencia (Ref):</p>
-                            <p style={{ fontSize: '0.9rem', margin: 0 }}>$ {Math.round(editPrices.lista * (100 / 110)).toLocaleString()}</p>
                         </div>
 
                         <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
