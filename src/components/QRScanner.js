@@ -32,7 +32,10 @@ export default function QRScanner({ onScanSuccess, label = "Escanee un código Q
                         aspectRatio: 1.0,
                     },
                     (decodedText) => {
-                        onScanRef.current(decodedText)
+                        // Robust extraction: catch ST-000000 even if embedded in a URL
+                        const match = (decodedText || '').match(/ST-\d{6}/i)
+                        const cleanText = match ? match[0].toUpperCase() : decodedText.trim().toUpperCase()
+                        onScanRef.current(cleanText)
                     },
                     () => { /* ignore silent failure */ }
                 )

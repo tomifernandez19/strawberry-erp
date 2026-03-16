@@ -35,9 +35,13 @@ export default function CambiosPage() {
     }
 
     const handleScanOld = async (qr) => {
+        const match = (qr || '').match(/ST-\d{6}/i)
+        const cleanQr = match ? match[0].toUpperCase() : qr.toUpperCase().trim()
+        if (!cleanQr) return
+
         setLoading(true)
         try {
-            const res = await getUnitForSale(qr, false) // false means include sold units
+            const res = await getUnitForSale(cleanQr, false) // false means include sold units
             if (res.success) {
                 if (res.data.estado !== 'VENDIDO' && res.data.estado !== 'VENDIDO_ONLINE') {
                     throw new Error('Esta unidad no está marcada como vendida.')
@@ -54,9 +58,13 @@ export default function CambiosPage() {
     }
 
     const handleScanNew = async (qr) => {
+        const match = (qr || '').match(/ST-\d{6}/i)
+        const cleanQr = match ? match[0].toUpperCase() : qr.toUpperCase().trim()
+        if (!cleanQr) return
+
         setLoading(true)
         try {
-            const res = await getUnitForSale(qr)
+            const res = await getUnitForSale(cleanQr)
             if (res.success) {
                 setNewUnit(res.data)
             } else {

@@ -24,11 +24,14 @@ export default function DespacharPage() {
     }
 
     const handleScanComplete = async (qrCode) => {
+        const match = (qrCode || '').match(/ST-\d{6}/i)
+        const cleanQr = match ? match[0].toUpperCase() : qrCode.toUpperCase().trim()
+
         setScanning(false)
         setError('')
         try {
             // 1. Show preview of unit scanned (Include Reserved ones!)
-            const result = await getUnitForSale(qrCode, true)
+            const result = await getUnitForSale(cleanQr, true)
 
             if (!result.success) {
                 setError(result.message)

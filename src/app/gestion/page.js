@@ -143,10 +143,14 @@ export default function GestionPage() {
     const handleDeleteUnit = async (unitId) => {
         if (!confirm('¿Seguro quieres eliminar este par del stock?')) return
         try {
-            await deleteUnit(unitId)
-            fetchStock()
+            const res = await deleteUnit(unitId)
+            if (res.success) {
+                fetchStock()
+            } else {
+                alert(res.message)
+            }
         } catch (err) {
-            alert(err.message)
+            alert("Error de conexión: " + err.message)
         }
     }
 
@@ -163,11 +167,15 @@ export default function GestionPage() {
             precio_lista: newLista
         }
         try {
-            await updateVariant(editingVariant.id, updates)
-            setEditingVariant(null)
-            fetchStock()
+            const res = await updateVariant(editingVariant.id, updates)
+            if (res.success) {
+                setEditingVariant(null)
+                fetchStock()
+            } else {
+                alert(res.message)
+            }
         } catch (err) {
-            alert(err.message)
+            alert("Error de conexión: " + err.message)
         }
     }
 

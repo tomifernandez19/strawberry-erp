@@ -10,10 +10,14 @@ export default function ConsultarPage() {
     const [error, setError] = useState('')
 
     const handleSearch = async (qrCode) => {
+        const match = (qrCode || '').match(/ST-\d{6}/i)
+        const cleanQr = match ? match[0].toUpperCase() : qrCode.toUpperCase().trim()
+        if (!cleanQr) return
+
         setLoading(true)
         setError('')
         try {
-            const data = await getProductDetailsByQR(qrCode)
+            const data = await getProductDetailsByQR(cleanQr)
             setScannedData(data)
         } catch (err) {
             setError(err.message)

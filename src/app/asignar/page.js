@@ -35,11 +35,16 @@ export default function AsignarQRPage() {
 
     const handleScanSuccess = async (qrCode) => {
         if (!selectedUnit || isProcessing) return
+
+        const match = (qrCode || '').match(/ST-\d{6}/i)
+        const cleanQr = match ? match[0].toUpperCase() : qrCode.toUpperCase().trim()
+        if (!cleanQr) return
+
         setIsProcessing(true)
         setMessage('')
 
         try {
-            const res = await assignQRToUnit(selectedUnit.id, qrCode)
+            const res = await assignQRToUnit(selectedUnit.id, cleanQr)
             if (res.success) {
                 setMessage(`✅ ${selectedUnit.variantes.modelos.descripcion} (Talle ${selectedUnit.talle_especifico}) asignado!`)
 

@@ -11,7 +11,9 @@ export default function UbicacionPage() {
     const [loading, setLoading] = useState(false)
 
     const handleScan = (decodedText) => {
-        setScannedQR(decodedText)
+        const match = (decodedText || '').match(/ST-\d{6}/i)
+        const cleanText = match ? match[0].toUpperCase() : decodedText.trim().toUpperCase()
+        setScannedQR(cleanText)
         setStatus(null)
         // Auto-focus on the zone input
         document.getElementById('zona-input')?.focus()
