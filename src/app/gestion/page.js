@@ -580,6 +580,13 @@ export default function GestionPage() {
                 >
                     <span>{activatingTN ? '⏳ Conectando...' : '🔌 Activar Conexión Tiendanube'}</span>
                 </button>
+
+                <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', fontSize: '0.8rem' }}>
+                    <h4 style={{ margin: '0 0 10px 0', opacity: 0.7 }}>Debug Conexión (Tiendanube)</h4>
+                    <p style={{ margin: '2px 0' }}>Store ID detectado (Vercel): ****{process.env.TIENDANUBE_STORE_ID?.slice(-4) || 'No detectado'}</p>
+                    <p style={{ margin: '2px 0' }}>Token detectado (Vercel): ****{process.env.TIENDANUBE_ACCESS_TOKEN?.slice(-4) || 'No detectado'}</p>
+                    <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '5px' }}>Si los últimos 4 dígitos no coinciden con tus nuevos datos, falta hacer Redeploy en Vercel.</p>
+                </div>
             </section>
 
             {editingVariant && (
