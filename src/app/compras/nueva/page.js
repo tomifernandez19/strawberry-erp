@@ -12,7 +12,7 @@ export default function NuevaCompraPage() {
     const [formData, setFormData] = useState({
         proveedor: '',
         nro_remito: '',
-        supplier_type: 'CAROLINA'
+        supplier_type: 'PROVEEDOR'
     })
     const [items, setItems] = useState([
         { variante_id: '', cantidad: 6, costo_unitario: 0, descripcion: '', color: '', codigo_proveedor: '', curva: '35-39(37)' }
