@@ -520,7 +520,8 @@ export default function GestionPage() {
                                     value={editPrices.efectivo}
                                     onChange={(e) => {
                                         const efe = e.target.value;
-                                        const lista = Math.round(efe * 1.21);
+                                        // Redondear a los 100 más cercanos
+                                        const lista = Math.round((efe * 1.21) / 100) * 100;
                                         setEditPrices({ efectivo: efe, lista: lista });
                                     }}
                                     autoFocus
