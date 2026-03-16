@@ -400,6 +400,16 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
 
     if (updateError) throw updateError
 
+    // 5. AUTO-SYNC with Tiendanube
+    try {
+        const modelIds = [...new Set(units.map(u => u.variantes?.modelo_id))].filter(Boolean);
+        for (const mId of modelIds) {
+            syncProductToTiendanube(mId).catch(e => console.error(`[AutoSync] Error:`, e));
+        }
+    } catch (e) {
+        console.error("[AutoSync] Failed to initiate:", e);
+    }
+
     return { venta, units }
 }
 
@@ -959,6 +969,12 @@ export async function deleteSale(saleId) {
     const supabase = createClient();
 
     try {
+        // 0. Get units to sync later
+        const { data: unitsToSync } = await supabase
+            .from('unidades')
+            .select('variantes(modelo_id)')
+            .eq('venta_id', saleId);
+
         // 1. Revert all units associated with this sale to DISPONIBLE
         const { error: unitError } = await supabase
             .from('unidades')
@@ -988,6 +1004,16 @@ export async function deleteSale(saleId) {
 
         if (!deleted || deleted.length === 0) {
             return { success: false, message: "No se pudo eliminar el registro de la venta. Es posible que no tengas permisos o ya se haya borrado." };
+        }
+
+        // 3. AUTO-SYNC
+        try {
+            const modelIds = [...new Set(unitsToSync?.map(u => u.variantes?.modelo_id))].filter(Boolean);
+            for (const mId of modelIds) {
+                syncProductToTiendanube(mId).catch(e => console.error(`[AutoSync] Error:`, e));
+            }
+        } catch (e) {
+            console.error("[AutoSync] Failed:", e);
         }
 
         return { success: true };
@@ -1056,12 +1082,25 @@ export async function reconcileSale(saleId, { monto_neto, dias_acreditacion }) {
 export async function deleteUnit(unitId) {
     const supabase = createClient();
     try {
+        // 0. Get info to sync
+        const { data: unit } = await supabase
+            .from('unidades')
+            .select('variantes(modelo_id)')
+            .eq('id', unitId)
+            .single();
+
         const { error } = await supabase
             .from('unidades')
             .delete()
             .eq('id', unitId);
 
         if (error) throw error;
+
+        // Sync
+        if (unit?.variantes?.modelo_id) {
+            syncProductToTiendanube(unit.variantes.modelo_id).catch(e => console.error(`[AutoSync] Error:`, e));
+        }
+
         return { success: true };
     } catch (err) {
         console.error("[deleteUnit] Error:", err);
@@ -1075,12 +1114,23 @@ export async function deleteUnit(unitId) {
 export async function updateVariant(variantId, updates) {
     const supabase = createClient();
     try {
+        const { data: variant } = await supabase
+            .from('variantes')
+            .select('modelo_id')
+            .eq('id', variantId)
+            .single();
+
         const { error } = await supabase
             .from('variantes')
             .update(updates)
             .eq('id', variantId);
 
         if (error) throw error;
+
+        if (variant?.modelo_id) {
+            syncProductToTiendanube(variant.modelo_id).catch(e => console.error(`[AutoSync] Error:`, e));
+        }
+
         return { success: true };
     } catch (err) {
         console.error("[updateVariant] Error:", err);
