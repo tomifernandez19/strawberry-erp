@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary, getRecentUnifiedCaja } from '@/lib/actions'
+import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary, getRecentUnifiedCaja, getPendingSenasList, completeSena } from '@/lib/actions'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -17,6 +17,9 @@ export default function HomePage() {
     const [recentMovements, setRecentMovements] = useState([])
     const [loadingMovements, setLoadingMovements] = useState(false)
     const [invoiceCounts, setInvoiceCounts] = useState({ sofi: 0, tomi: 0, lucas: 0, total: 0 })
+    const [pendingSenas, setPendingSenas] = useState([])
+    const [showSenasModal, setShowSenasModal] = useState(false)
+    const [isCompletingSena, setIsCompletingSena] = useState(false)
 
     useEffect(() => {
         if (!user) return
@@ -60,6 +63,10 @@ export default function HomePage() {
                     .is('imagen_url', null)
                 setPendingImages(imgCount || 0)
             }
+
+            // Task 6: Pending Senas (Visible to everyone)
+            const senas = await getPendingSenasList()
+            setPendingSenas(senas || [])
         }
 
         loadData()
@@ -148,6 +155,14 @@ export default function HomePage() {
             borderColor = 'rgba(236, 72, 153, 0.3)';
             bg = 'rgba(236, 72, 153, 0.05)';
             accentColor = '#ec4899';
+        } else if (type === 'SENA') {
+            count = pendingSenas.length;
+            title = 'Señas Pendientes';
+            subtitle = `${count} productos reservados`;
+            href = '#';
+            borderColor = 'rgba(234, 179, 8, 0.3)';
+            bg = 'rgba(234, 179, 8, 0.05)';
+            accentColor = '#eab308';
         }
 
         const isCounting = count > 0;
@@ -155,7 +170,17 @@ export default function HomePage() {
         if (mode === 'BOTTOM' && isCounting) return null;
 
         return (
-            <Link href={href} key={type} style={{ textDecoration: 'none', color: 'inherit' }}>
+            <Link
+                href={href}
+                key={type}
+                style={{ textDecoration: 'none', color: 'inherit' }}
+                onClick={(e) => {
+                    if (type === 'SENA') {
+                        e.preventDefault();
+                        setShowSenasModal(true);
+                    }
+                }}
+            >
                 <section className="card" style={{ border: borderColor, background: bg, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', marginBottom: 0 }}>
                     <div>
                         <h4 style={{ fontSize: '0.8rem', opacity: 0.8 }}>{title}</h4>
@@ -171,7 +196,7 @@ export default function HomePage() {
     }
 
     const PendingGrid = ({ mode }) => {
-        const items = ['QR', 'LOC', 'DISPATCH', 'INVOICE', 'IMAGE'].map(t => renderCard(t, mode)).filter(Boolean)
+        const items = ['QR', 'LOC', 'DISPATCH', 'SENA', 'INVOICE', 'IMAGE'].map(t => renderCard(t, mode)).filter(Boolean)
         if (items.length === 0) return null;
         return (
             <div className="grid mt-md" style={{ gap: '15px' }}>
@@ -181,6 +206,7 @@ export default function HomePage() {
     }
 
     const isAdminAndHasTasks = isAdmin && (pendingQR > 0 || pendingDispatches > 0 || pendingLocation > 0 || invoiceCounts.total > 0 || pendingImages > 0)
+    const hasSenas = pendingSenas.length > 0
 
     return (
         <div className="grid mt-lg">
@@ -208,6 +234,13 @@ export default function HomePage() {
                     )}
                 </div>
             </header>
+
+            {/* Section: Pending deposits (Señas) - Visible to everyone if they exist */}
+            {hasSenas && (
+                <div className="grid mt-md">
+                    {renderCard('SENA')}
+                </div>
+            )}
 
             {/* Section 1: Top Pending (only those > 0) */}
             {isAdmin && <PendingGrid mode="TOP" />}
@@ -399,7 +432,129 @@ export default function HomePage() {
                 </div>
             )}
 
+            <SenasModal
+                open={showSenasModal}
+                onClose={() => setShowSenasModal(false)}
+                senas={pendingSenas}
+                onComplete={async (id, data) => {
+                    await completeSena(id, data);
+                    const s = await getDailySummary(isAdmin ? null : user.id);
+                    setSummary(s);
+                    const senas = await getPendingSenasList();
+                    setPendingSenas(senas || []);
+                }}
+            />
+
             <div style={{ height: '80px' }}></div>
         </div>
     )
+}
+
+function SenasModal({ open, onClose, senas, onComplete }) {
+    if (!open) return null;
+
+    return (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 3000, padding: '20px'
+        }}>
+            <div className="card" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h2 style={{ fontSize: '1.2rem' }}>Señas y Reservas 📝</h2>
+                    <button onClick={onClose} className="btn-secondary" style={{ padding: '6px 15px' }}>Cerrar</button>
+                </div>
+
+                <div className="grid" style={{ gap: '15px' }}>
+                    {senas.length === 0 ? (
+                        <p style={{ textAlign: 'center', opacity: 0.5, padding: '20px' }}>No hay señas pendientes.</p>
+                    ) : (
+                        senas.map(sena => (
+                            <SenaRow key={sena.id} sena={sena} onComplete={onComplete} />
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function SenaRow({ sena, onComplete }) {
+    const [loading, setLoading] = useState(false);
+    const [showCobro, setShowCobro] = useState(false);
+    const [medioPago, setMedioPago] = useState('EFECTIVO');
+
+    // Calculate total paid and total due
+    const paid = (Number(sena.monto_efectivo) || 0) + (Number(sena.monto_otro) || 0);
+    const due = (Number(sena.total) || 0) - paid;
+
+    const handleComplete = async () => {
+        setLoading(true);
+        try {
+            await onComplete(sena.id, {
+                monto_efectivo: medioPago === 'EFECTIVO' ? due : 0,
+                monto_otro: medioPago !== 'EFECTIVO' ? due : 0,
+                medio_pago: medioPago,
+                cuenta_destino: ['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medioPago) ? 'CAJA_LOCAL' : 'SOFI_MP'
+            });
+            setShowCobro(false);
+        } catch (err) {
+            alert("Error al completar seña: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="card" style={{ border: '1px solid rgba(234, 179, 8, 0.2)', background: 'rgba(234, 179, 8, 0.02)', padding: '15px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <div>
+                    <h4 style={{ margin: 0 }}>👤 {sena.nombre_cliente || 'Cliente sin nombre'}</h4>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.6, margin: '2px 0' }}>{sena.telefono_cliente || 'S/T'} • {new Date(sena.fecha).toLocaleDateString()}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Saldo:</p>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#eab308' }}>$ {due.toLocaleString()}</p>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: '5px', marginBottom: '15px' }}>
+                {sena.unidades?.map(u => (
+                    <div key={u.id} style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                        • {u.variantes?.modelos?.descripcion} ({u.variantes?.color}) T{u.talle_especifico}
+                    </div>
+                ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                <span style={{ fontSize: '0.75rem', opacity: 0.4 }}>Total: ${sena.total.toLocaleString()} (Señó ${paid.toLocaleString()})</span>
+                {!showCobro ? (
+                    <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#eab308' }} onClick={() => setShowCobro(true)}>Cobrar Saldo</button>
+                ) : (
+                    <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => setShowCobro(false)}>Cancelar</button>
+                )}
+            </div>
+
+            {showCobro && (
+                <div className="mt-md" style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <label style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block', marginBottom: '5px' }}>Medio de Pago del Saldo:</label>
+                    <select className="input-field" value={medioPago} onChange={(e) => setMedioPago(e.target.value)} style={{ fontSize: '0.85rem' }}>
+                        <option value="EFECTIVO">Efectivo 💵</option>
+                        <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
+                        <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
+                        <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
+                        <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
+                    </select>
+                    <button
+                        className="btn-primary"
+                        style={{ width: '100%', marginTop: '10px', background: '#eab308' }}
+                        disabled={loading}
+                        onClick={handleComplete}
+                    >
+                        {loading ? 'Procesando...' : `Confirmar Cobro ($${due.toLocaleString()})`}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 }

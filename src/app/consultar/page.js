@@ -2,12 +2,13 @@
 import { useState } from 'react'
 import QRScanner from '@/components/QRScanner'
 import ManualSelector from '@/components/ManualSelector'
-import { getProductDetailsByQR } from '@/lib/actions'
+import { getProductDetailsByQR, getPendingSenasList } from '@/lib/actions'
 
 export default function ConsultarPage() {
     const [scannedData, setScannedData] = useState(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
+    const [senaData, setSenaData] = useState(null)
 
     const handleSearch = async (qrCode) => {
         const match = (qrCode || '').match(/ST-\d{6}/i)
@@ -16,9 +17,17 @@ export default function ConsultarPage() {
 
         setLoading(true)
         setError('')
+        setSenaData(null)
         try {
             const data = await getProductDetailsByQR(cleanQr)
             setScannedData(data)
+
+            // If unit is reserved, find the sena info
+            if (data.unit.estado === 'RESERVADO_ONLINE') {
+                const senas = await getPendingSenasList()
+                const sMatch = senas.find(s => s.unidades.some(u => u.codigo_qr === cleanQr))
+                if (sMatch) setSenaData(sMatch)
+            }
         } catch (err) {
             setError(err.message)
             setScannedData(null)
@@ -50,10 +59,25 @@ export default function ConsultarPage() {
                     <section className="card" style={{ border: '2px solid var(--accent)' }}>
                         <div className="text-center">
                             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
-                                <span className="badge" style={{ backgroundColor: scannedData.unit.estado === 'DISPONIBLE' ? 'var(--accent)' : 'var(--secondary)' }}>
-                                    {scannedData.unit.estado}
+                                <span className="badge" style={{
+                                    backgroundColor: scannedData.unit.estado === 'DISPONIBLE' ? 'var(--accent)' : (scannedData.unit.estado === 'RESERVADO_ONLINE' ? '#eab308' : 'var(--secondary)'),
+                                    color: scannedData.unit.estado === 'RESERVADO_ONLINE' ? 'black' : 'white'
+                                }}>
+                                    {scannedData.unit.estado === 'RESERVADO_ONLINE' ? '📖 RESERVADO (SEÑA)' : scannedData.unit.estado}
                                 </span>
                             </div>
+
+                            {senaData && (
+                                <div className="card mt-sm mb-md" style={{ border: '1px solid #eab308', background: 'rgba(234, 179, 8, 0.05)', padding: '10px' }}>
+                                    <p style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#eab308', margin: 0 }}>DATOS DE RESERVA:</p>
+                                    <p style={{ fontSize: '0.9rem', margin: '4px 0' }}>👤 {senaData.nombre_cliente || 'Sin nombre'}</p>
+                                    <p style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>📞 {senaData.telefono_cliente || 'Sin teléfono'}</p>
+                                    <div style={{ borderTop: '1px solid rgba(234, 179, 8, 0.2)', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>Saldo Pendiente:</span>
+                                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#eab308' }}>$ {((senaData.total || 0) - ((senaData.monto_efectivo || 0) + (senaData.monto_otro || 0))).toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            )}
 
                             {scannedData.variant?.imagen_url && (
                                 <div style={{ width: '100%', maxWidth: '200px', margin: '15px auto', borderRadius: '15px', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)' }}>

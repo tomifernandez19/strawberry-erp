@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant, registerTiendanubeWebhooks, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, registerTiendanubeWebhooks, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena } from '@/lib/actions'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -19,6 +19,7 @@ export default function GestionPage() {
     const [editPrices, setEditPrices] = useState({ lista: 0, efectivo: 0 })
     const [activatingTN, setActivatingTN] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
+    const [senas, setSenas] = useState([])
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -32,6 +33,7 @@ export default function GestionPage() {
             if (tab === 'ventas') fetchVentas(searchQuery)
             else if (tab === 'stock') fetchStock(searchQuery)
             else if (tab === 'imagenes') fetchMissingImages(searchQuery)
+            else if (tab === 'senas') fetchSenas()
         }, 400);
 
         return () => clearTimeout(handler);
@@ -75,6 +77,17 @@ export default function GestionPage() {
             .select('*', { count: 'exact', head: true })
             .is('imagen_url', null)
         setPendingImages(imgCount || 0)
+
+        // Count pending senas
+        const s = await getPendingSenasList()
+        setSenas(s)
+    }
+
+    async function fetchSenas() {
+        setLoading(true)
+        const data = await getPendingSenasList()
+        setSenas(data)
+        setLoading(false)
     }
 
     async function fetchVentas(search = '') {
@@ -138,8 +151,8 @@ export default function GestionPage() {
             const variantIds = variantData.map(v => v.id)
             const { data: unitData, error: unitError } = await supabase
                 .from('unidades')
-                .select('id, talle_especifico, codigo_qr, variante_id')
-                .eq('estado', 'DISPONIBLE')
+                .select('id, talle_especifico, codigo_qr, variante_id, estado')
+                .in('estado', ['DISPONIBLE', 'RESERVADO_ONLINE'])
                 .in('variante_id', variantIds)
 
             if (unitError) throw unitError
@@ -292,10 +305,18 @@ export default function GestionPage() {
             title = 'Faltan Fotos';
             href = '/gestion?tab=imagenes';
             accentColor = '#ec4899';
+        } else if (type === 'SENA') {
+            count = senas.length;
+            title = 'Señas';
+            href = '/gestion?tab=senas';
+            accentColor = '#eab308';
         }
 
         return (
-            <Link href={href} key={type} style={{ textDecoration: 'none', color: 'inherit' }} onClick={() => href.includes('tab=imagenes') && setTab('imagenes')}>
+            <Link href={href} key={type} style={{ textDecoration: 'none', color: 'inherit' }} onClick={() => {
+                if (href.includes('tab=imagenes')) setTab('imagenes');
+                if (href.includes('tab=senas')) setTab('senas');
+            }}>
                 <section className="card" style={{ padding: '10px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
                     <h4 style={{ fontSize: '0.65rem', opacity: 0.7, margin: 0 }}>{title}</h4>
                     <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: count > 0 ? accentColor : 'var(--accent)', margin: '2px 0' }}>
@@ -314,8 +335,8 @@ export default function GestionPage() {
                 <p style={{ opacity: 0.7 }}>Panel administrativo central</p>
             </header>
 
-            <div className="grid mt-md" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
-                {['QR', 'LOC', 'DISPATCH', 'INVOICE', 'IMAGE'].map(renderCard)}
+            <div className="grid mt-md" style={{ gridTemplateColumns: 'repeat(6, 1fr)', gap: '10px' }}>
+                {['QR', 'LOC', 'DISPATCH', 'SENA', 'INVOICE', 'IMAGE'].map(renderCard)}
             </div>
 
             <nav style={{ display: 'flex', gap: '8px', marginTop: '20px', overflowX: 'auto', paddingBottom: '5px' }}>
@@ -332,6 +353,13 @@ export default function GestionPage() {
                     style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
                 >
                     Precio/Stock
+                </button>
+                <button
+                    className={tab === 'senas' ? 'btn-primary' : 'btn-secondary'}
+                    onClick={() => { setTab('senas'); setSearchQuery(''); }}
+                    style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
+                >
+                    Señas/Reservas{senas.length > 0 ? ` (${senas.length})` : ''}
                 </button>
                 <button
                     className={tab === 'imagenes' ? 'btn-primary' : 'btn-secondary'}
@@ -356,6 +384,57 @@ export default function GestionPage() {
             <section className="mt-lg">
                 {loading ? (
                     <p className="text-center">Cargando...</p>
+                ) : tab === 'senas' ? (
+                    <div className="grid" style={{ gap: '15px' }}>
+                        {senas.length === 0 ? (
+                            <p className="text-center py-lg opacity-50">No hay señas pendientes.</p>
+                        ) : (
+                            senas.map(sena => (
+                                <div key={sena.id} className="card" style={{ padding: '15px', borderLeft: '4px solid #eab308' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div>
+                                            <h4 style={{ margin: 0 }}>👤 {sena.nombre_cliente || 'Sin nombre'}</h4>
+                                            <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: '2px 0' }}>
+                                                {new Date(sena.fecha).toLocaleDateString()} • {sena.telefono_cliente || 'Sin tel'}
+                                            </p>
+                                            <div style={{ marginTop: '8px', fontSize: '0.8rem' }}>
+                                                {sena.unidades?.map(u => (
+                                                    <p key={u.id} style={{ margin: 0 }}>• {u.variantes?.modelos?.descripcion} ({u.variantes?.color}) T{u.talle_especifico}</p>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <p style={{ color: '#eab308', fontWeight: 'bold', fontSize: '1.1rem', margin: 0 }}>
+                                                Faltan: $ {(sena.total - (Number(sena.monto_efectivo) + Number(sena.monto_otro))).toLocaleString()}
+                                            </p>
+                                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Total: ${sena.total.toLocaleString()}</p>
+                                            <button
+                                                className="btn-primary mt-sm"
+                                                style={{ fontSize: '0.75rem', padding: '6px 12px', background: '#eab308', color: 'black' }}
+                                                onClick={() => {
+                                                    // This will open a way to complete it. For simplicity in Gestion tab, 
+                                                    // let's just tell them to go to Home or we can implement a quick cobrar here.
+                                                    if (confirm('¿Deseas completar esta seña ahora? El saldo se cobrará en EFECTIVO.')) {
+                                                        const due = sena.total - (Number(sena.monto_efectivo) + Number(sena.monto_otro));
+                                                        completeSena(sena.id, {
+                                                            monto_efectivo: due,
+                                                            medio_pago: 'EFECTIVO',
+                                                            cuenta_destino: 'CAJA_LOCAL'
+                                                        }).then(() => {
+                                                            fetchSenas();
+                                                            fetchCounters();
+                                                        });
+                                                    }
+                                                }}
+                                            >
+                                                Completar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
                 ) : tab === 'ventas' ? (
                     <div className="grid" style={{ gap: '15px' }}>
                         {ventas.map(v => {
@@ -414,15 +493,17 @@ export default function GestionPage() {
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
                                                     {v.available_units.map(u => (
                                                         <div key={u.id} style={{
-                                                            background: 'var(--secondary)',
+                                                            background: u.estado === 'RESERVADO_ONLINE' ? 'rgba(234, 179, 8, 0.1)' : 'var(--secondary)',
                                                             fontSize: '0.65rem',
                                                             padding: '3px 6px',
                                                             borderRadius: '4px',
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             gap: '5px',
-                                                            border: '1px solid var(--card-border)'
+                                                            border: u.estado === 'RESERVADO_ONLINE' ? '1px solid #eab308' : '1px solid var(--card-border)',
+                                                            position: 'relative'
                                                         }}>
+                                                            {u.estado === 'RESERVADO_ONLINE' && <span title="Reservado" style={{ fontSize: '10px' }}>⏳</span>}
                                                             <span>T{u.talle_especifico}</span>
                                                             <button
                                                                 onClick={() => handleDeleteUnit(u.id)}

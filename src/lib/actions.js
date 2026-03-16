@@ -306,7 +306,8 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
         descuento = 0,
         monto_descuento_fijo = 0,
         monto_neto = null,
-        dias_acreditacion = 0
+        dias_acreditacion = 0,
+        isSena = false
     } = options;
 
     if (!Array.isArray(qrCodes) || qrCodes.length === 0) throw new Error("No hay productos seleccionados");
@@ -369,8 +370,8 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             medio_pago,
             total: calculatedTotal,
             user_id: user?.id || null,
-            monto_efectivo: medio_pago === 'DIVIDIR_PAGOS' ? monto_efectivo : (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medio_pago) ? calculatedTotal : 0),
-            monto_otro: medio_pago === 'DIVIDIR_PAGOS' ? monto_otro : 0,
+            monto_efectivo: (isSena || medio_pago === 'DIVIDIR_PAGOS') ? monto_efectivo : (['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio_pago) ? calculatedTotal : 0),
+            monto_otro: (isSena || medio_pago === 'DIVIDIR_PAGOS') ? monto_otro : 0,
             otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
             facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
             nombre_cliente: customerData.nombre?.toUpperCase() || null,
@@ -379,7 +380,8 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             // New Finance fields
             monto_neto: monto_neto || null,
             fecha_acreditacion: fechaAcreditacion.toISOString(),
-            cuenta_destino: targetAccount
+            cuenta_destino: targetAccount,
+            tipo: isSena ? 'SENA' : 'VENTA_LOCAL'
         }])
         .select()
         .single()
@@ -390,7 +392,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     const { error: updateError } = await supabase
         .from('unidades')
         .update({
-            estado: 'VENDIDO',
+            estado: isSena ? 'RESERVADO_ONLINE' : 'VENDIDO',
             venta_id: venta.id,
             fecha_venta: new Date().toISOString()
         })
@@ -2287,4 +2289,71 @@ export async function fixProveedorPrices() {
         console.error("fixProveedorPrices Error:", err);
         return { success: false, message: err.message };
     }
+}
+
+/**
+ * Fetches all pending deposits (señas).
+ */
+export async function getPendingSenasList() {
+    const supabase = createClient();
+    const { data, error } = await supabase
+        .from('ventas')
+        .select(`
+            *,
+            unidades (
+                id, talle_especifico, codigo_qr, 
+                variantes (color, modelos (descripcion))
+            )
+        `)
+        .eq('tipo', 'SENA')
+        .order('fecha', { ascending: false });
+
+    if (error) {
+        console.error("[getPendingSenasList] Error:", error);
+        return [];
+    }
+    return data || [];
+}
+
+/**
+ * Completes a pending deposit with the final payment.
+ */
+export async function completeSena(ventaId, paymentData) {
+    const supabase = createClient();
+    const { monto_efectivo, monto_otro, medio_pago, cuenta_destino } = paymentData;
+
+    // 1. Update the sale record
+    const { data: venta, error: vErr } = await supabase
+        .from('ventas')
+        .select('*')
+        .eq('id', ventaId)
+        .single();
+
+    if (vErr) throw vErr;
+
+    const newMontoEfectivo = (venta.monto_efectivo || 0) + (Number(monto_efectivo) || 0);
+    const newMontoOtro = (venta.monto_otro || 0) + (Number(monto_otro) || 0);
+
+    const { error: updateVErr } = await supabase
+        .from('ventas')
+        .update({
+            tipo: 'VENTA_LOCAL',
+            monto_efectivo: newMontoEfectivo,
+            monto_otro: newMontoOtro,
+            medio_pago: medio_pago || venta.medio_pago,
+            cuenta_destino: cuenta_destino || venta.cuenta_destino
+        })
+        .eq('id', ventaId);
+
+    if (updateVErr) throw updateVErr;
+
+    // 2. Update units to VENDIDO
+    const { error: uErr } = await supabase
+        .from('unidades')
+        .update({ estado: 'VENDIDO', fecha_venta: new Date().toISOString() })
+        .eq('venta_id', ventaId);
+
+    if (uErr) throw uErr;
+
+    return { success: true };
 }

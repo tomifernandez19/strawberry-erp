@@ -15,6 +15,8 @@ export default function VenderPage() {
     const [medioPago, setMedioPago] = useState('EFECTIVO')
     const [montoDescuento, setMontoDescuento] = useState(0)
     const [montoAbonado, setMontoAbonado] = useState('')
+    const [isSena, setIsSena] = useState(false)
+    const [montoSena, setMontoSena] = useState('')
 
     const [montoEfectivo, setMontoEfectivo] = useState('')
     const [montoOtro, setMontoOtro] = useState('')
@@ -95,11 +97,6 @@ export default function VenderPage() {
         try {
             const qrCodes = items.map(it => it.codigo_qr)
             const options = {
-                ...(medioPago === 'DIVIDIR_PAGOS' ? {
-                    monto_efectivo: parseFloat(montoEfectivo),
-                    monto_otro: parseFloat(montoOtro),
-                    otro_medio_pago: otroMedioPago
-                } : {}),
                 customerData: {
                     nombre: customerName,
                     telefono: customerPhone,
@@ -107,7 +104,18 @@ export default function VenderPage() {
                 },
                 monto_descuento_fijo: Number(montoDescuento),
                 monto_neto: parseFloat(montoNeto) || null,
-                dias_acreditacion: parseInt(diasAcreditacion) || 0
+                dias_acreditacion: parseInt(diasAcreditacion) || 0,
+                isSena
+            }
+
+            if (isSena) {
+                if (!montoSena || Number(montoSena) <= 0) throw new Error("Debe ingresar el monto de la seña");
+                options.monto_efectivo = (['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago)) ? Number(montoSena) : 0;
+                options.monto_otro = (!['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medioPago)) ? Number(montoSena) : 0;
+            } else if (medioPago === 'DIVIDIR_PAGOS') {
+                options.monto_efectivo = parseFloat(montoEfectivo);
+                options.monto_otro = parseFloat(montoOtro);
+                options.otro_medio_pago = otroMedioPago;
             }
 
             const result = await recordSale(qrCodes, medioPago, options)
@@ -132,6 +140,8 @@ export default function VenderPage() {
         setCustomerEmail('')
         setMontoDescuento(0)
         setMontoAbonado('')
+        setIsSena(false)
+        setMontoSena('')
     }
 
     const totals = () => {
@@ -293,6 +303,64 @@ export default function VenderPage() {
                                 <p style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>${totalLista.toLocaleString()}</p>
                             </div>
                         </div>
+
+                        <div
+                            style={{
+                                marginTop: '15px',
+                                padding: '15px',
+                                background: isSena ? 'rgba(234, 179, 8, 0.15)' : 'rgba(234, 179, 8, 0.05)',
+                                borderRadius: '12px',
+                                border: isSena ? '2px solid #eab308' : '1px dashed rgba(234, 179, 8, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                            onClick={() => setIsSena(!isSena)}
+                        >
+                            <div style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '6px',
+                                border: '2px solid #eab308',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: isSena ? '#eab308' : 'transparent',
+                                color: 'black',
+                                fontSize: '14px',
+                                fontWeight: 'bold'
+                            }}>
+                                {isSena ? '✓' : ''}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: '1rem', fontWeight: 'bold', color: isSena ? '#eab308' : '#eab308', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    REGISTRAR COMO SEÑA / RESERVA 📝
+                                </label>
+                                <p style={{ fontSize: '0.75rem', opacity: 0.8, margin: 0, color: isSena ? '#fff' : 'rgba(255,255,255,0.6)' }}>
+                                    El producto quedará reservado y se descontará del stock.
+                                </p>
+                            </div>
+                        </div>
+
+                        {isSena && (
+                            <div className="card mt-md" style={{ background: 'rgba(234, 179, 8, 0.05)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                                <label style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '8px' }}>Monto que deja de seña ($):</label>
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    placeholder="¿Cuánto paga ahora?"
+                                    value={montoSena}
+                                    onChange={(e) => setMontoSena(e.target.value)}
+                                    autoFocus
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '0.8rem' }}>
+                                    <span style={{ opacity: 0.6 }}>Saldo Pendiente:</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {(finalTotal - (Number(montoSena) || 0)).toLocaleString()}</span>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="mt-lg">
                             <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Medio de Pago:</label>
@@ -543,7 +611,7 @@ export default function VenderPage() {
                                 Cancelar
                             </button>
                             <button className="btn-primary" onClick={handleConfirmSale} disabled={loading} style={{ background: 'var(--accent)' }}>
-                                {loading ? 'Procesando...' : `Confirmar Venta (${items.length})`}
+                                {loading ? 'Procesando...' : (isSena ? `Reservar con Seña (${items.length})` : `Confirmar Venta (${items.length})`)}
                             </button>
                         </div>
                     </section>
