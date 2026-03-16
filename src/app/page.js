@@ -491,11 +491,16 @@ function SenaRow({ sena, onComplete }) {
     const handleComplete = async () => {
         setLoading(true);
         try {
+            let target = 'SOFI_MP';
+            if (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medioPago)) target = 'CAJA_LOCAL';
+            if (medioPago === 'TRANSFERENCIA_TOMI') target = 'TOMI';
+            if (medioPago === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
+
             await onComplete(sena.id, {
                 monto_efectivo: medioPago === 'EFECTIVO' ? due : 0,
                 monto_otro: medioPago !== 'EFECTIVO' ? due : 0,
                 medio_pago: medioPago,
-                cuenta_destino: ['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medioPago) ? 'CAJA_LOCAL' : 'SOFI_MP'
+                cuenta_destino: target
             });
             setShowCobro(false);
         } catch (err) {
