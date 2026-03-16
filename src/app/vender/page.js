@@ -36,22 +36,41 @@ export default function VenderPage() {
     }, [medioPago, otroMedioPago])
 
     const addItem = async (qrCode) => {
-        if (items.some(it => it.codigo_qr === qrCode)) {
-            setError('Este producto ya está en la lista')
+        // Robust QR extraction: handles full URLs or extra spaces/lowercase
+        const rawText = (qrCode || '').trim()
+        const match = rawText.match(/ST-\d{6}/i)
+        const cleanQr = match ? match[0].toUpperCase() : rawText.toUpperCase()
+
+        if (!cleanQr) return
+
+        // Preliminary check to avoid redundant network calls
+        if (items.some(it => it.codigo_qr === cleanQr)) {
+            setError(`El producto ${cleanQr} ya está en el carrito`)
+            // Brief alert if it's a re-scan of the same item
             return
         }
 
+        if (loading) return // Prevent multiple concurrent additions
         setLoading(true)
         setError('')
+
         try {
-            const result = await getUnitForSale(qrCode)
+            const result = await getUnitForSale(cleanQr)
             if (result.success) {
-                setItems(prev => [...prev, result.data])
+                // Second check within the state update to be 100% thread-safe against rapid scans
+                setItems(prev => {
+                    const alreadyIn = prev.some(it => it.codigo_qr === result.data.codigo_qr)
+                    if (alreadyIn) {
+                        setError(`El producto ${cleanQr} ya está en el carrito`)
+                        return prev
+                    }
+                    return [...prev, result.data]
+                })
             } else {
                 setError(result.message)
             }
         } catch (err) {
-            setError(err.message)
+            setError("Error al cargar producto: " + err.message)
         } finally {
             setLoading(false)
         }
