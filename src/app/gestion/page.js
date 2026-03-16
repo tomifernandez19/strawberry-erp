@@ -27,10 +27,16 @@ export default function GestionPage() {
     const [invoiceCounts, setInvoiceCounts] = useState({ sofi: 0, tomi: 0, lucas: 0, total: 0 })
 
     useEffect(() => {
-        if (tab === 'ventas') fetchVentas()
-        else if (tab === 'stock') fetchStock()
-        else if (tab === 'imagenes') fetchMissingImages()
+        const handler = setTimeout(() => {
+            if (tab === 'ventas') fetchVentas(searchQuery)
+            else if (tab === 'stock') fetchStock(searchQuery)
+            else if (tab === 'imagenes') fetchMissingImages(searchQuery)
+        }, 400);
 
+        return () => clearTimeout(handler);
+    }, [tab, searchQuery])
+
+    useEffect(() => {
         fetchCounters()
     }, [tab])
 
@@ -70,10 +76,10 @@ export default function GestionPage() {
         setPendingImages(imgCount || 0)
     }
 
-    async function fetchVentas() {
+    async function fetchVentas(search = '') {
         setLoading(true)
         try {
-            const data = await getRecentSalesList()
+            const data = await getRecentSalesList(search)
             setVentas(data)
         } catch (err) {
             console.error(err)
@@ -82,19 +88,37 @@ export default function GestionPage() {
         }
     }
 
-    async function fetchStock() {
+    async function fetchStock(search = '') {
         setLoading(true)
-        const { data } = await supabase
-            .from('unidades')
-            .select(`
-                id, codigo_qr, talle_especifico,
-                variantes (*, modelos (descripcion))
-            `)
-            .eq('estado', 'DISPONIBLE')
-            .order('id', { ascending: false })
-            .limit(50)
-        setStock(data || [])
-        setLoading(false)
+        try {
+            let query = supabase
+                .from('variantes')
+                .select(`
+                    id, color, precio_lista, precio_efectivo, imagen_url,
+                    modelos!inner (descripcion),
+                    unidades(id, talle_especifico, codigo_qr, estado)
+                `)
+                .eq('unidades.estado', 'DISPONIBLE')
+                .order('id', { ascending: false })
+
+            if (search) {
+                query = query.or(`color.ilike.%${search}%,modelos.descripcion.ilike.%${search}%`)
+            }
+
+            const { data, error } = await query.limit(100)
+            if (error) throw error
+
+            const withUnits = (data || []).map(v => ({
+                ...v,
+                available_units: v.unidades.filter(u => u.estado === 'DISPONIBLE').sort((a, b) => a.talle_especifico.localeCompare(b.talle_especifico, undefined, { numeric: true }))
+            })).filter(v => v.available_units.length > 0)
+
+            setStock(withUnits)
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     async function fetchMissingImages() {
@@ -129,7 +153,7 @@ export default function GestionPage() {
         try {
             const res = await deleteSale(saleId)
             if (res.success) {
-                fetchVentas()
+                fetchVentas(searchQuery)
                 fetchCounters()
             } else {
                 alert(res.message)
@@ -146,7 +170,7 @@ export default function GestionPage() {
         try {
             const res = await deleteUnit(unitId)
             if (res.success) {
-                fetchStock()
+                fetchStock(searchQuery)
             } else {
                 alert(res.message)
             }
@@ -171,7 +195,7 @@ export default function GestionPage() {
             const res = await updateVariant(editingVariant.id, updates)
             if (res.success) {
                 setEditingVariant(null)
-                fetchStock()
+                fetchStock(searchQuery)
             } else {
                 alert(res.message)
             }
@@ -300,88 +324,87 @@ export default function GestionPage() {
                     <p className="text-center">Cargando...</p>
                 ) : tab === 'ventas' ? (
                     <div className="grid" style={{ gap: '15px' }}>
-                        {ventas
-                            .filter(v => {
-                                const q = searchQuery.toLowerCase();
-                                return (v.variantes?.modelos?.descripcion || '').toLowerCase().includes(q) ||
-                                    (v.variantes?.color || '').toLowerCase().includes(q) ||
-                                    (v.codigo_qr || '').toLowerCase().includes(q);
-                            })
-                            .map(v => {
-                                const sale = v.ventas;
-                                return (
-                                    <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <div style={{ flex: 1 }}>
-                                                <h4 style={{ margin: 0 }}>{v.variantes?.modelos?.descripcion || 'Sin descripción'}</h4>
-                                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                                                    {new Date(v.fecha_venta).toLocaleString()} • {v.estado === 'VENDIDO_ONLINE' ? 'TIENDANUBE' : (sale?.medio_pago || 'S/D')}
-                                                </p>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '5px' }}>
-                                                    <div>
-                                                        <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: 0 }}>
-                                                            Neto: $ {(sale?.monto_neto || sale?.total || 0).toLocaleString()}
-                                                        </p>
-                                                        <p style={{ fontSize: '0.65rem', opacity: 0.4, margin: 0 }}>
-                                                            Lista: $ {(sale?.total || 0).toLocaleString()}
-                                                        </p>
-                                                    </div>
-                                                    {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 8px', background: '#eab308', color: 'black' }}>ONLINE</span>}
+                        {ventas.map(v => {
+                            const sale = v.ventas;
+                            return (
+                                <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <h4 style={{ margin: 0 }}>{v.variantes?.modelos?.descripcion || 'Sin descripción'}</h4>
+                                            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
+                                                {v.codigo_qr} • {new Date(v.fecha_venta).toLocaleString()} • {v.estado === 'VENDIDO_ONLINE' ? 'TIENDANUBE' : (sale?.medio_pago || 'S/D')}
+                                            </p>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '5px' }}>
+                                                <div>
+                                                    <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: 0 }}>
+                                                        Neto: $ {(sale?.monto_neto || sale?.total || 0).toLocaleString()}
+                                                    </p>
+                                                    <p style={{ fontSize: '0.65rem', opacity: 0.4, margin: 0 }}>
+                                                        Lista: $ {(sale?.total || 0).toLocaleString()}
+                                                    </p>
                                                 </div>
+                                                {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 8px', background: '#eab308', color: 'black' }}>ONLINE</span>}
                                             </div>
-                                            {sale && (
-                                                <button
-                                                    onClick={() => handleDeleteSale(sale.id)}
-                                                    style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
-                                                >
-                                                    Anular ✕
-                                                </button>
-                                            )}
                                         </div>
+                                        {sale && (
+                                            <button
+                                                onClick={() => handleDeleteSale(sale.id)}
+                                                style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                            >
+                                                Anular ✕
+                                            </button>
+                                        )}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            );
+                        })}
                     </div>
                 ) : tab === 'stock' ? (
                     <div className="grid" style={{ gap: '15px' }}>
-                        {stock
-                            .filter(u => {
-                                const q = searchQuery.toLowerCase();
-                                return (u.variantes?.modelos?.descripcion || '').toLowerCase().includes(q) ||
-                                    (u.variantes?.color || '').toLowerCase().includes(q) ||
-                                    (u.codigo_qr || '').toLowerCase().includes(q);
-                            })
-                            .map(u => (
-                                <div key={u.id} className="card" style={{ padding: '15px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                            {u.variantes?.imagen_url && (
-                                                <img src={u.variantes.imagen_url} alt="Prod" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px' }} />
-                                            )}
-                                            <div>
-                                                <h4 style={{ margin: 0 }}>{u.variantes?.modelos?.descripcion}</h4>
-                                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                                                    QR: {u.codigo_qr} • Talle: {u.talle_especifico} • {u.variantes?.color}
-                                                </p>
+                        {stock.map(v => (
+                            <div key={v.id} className="card" style={{ padding: '15px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ display: 'flex', gap: '15px', flex: 1 }}>
+                                        {v.imagen_url && (
+                                            <img src={v.imagen_url} alt="Prod" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px' }} />
+                                        )}
+                                        <div style={{ flex: 1 }}>
+                                            <h4 style={{ margin: 0 }}>{v.modelos?.descripcion}</h4>
+                                            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{v.color} • {v.available_units.length} pares en stock</p>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
+                                                {v.available_units.map(u => (
+                                                    <div key={u.id} style={{
+                                                        background: 'var(--secondary)',
+                                                        fontSize: '0.65rem',
+                                                        padding: '3px 6px',
+                                                        borderRadius: '4px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px',
+                                                        border: '1px solid var(--card-border)'
+                                                    }}>
+                                                        <span>T{u.talle_especifico}</span>
+                                                        <button
+                                                            onClick={() => handleDeleteUnit(u.id)}
+                                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}
+                                                            title="Eliminar este par"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button
-                                                onClick={() => setEditingVariant(u.variantes)}
-                                                style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
-                                            >
-                                                Precio
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteUnit(u.id)}
-                                                style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
-                                            >
-                                                Eliminar
-                                            </button>
-                                        </div>
                                     </div>
+                                    <button
+                                        onClick={() => setEditingVariant(v)}
+                                        style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
+                                    >
+                                        Editar Precio
+                                    </button>
                                 </div>
-                            ))}
+                            </div>
+                        ))}
                     </div>
                 ) : (
                     <div className="grid" style={{ gap: '15px' }}>

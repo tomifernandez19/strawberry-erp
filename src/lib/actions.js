@@ -2092,20 +2092,26 @@ export async function migratePricing() {
 /**
  * Fetches recent units sold with their sale data for management.
  */
-export async function getRecentSalesList() {
+export async function getRecentSalesList(search = '') {
     const supabase = createClient();
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('unidades')
         .select(`
             id, fecha_venta, estado,
+            codigo_qr,
             venta_id,
             ventas (id, total, medio_pago, monto_neto),
-            variantes (color, modelos (descripcion))
+            variantes!inner (color, modelos!inner (descripcion))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
-        .order('fecha_venta', { ascending: false })
-        .limit(50);
+        .order('fecha_venta', { ascending: false });
+
+    if (search) {
+        query = query.or(`codigo_qr.ilike.%${search}%,variantes.color.ilike.%${search}%,variantes.modelos.descripcion.ilike.%${search}%`);
+    }
+
+    const { data, error } = await query.limit(search ? 100 : 50);
 
     if (error) {
         console.error("[getRecentSalesList] Error:", error);
