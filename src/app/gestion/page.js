@@ -92,29 +92,53 @@ export default function GestionPage() {
     async function fetchStock(search = '') {
         setLoading(true)
         try {
+            // Buscamos las unidades disponibles directamente
             let query = supabase
-                .from('variantes')
+                .from('unidades')
                 .select(`
-                    id, color, precio_lista, precio_efectivo, imagen_url,
-                    modelos!inner (descripcion),
-                    unidades!inner(id, talle_especifico, codigo_qr, estado)
+                    id, talle_especifico, codigo_qr, estado,
+                    variantes!inner (
+                        id, color, precio_lista, precio_efectivo, imagen_url,
+                        modelos!inner (descripcion)
+                    )
                 `)
-                .eq('unidades.estado', 'DISPONIBLE')
+                .eq('estado', 'DISPONIBLE')
                 .order('id', { ascending: false })
 
             if (search) {
-                query = query.or(`color.ilike.%${search}%,modelos.descripcion.ilike.%${search}%`)
+                // Filtro robusto por modelo o color
+                query = query.or(`variantes.color.ilike.%${search}%,variantes.modelos.descripcion.ilike.%${search}%`)
             }
 
-            const { data, error } = await query.limit(search ? 1000 : 100)
+            const { data, error } = await query.limit(search ? 1000 : 200)
             if (error) throw error
 
-            const withUnits = (data || []).map(v => ({
-                ...v,
-                available_units: v.unidades.filter(u => u.estado === 'DISPONIBLE').sort((a, b) => a.talle_especifico.localeCompare(b.talle_especifico, undefined, { numeric: true }))
-            })).filter(v => v.available_units.length > 0)
+            // Agrupamos por variante (modelo + color) para la vista
+            const grouped = {};
+            (data || []).forEach(unit => {
+                const variant = unit.variantes;
+                if (!variant) return;
 
-            setStock(withUnits)
+                if (!grouped[variant.id]) {
+                    grouped[variant.id] = {
+                        ...variant,
+                        available_units: []
+                    };
+                }
+                grouped[variant.id].available_units.push({
+                    id: unit.id,
+                    talle_especifico: unit.talle_especifico,
+                    codigo_qr: unit.codigo_qr
+                });
+            });
+
+            // Convertimos a array y ordenamos talles
+            const result = Object.values(grouped).map(v => ({
+                ...v,
+                available_units: v.available_units.sort((a, b) => a.talle_especifico.localeCompare(b.talle_especifico, undefined, { numeric: true }))
+            }));
+
+            setStock(result)
         } catch (err) {
             console.error(err)
         } finally {
