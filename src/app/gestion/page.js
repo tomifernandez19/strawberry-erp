@@ -16,6 +16,7 @@ export default function GestionPage() {
     const [missingImages, setMissingImages] = useState([])
     const [loading, setLoading] = useState(false)
     const [editingVariant, setEditingVariant] = useState(null)
+    const [editPrices, setEditPrices] = useState({ lista: 0, efectivo: 0 })
     const [activatingTN, setActivatingTN] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
 
@@ -96,7 +97,7 @@ export default function GestionPage() {
                 .select(`
                     id, color, precio_lista, precio_efectivo, imagen_url,
                     modelos!inner (descripcion),
-                    unidades(id, talle_especifico, codigo_qr, estado)
+                    unidades!inner(id, talle_especifico, codigo_qr, estado)
                 `)
                 .eq('unidades.estado', 'DISPONIBLE')
                 .order('id', { ascending: false })
@@ -105,7 +106,7 @@ export default function GestionPage() {
                 query = query.or(`color.ilike.%${search}%,modelos.descripcion.ilike.%${search}%`)
             }
 
-            const { data, error } = await query.limit(100)
+            const { data, error } = await query.limit(search ? 1000 : 100)
             if (error) throw error
 
             const withUnits = (data || []).map(v => ({
@@ -181,15 +182,9 @@ export default function GestionPage() {
 
     const handleUpdatePrice = async (e) => {
         e.preventDefault()
-        const formData = new FormData(e.target)
-        const newLista = parseFloat(formData.get('lista'))
-
-        // Auto-calculate cash price for consistency (100/121) rounded up to 1000
-        const newEfectivo = Math.ceil((newLista * (100 / 121)) / 1000) * 1000;
-
         const updates = {
-            precio_efectivo: newEfectivo,
-            precio_lista: newLista
+            precio_efectivo: parseFloat(editPrices.efectivo),
+            precio_lista: parseFloat(editPrices.lista)
         }
         try {
             const res = await updateVariant(editingVariant.id, updates)
@@ -397,7 +392,10 @@ export default function GestionPage() {
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => setEditingVariant(v)}
+                                        onClick={() => {
+                                            setEditingVariant(v);
+                                            setEditPrices({ lista: v.precio_lista, efectivo: v.precio_efectivo });
+                                        }}
                                         style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
                                     >
                                         Editar Precio
@@ -467,23 +465,48 @@ export default function GestionPage() {
                         <h3>Editar Precios</h3>
                         <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '15px' }}>{editingVariant.modelos?.descripcion} - {editingVariant.color}</p>
 
-                        <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>PRECIO LISTA (BASE):</label>
-                        <input name="lista" type="number" step="1" className="input-field" defaultValue={editingVariant.precio_lista} autoFocus />
+                        <div className="grid" style={{ gap: '15px' }}>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>PRECIO EFECTIVO (Billetes 💵):</label>
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    value={editPrices.efectivo}
+                                    onChange={(e) => {
+                                        const efe = e.target.value;
+                                        const lista = Math.round(efe * 1.21);
+                                        setEditPrices({ efectivo: efe, lista: lista });
+                                    }}
+                                    autoFocus
+                                />
+                                <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Este es el que usás para cobrar en mano.</p>
+                            </div>
 
-                        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
-                            <div className="card" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Efectivo (Automá.)</p>
-                                <p style={{ fontSize: '0.9rem' }}>$ {Math.ceil((editingVariant.precio_lista * (100 / 121)) / 1000) * 1000}</p>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>PRECIO LISTA (Tarjetas 💳):</label>
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    value={editPrices.lista}
+                                    onChange={(e) => {
+                                        const lista = e.target.value;
+                                        // Derivar efectivo: (lista / 1.21) y redondear a mil más cercano p/ arriba
+                                        const efe = Math.ceil((lista * (100 / 121)) / 1000) * 1000;
+                                        setEditPrices({ lista: lista, efectivo: efe });
+                                    }}
+                                />
+                                <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Equivale a sumar el 21% al efectivo.</p>
                             </div>
-                            <div className="card" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Transf. (Automá.)</p>
-                                <p style={{ fontSize: '0.9rem' }}>$ {Math.round(editingVariant.precio_lista * (100 / 110)).toLocaleString()}</p>
-                            </div>
+                        </div>
+
+                        <div className="card mt-md" style={{ background: 'rgba(255,255,255,0.02)', padding: '10px' }}>
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5, margin: 0 }}>Transferencia (Ref):</p>
+                            <p style={{ fontSize: '0.9rem', margin: 0 }}>$ {Math.round(editPrices.lista * (100 / 110)).toLocaleString()}</p>
                         </div>
 
                         <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                             <button type="button" onClick={() => setEditingVariant(null)} className="btn-secondary" style={{ flex: 1 }}>Cancelar</button>
-                            <button type="submit" className="btn-primary" style={{ flex: 1 }}>Actualizar Todo</button>
+                            <button type="submit" className="btn-primary" style={{ flex: 1 }}>Actualizar Todo ✅</button>
                         </div>
                     </form>
                 </div>
