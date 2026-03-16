@@ -92,55 +92,70 @@ export default function GestionPage() {
     async function fetchStock(search = '') {
         setLoading(true)
         try {
-            // Buscamos las unidades disponibles directamente
-            let query = supabase
-                .from('unidades')
-                .select(`
-                    id, talle_especifico, codigo_qr, estado,
-                    variantes!inner (
-                        id, color, precio_lista, precio_efectivo, imagen_url,
-                        modelos!inner (descripcion)
-                    )
-                `)
-                .eq('estado', 'DISPONIBLE')
-                .order('id', { ascending: false })
+            let variantData = []
 
             if (search) {
-                // Filtro robusto por modelo o color
-                query = query.or(`variantes.color.ilike.%${search}%,variantes.modelos.descripcion.ilike.%${search}%`)
+                // Stage 1: Search models by name
+                const { data: matchedModels } = await supabase
+                    .from('modelos')
+                    .select('id')
+                    .ilike('descripcion', `%${search}%`)
+
+                const modelIds = matchedModels?.map(m => m.id) || []
+
+                // Stage 2: Search variants that match model_id OR color
+                let vQuery = supabase
+                    .from('variantes')
+                    .select('id, color, precio_lista, precio_efectivo, imagen_url, modelos (descripcion)')
+
+                if (modelIds.length > 0) {
+                    vQuery = vQuery.or(`color.ilike.%${search}%,modelo_id.in.(${modelIds.map(id => `"${id}"`).join(',')})`)
+                } else {
+                    vQuery = vQuery.ilike('color', `%${search}%`)
+                }
+
+                const { data: vData, error: vError } = await vQuery.limit(200)
+                if (vError) throw vError
+                variantData = vData || []
+            } else {
+                // Default: Just show recent variants with stock
+                const { data: vData, error: vError } = await supabase
+                    .from('variantes')
+                    .select('id, color, precio_lista, precio_efectivo, imagen_url, modelos (descripcion)')
+                    .order('created_at', { ascending: false })
+                    .limit(100)
+                if (vError) throw vError
+                variantData = vData || []
             }
 
-            const { data, error } = await query.limit(search ? 1000 : 200)
-            if (error) throw error
+            if (variantData.length === 0) {
+                setStock([])
+                setLoading(false)
+                return
+            }
 
-            // Agrupamos por variante (modelo + color) para la vista
-            const grouped = {};
-            (data || []).forEach(unit => {
-                const variant = unit.variantes;
-                if (!variant) return;
+            // Stage 3: Get available units for these variants
+            const variantIds = variantData.map(v => v.id)
+            const { data: unitData, error: unitError } = await supabase
+                .from('unidades')
+                .select('id, talle_especifico, codigo_qr, variante_id')
+                .eq('estado', 'DISPONIBLE')
+                .in('variante_id', variantIds)
 
-                if (!grouped[variant.id]) {
-                    grouped[variant.id] = {
-                        ...variant,
-                        available_units: []
-                    };
-                }
-                grouped[variant.id].available_units.push({
-                    id: unit.id,
-                    talle_especifico: unit.talle_especifico,
-                    codigo_qr: unit.codigo_qr
-                });
-            });
+            if (unitError) throw unitError
 
-            // Convertimos a array y ordenamos talles
-            const result = Object.values(grouped).map(v => ({
-                ...v,
-                available_units: v.available_units.sort((a, b) => a.talle_especifico.localeCompare(b.talle_especifico, undefined, { numeric: true }))
-            }));
+            // Combine and filter those that actually have stock (or show all if searching?)
+            // For editing prices, showing variants even without stock could be useful, 
+            // but the user asked for "precio/stock" and expected to see stock.
+            const results = variantData.map(v => {
+                const units = (unitData || []).filter(u => u.variante_id === v.id)
+                    .sort((a, b) => a.talle_especifico.localeCompare(b.talle_especifico, undefined, { numeric: true }))
+                return { ...v, available_units: units }
+            }).filter(v => search ? true : v.available_units.length > 0) // If searching, show even if 0 stock so they can edit price
 
-            setStock(result)
+            setStock(results)
         } catch (err) {
-            console.error(err)
+            console.error("Error fetching stock:", err)
         } finally {
             setLoading(false)
         }
@@ -380,53 +395,60 @@ export default function GestionPage() {
                     </div>
                 ) : tab === 'stock' ? (
                     <div className="grid" style={{ gap: '15px' }}>
-                        {stock.map(v => (
-                            <div key={v.id} className="card" style={{ padding: '15px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div style={{ display: 'flex', gap: '15px', flex: 1 }}>
-                                        {v.imagen_url && (
-                                            <img src={v.imagen_url} alt="Prod" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px' }} />
-                                        )}
-                                        <div style={{ flex: 1 }}>
-                                            <h4 style={{ margin: 0 }}>{v.modelos?.descripcion}</h4>
-                                            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{v.color} • {v.available_units.length} pares en stock</p>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
-                                                {v.available_units.map(u => (
-                                                    <div key={u.id} style={{
-                                                        background: 'var(--secondary)',
-                                                        fontSize: '0.65rem',
-                                                        padding: '3px 6px',
-                                                        borderRadius: '4px',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '5px',
-                                                        border: '1px solid var(--card-border)'
-                                                    }}>
-                                                        <span>T{u.talle_especifico}</span>
-                                                        <button
-                                                            onClick={() => handleDeleteUnit(u.id)}
-                                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}
-                                                            title="Eliminar este par"
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                    </div>
-                                                ))}
+                        {stock.length === 0 ? (
+                            <div className="card text-center" style={{ padding: '40px', opacity: 0.6 }}>
+                                <p>🔍 No se encontró stock para "{searchQuery}"</p>
+                                <button className="btn-secondary" onClick={() => setSearchQuery('')} style={{ marginTop: '10px' }}>Limpiar búsqueda</button>
+                            </div>
+                        ) : (
+                            stock.map(v => (
+                                <div key={v.id} className="card" style={{ padding: '15px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div style={{ display: 'flex', gap: '15px', flex: 1 }}>
+                                            {v.imagen_url && (
+                                                <img src={v.imagen_url} alt="Prod" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px' }} />
+                                            )}
+                                            <div style={{ flex: 1 }}>
+                                                <h4 style={{ margin: 0 }}>{v.modelos?.descripcion}</h4>
+                                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{v.color} • {v.available_units.length} pares en stock</p>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
+                                                    {v.available_units.map(u => (
+                                                        <div key={u.id} style={{
+                                                            background: 'var(--secondary)',
+                                                            fontSize: '0.65rem',
+                                                            padding: '3px 6px',
+                                                            borderRadius: '4px',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '5px',
+                                                            border: '1px solid var(--card-border)'
+                                                        }}>
+                                                            <span>T{u.talle_especifico}</span>
+                                                            <button
+                                                                onClick={() => handleDeleteUnit(u.id)}
+                                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}
+                                                                title="Eliminar este par"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
+                                        <button
+                                            onClick={() => {
+                                                setEditingVariant(v);
+                                                setEditPrices({ lista: v.precio_lista, efectivo: v.precio_efectivo });
+                                            }}
+                                            style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
+                                        >
+                                            Editar Precio
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => {
-                                            setEditingVariant(v);
-                                            setEditPrices({ lista: v.precio_lista, efectivo: v.precio_efectivo });
-                                        }}
-                                        style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
-                                    >
-                                        Editar Precio
-                                    </button>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                 ) : (
                     <div className="grid" style={{ gap: '15px' }}>
