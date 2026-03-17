@@ -143,6 +143,8 @@ export default function ConsultarPage() {
                 </div>
             ) : (
                 <div className="grid">
+                    <ManualSelector onSelect={handleSearch} loading={loading} buttonLabel="Consultar Stock" />
+
                     <QRScanner onScanSuccess={handleSearch} label="Escanear producto" />
 
                     <div className="card mt-md" style={{ textAlign: 'center' }}>
@@ -163,8 +165,6 @@ export default function ConsultarPage() {
                             </button>
                         </div>
                     </div>
-
-                    <ManualSelector onSelect={handleSearch} loading={loading} />
                 </div>
             )}
             <div style={{ height: '80px' }}></div>

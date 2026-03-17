@@ -217,6 +217,8 @@ export default function VenderPage() {
             )}
 
             <div className="grid">
+                <ManualSelector onSelect={addItem} loading={loading} excludeQrs={items.map(it => it.codigo_qr)} buttonLabel="Agregar al Carrito" />
+
                 <QRScanner onScanSuccess={addItem} label="Escanear producto" />
 
                 <div className="card mt-md" style={{ textAlign: 'center' }}>
@@ -244,8 +246,6 @@ export default function VenderPage() {
                         </button>
                     </div>
                 </div>
-
-                <ManualSelector onSelect={addItem} loading={loading} excludeQrs={items.map(it => it.codigo_qr)} />
             </div>
 
             {items.length > 0 && (
