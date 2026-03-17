@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant, registerTiendanubeWebhooks, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, registerTiendanubeWebhooks, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena, getTiendanubeStatus } from '@/lib/actions'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -20,6 +20,7 @@ export default function GestionPage() {
     const [activatingTN, setActivatingTN] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [senas, setSenas] = useState([])
+    const [tnDebug, setTnDebug] = useState({ storeDigits: '...', tokenDigits: '...' })
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -41,6 +42,9 @@ export default function GestionPage() {
 
     useEffect(() => {
         fetchCounters()
+        if (tab === 'config') {
+            getTiendanubeStatus().then(setTnDebug);
+        }
     }, [tab])
 
     async function fetchCounters() {
@@ -583,8 +587,8 @@ export default function GestionPage() {
 
                 <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', fontSize: '0.8rem' }}>
                     <h4 style={{ margin: '0 0 10px 0', opacity: 0.7 }}>Debug Conexión (Tiendanube)</h4>
-                    <p style={{ margin: '2px 0' }}>Store ID detectado (Vercel): ****{process.env.TIENDANUBE_STORE_ID?.slice(-4) || 'No detectado'}</p>
-                    <p style={{ margin: '2px 0' }}>Token detectado (Vercel): ****{process.env.TIENDANUBE_ACCESS_TOKEN?.slice(-4) || 'No detectado'}</p>
+                    <p style={{ margin: '2px 0' }}>Store ID detectado (Vercel): ****{tnDebug.storeDigits}</p>
+                    <p style={{ margin: '2px 0' }}>Token detectado (Vercel): ****{tnDebug.tokenDigits}</p>
                     <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '5px' }}>Si los últimos 4 dígitos no coinciden con tus nuevos datos, falta hacer Redeploy en Vercel.</p>
                 </div>
             </section>

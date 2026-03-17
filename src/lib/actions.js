@@ -1366,7 +1366,8 @@ export async function registerTiendanubeWebhooks() {
         method: 'POST',
         headers: {
             'Authentication': `bearer ${accessToken}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'Strawberry ERP (fernandezdemaussiontomas@gmail.com)'
         },
         body: JSON.stringify({
             event: 'order/created',
@@ -1378,6 +1379,15 @@ export async function registerTiendanubeWebhooks() {
     console.log('Tiendanube Webhook Response:', data);
 
     return response.ok;
+}
+
+export async function getTiendanubeStatus() {
+    return {
+        hasToken: !!process.env.TIENDANUBE_ACCESS_TOKEN,
+        hasStoreId: !!process.env.TIENDANUBE_STORE_ID,
+        storeDigits: process.env.TIENDANUBE_STORE_ID?.slice(-4) || '---',
+        tokenDigits: process.env.TIENDANUBE_ACCESS_TOKEN?.slice(-4) || '---'
+    };
 }
 
 export async function syncProductToTiendanube(modeloId) {
@@ -1392,7 +1402,8 @@ export async function syncProductToTiendanube(modeloId) {
     const baseUrl = `https://api.tiendanube.com/v1/${storeId}`;
     const headers = {
         'Authentication': `bearer ${accessToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'Strawberry ERP (fernandezdemaussiontomas@gmail.com)'
     };
 
     try {
