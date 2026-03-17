@@ -257,11 +257,11 @@ export default function GestionPage() {
         if (!confirm('¿Activar conexión automática con Tiendanube?')) return
         setActivatingTN(true)
         try {
-            const ok = await registerTiendanubeWebhooks()
-            if (ok) {
+            const result = await registerTiendanubeWebhooks()
+            if (result.ok) {
                 alert('✅ ¡Conexión activada con éxito! Tiendanube ahora enviará los pedidos automáticamente.')
             } else {
-                alert('❌ Error al activar. Verifique las credenciales en Vercel.')
+                alert(`❌ Error al activar:\n${result.error}`)
             }
         } catch (err) {
             alert('❌ Error: ' + err.message)

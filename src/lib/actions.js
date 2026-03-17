@@ -1351,34 +1351,35 @@ export async function searchModels(term) {
 // --- INTEGRACIÓN TIENDANUBE ---
 
 export async function registerTiendanubeWebhooks() {
-    const supabase = createClient();
     const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
-    const storeId = process.env.TIENDANUBE_STORE_ID; // Necesitaremos este dato
-    const appUrl = 'https://strawberry-erp.vercel.app'; // Tu URL de Vercel
+    const storeId = process.env.TIENDANUBE_STORE_ID;
 
-    console.log('Registering Webhook for Store:', storeId);
-    if (!accessToken || !storeId) {
-        console.error('Missing Tiendanube credentials in environment variables');
-        return false;
+    if (!accessToken || !storeId) return { ok: false, error: 'Faltan credenciales en Vercel' };
+
+    try {
+        const response = await fetch(`https://api.tiendanube.com/v1/${storeId}/webhooks`, {
+            method: 'POST',
+            headers: {
+                'Authentication': `bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'ERP Strawberry Trejo (fernandezdemaussiontomas@gmail.com)'
+            },
+            body: JSON.stringify({
+                event: 'order/created',
+                url: `https://strawberry-erp.vercel.app/api/webhooks/tiendanube`
+            })
+        });
+
+        if (response.ok) return { ok: true };
+
+        const errorData = await response.json().catch(() => ({}));
+        return {
+            ok: false,
+            error: `Error ${response.status}: ${errorData.description || errorData.message || 'Sin detalles'}`
+        };
+    } catch (err) {
+        return { ok: false, error: err.message };
     }
-
-    const response = await fetch(`https://api.tiendanube.com/v1/${storeId}/webhooks`, {
-        method: 'POST',
-        headers: {
-            'Authentication': `bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'User-Agent': 'Strawberry ERP (fernandezdemaussiontomas@gmail.com)'
-        },
-        body: JSON.stringify({
-            event: 'order/created',
-            url: `${appUrl}/api/webhooks/tiendanube`
-        })
-    });
-
-    const data = await response.json();
-    console.log('Tiendanube Webhook Response:', data);
-
-    return response.ok;
 }
 
 export async function getTiendanubeStatus() {
