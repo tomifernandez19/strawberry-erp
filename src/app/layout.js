@@ -48,6 +48,11 @@ function Nav() {
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
+      <head>
+        <title>Strawberry ERP</title>
+        <meta name="description" content="Sistema de gestión Strawberry" />
+        <link rel="icon" href="/icon.png" />
+      </head>
       <body className={inter.className}>
         <AuthProvider>
           <main className="container">
