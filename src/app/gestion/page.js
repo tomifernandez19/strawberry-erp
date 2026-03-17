@@ -121,7 +121,7 @@ export default function GestionPage() {
                 // Stage 2: Search variants that match model_id OR color
                 let vQuery = supabase
                     .from('variantes')
-                    .select('id, color, precio_lista, precio_efectivo, imagen_url, modelos (descripcion)')
+                    .select('id, color, precio_lista, precio_efectivo, costo_promedio, imagen_url, modelos (descripcion)')
 
                 if (modelIds.length > 0) {
                     vQuery = vQuery.or(`color.ilike.%${search}%,modelo_id.in.(${modelIds.map(id => `"${id}"`).join(',')})`)
@@ -136,7 +136,7 @@ export default function GestionPage() {
                 // Default: Just show recent variants with stock
                 const { data: vData, error: vError } = await supabase
                     .from('variantes')
-                    .select('id, color, precio_lista, precio_efectivo, imagen_url, modelos (descripcion)')
+                    .select('id, color, precio_lista, precio_efectivo, costo_promedio, imagen_url, modelos (descripcion)')
                     .order('created_at', { ascending: false })
                     .limit(100)
                 if (vError) throw vError
@@ -238,7 +238,8 @@ export default function GestionPage() {
         e.preventDefault()
         const updates = {
             precio_efectivo: parseFloat(editPrices.efectivo),
-            precio_lista: parseFloat(editPrices.lista)
+            precio_lista: parseFloat(editPrices.lista),
+            costo_promedio: parseFloat(editPrices.costo)
         }
         try {
             const res = await updateVariant(editingVariant.id, updates)
@@ -251,6 +252,17 @@ export default function GestionPage() {
         } catch (err) {
             alert("Error de conexión: " + err.message)
         }
+    }
+
+    const calcPricesFromCost = (cost) => {
+        const c = parseFloat(cost) || 0;
+        const efe = (c * 2) + 3000;
+        const rawLista = c * 2 * 1.21;
+        const lista = (rawLista % 1000 >= 100)
+            ? Math.ceil(rawLista / 1000) * 1000
+            : Math.floor(rawLista / 1000) * 1000;
+        const may = Math.round(efe * 0.9);
+        return { costo: cost, efectivo: efe, lista: lista, mayorista: may };
     }
 
     const handleActivateTN = async () => {
@@ -499,7 +511,27 @@ export default function GestionPage() {
                                             <div style={{ flex: 1 }}>
                                                 <h4 style={{ margin: 0 }}>{v.modelos?.descripcion}</h4>
                                                 <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{v.color} • {v.available_units.length} pares en stock</p>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
+
+                                                <div style={{ display: 'flex', gap: '15px', marginTop: '10px', fontSize: '0.85rem' }}>
+                                                    <div>
+                                                        <span style={{ opacity: 0.5 }}>Costo:</span>
+                                                        <span style={{ fontWeight: 'bold', marginLeft: '5px' }}>${v.costo_promedio?.toLocaleString() || '0'}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span style={{ opacity: 0.5 }}>Efe:</span>
+                                                        <span style={{ color: 'var(--primary)', fontWeight: 'bold', marginLeft: '5px' }}>${v.precio_efectivo?.toLocaleString()}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span style={{ opacity: 0.5 }}>May:</span>
+                                                        <span style={{ color: '#fbbf24', fontWeight: 'bold', marginLeft: '5px' }}>${Math.round(v.precio_efectivo * 0.9).toLocaleString()}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span style={{ opacity: 0.5 }}>Lista:</span>
+                                                        <span style={{ fontWeight: 'bold', marginLeft: '5px' }}>${v.precio_lista?.toLocaleString()}</span>
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '12px' }}>
                                                     {v.available_units.map(u => (
                                                         <div key={u.id} style={{
                                                             background: u.estado === 'RESERVADO_ONLINE' ? 'rgba(234, 179, 8, 0.1)' : 'var(--secondary)',
@@ -529,7 +561,12 @@ export default function GestionPage() {
                                         <button
                                             onClick={() => {
                                                 setEditingVariant(v);
-                                                setEditPrices({ lista: v.precio_lista, efectivo: v.precio_efectivo });
+                                                setEditPrices({
+                                                    costo: v.costo_promedio || 0,
+                                                    lista: v.precio_lista,
+                                                    efectivo: v.precio_efectivo,
+                                                    mayorista: Math.round(v.precio_efectivo * 0.9)
+                                                });
                                             }}
                                             style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}
                                         >
@@ -609,40 +646,52 @@ export default function GestionPage() {
                         <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '15px' }}>{editingVariant.modelos?.descripcion} - {editingVariant.color}</p>
 
                         <div className="grid" style={{ gap: '15px' }}>
-                            <div>
-                                <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>EFECTIVO / TRANSFERENCIA 💵:</label>
+                            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '10px', border: '1px solid var(--primary)' }}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--primary)' }}>COSTO UNITARIO:</label>
                                 <input
                                     type="number"
                                     className="input-field"
-                                    value={editPrices.efectivo}
-                                    onChange={(e) => {
-                                        const efe = e.target.value;
-                                        const rawLista = efe * 1.21;
-                                        // Si pasa los 100 pesos por encima del mil, redondea al mil siguiente
-                                        const lista = (rawLista % 1000 >= 100)
-                                            ? Math.ceil(rawLista / 1000) * 1000
-                                            : Math.floor(rawLista / 1000) * 1000;
-                                        setEditPrices({ efectivo: efe, lista: lista });
-                                    }}
+                                    value={editPrices.costo}
+                                    onChange={(e) => setEditPrices(calcPricesFromCost(e.target.value))}
                                     autoFocus
+                                    style={{ fontSize: '1.2rem', fontWeight: 'bold' }}
                                 />
-                                <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Este es el precio final para billetes o transferencias.</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '4px' }}>Al cambiar el costo, se recalculan el resto automáticamente.</p>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.75rem', opacity: 0.6 }}>EFECTIVO:</label>
+                                    <input
+                                        type="number"
+                                        className="input-field"
+                                        value={editPrices.efectivo}
+                                        onChange={(e) => {
+                                            const efe = parseFloat(e.target.value) || 0;
+                                            setEditPrices({ ...editPrices, efectivo: efe, mayorista: Math.round(efe * 0.9) });
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.75rem', opacity: 0.6 }}>MAYORISTA (-10%):</label>
+                                    <input
+                                        type="number"
+                                        disabled
+                                        className="input-field"
+                                        value={editPrices.mayorista}
+                                        style={{ opacity: 0.7 }}
+                                    />
+                                </div>
                             </div>
 
                             <div>
-                                <label style={{ fontSize: '0.8rem', opacity: 0.6 }}>PRECIO LISTA (TARJETAS 💳):</label>
+                                <label style={{ fontSize: '0.75rem', opacity: 0.6 }}>TARJETA (LISTA):</label>
                                 <input
                                     type="number"
                                     className="input-field"
                                     value={editPrices.lista}
-                                    onChange={(e) => {
-                                        const lista = e.target.value;
-                                        // Derivar efectivo: (lista / 1.21) y redondear a mil más cercano p/ arriba
-                                        const efe = Math.ceil((lista * (100 / 121)) / 1000) * 1000;
-                                        setEditPrices({ lista: lista, efectivo: efe });
-                                    }}
+                                    onChange={(e) => setEditPrices({ ...editPrices, lista: e.target.value })}
                                 />
-                                <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Es el precio base con el 21% incluido para cobrar con tarjeta.</p>
                             </div>
                         </div>
 
