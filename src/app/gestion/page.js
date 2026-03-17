@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant, registerTiendanubeWebhooks, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena, getTiendanubeStatus } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena } from '@/lib/actions'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -17,10 +17,8 @@ export default function GestionPage() {
     const [loading, setLoading] = useState(false)
     const [editingVariant, setEditingVariant] = useState(null)
     const [editPrices, setEditPrices] = useState({ lista: 0, efectivo: 0 })
-    const [activatingTN, setActivatingTN] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [senas, setSenas] = useState([])
-    const [tnDebug, setTnDebug] = useState({ storeDigits: '...', tokenDigits: '...' })
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -42,7 +40,6 @@ export default function GestionPage() {
 
     useEffect(() => {
         fetchCounters()
-        getTiendanubeStatus().then(setTnDebug);
     }, [tab])
 
     async function fetchCounters() {
@@ -265,22 +262,6 @@ export default function GestionPage() {
         return { costo: cost, efectivo: efe, lista: lista, mayorista: may };
     }
 
-    const handleActivateTN = async () => {
-        if (!confirm('¿Activar conexión automática con Tiendanube?')) return
-        setActivatingTN(true)
-        try {
-            const result = await registerTiendanubeWebhooks()
-            if (result.ok) {
-                alert('✅ ¡Conexión activada con éxito! Tiendanube ahora enviará los pedidos automáticamente.')
-            } else {
-                alert(`❌ Error al activar:\n${result.error}`)
-            }
-        } catch (err) {
-            alert('❌ Error: ' + err.message)
-        } finally {
-            setActivatingTN(false)
-        }
-    }
 
     const renderCard = (type) => {
         let count = 0;
@@ -381,13 +362,6 @@ export default function GestionPage() {
                     style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
                 >
                     Cargar Fotos
-                </button>
-                <button
-                    className={tab === 'config' ? 'btn-primary' : 'btn-secondary'}
-                    onClick={() => { setTab('config'); setSearchQuery(''); }}
-                    style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
-                >
-                    ⚙️ Config
                 </button>
             </nav>
 
@@ -615,25 +589,6 @@ export default function GestionPage() {
                 )}
             </section>
 
-            <section className="mt-xl card" style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                <h3>Configuración Avanzada</h3>
-                <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '20px' }}>Ajustes del sistema y conexiones externas.</p>
-                <button
-                    onClick={handleActivateTN}
-                    disabled={activatingTN}
-                    className="btn-primary"
-                    style={{ background: '#059669', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}
-                >
-                    <span>{activatingTN ? '⏳ Conectando...' : '🔌 Activar Conexión Tiendanube'}</span>
-                </button>
-
-                <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', fontSize: '0.8rem' }}>
-                    <h4 style={{ margin: '0 0 10px 0', opacity: 0.7 }}>Debug Conexión (Tiendanube)</h4>
-                    <p style={{ margin: '2px 0' }}>Store ID detectado (Vercel): ****{tnDebug.storeDigits}</p>
-                    <p style={{ margin: '2px 0' }}>Token detectado (Vercel): ****{tnDebug.tokenDigits}</p>
-                    <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '5px' }}>Si los últimos 4 dígitos no coinciden con tus nuevos datos, falta hacer Redeploy en Vercel.</p>
-                </div>
-            </section>
 
             {editingVariant && (
                 <div style={{
