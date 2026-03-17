@@ -42,9 +42,7 @@ export default function GestionPage() {
 
     useEffect(() => {
         fetchCounters()
-        if (tab === 'config') {
-            getTiendanubeStatus().then(setTnDebug);
-        }
+        getTiendanubeStatus().then(setTnDebug);
     }, [tab])
 
     async function fetchCounters() {
@@ -371,6 +369,13 @@ export default function GestionPage() {
                     style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
                 >
                     Cargar Fotos
+                </button>
+                <button
+                    className={tab === 'config' ? 'btn-primary' : 'btn-secondary'}
+                    onClick={() => { setTab('config'); setSearchQuery(''); }}
+                    style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem' }}
+                >
+                    ⚙️ Config
                 </button>
             </nav>
 
