@@ -349,7 +349,7 @@ export default function GestionPage() {
                 <p style={{ opacity: 0.7 }}>Panel administrativo central</p>
             </header>
 
-            <div className="grid mt-md" style={{ gridTemplateColumns: 'repeat(6, 1fr)', gap: '10px' }}>
+            <div className="grid mt-md" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
                 {['QR', 'LOC', 'DISPATCH', 'SENA', 'INVOICE', 'IMAGE'].map(renderCard)}
             </div>
 
@@ -512,22 +512,22 @@ export default function GestionPage() {
                                                 <h4 style={{ margin: 0 }}>{v.modelos?.descripcion}</h4>
                                                 <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{v.color} • {v.available_units.length} pares en stock</p>
 
-                                                <div style={{ display: 'flex', gap: '15px', marginTop: '10px', fontSize: '0.85rem' }}>
+                                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px', fontSize: '0.75rem', flexWrap: 'wrap' }}>
                                                     <div>
                                                         <span style={{ opacity: 0.5 }}>Costo:</span>
-                                                        <span style={{ fontWeight: 'bold', marginLeft: '5px' }}>${v.costo_promedio?.toLocaleString() || '0'}</span>
+                                                        <span style={{ fontWeight: 'bold', marginLeft: '3px' }}>${v.costo_promedio?.toLocaleString() || '0'}</span>
                                                     </div>
                                                     <div>
                                                         <span style={{ opacity: 0.5 }}>Efe:</span>
-                                                        <span style={{ color: 'var(--primary)', fontWeight: 'bold', marginLeft: '5px' }}>${v.precio_efectivo?.toLocaleString()}</span>
+                                                        <span style={{ color: 'var(--primary)', fontWeight: 'bold', marginLeft: '3px' }}>${v.precio_efectivo?.toLocaleString()}</span>
                                                     </div>
                                                     <div>
                                                         <span style={{ opacity: 0.5 }}>May:</span>
-                                                        <span style={{ color: '#fbbf24', fontWeight: 'bold', marginLeft: '5px' }}>${Math.round(v.precio_efectivo * 0.9).toLocaleString()}</span>
+                                                        <span style={{ color: '#fbbf24', fontWeight: 'bold', marginLeft: '3px' }}>${Math.round(v.precio_efectivo * 0.9).toLocaleString()}</span>
                                                     </div>
                                                     <div>
                                                         <span style={{ opacity: 0.5 }}>Lista:</span>
-                                                        <span style={{ fontWeight: 'bold', marginLeft: '5px' }}>${v.precio_lista?.toLocaleString()}</span>
+                                                        <span style={{ fontWeight: 'bold', marginLeft: '3px' }}>${v.precio_lista?.toLocaleString()}</span>
                                                     </div>
                                                 </div>
 
