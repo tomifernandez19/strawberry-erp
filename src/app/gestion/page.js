@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena, toggleUnitVidriera } from '@/lib/actions'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -19,6 +19,7 @@ export default function GestionPage() {
     const [editPrices, setEditPrices] = useState({ lista: 0, efectivo: 0 })
     const [searchQuery, setSearchQuery] = useState('')
     const [senas, setSenas] = useState([])
+    const [showOnlyVidriera, setShowOnlyVidriera] = useState(false)
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -150,8 +151,8 @@ export default function GestionPage() {
             const variantIds = variantData.map(v => v.id)
             const { data: unitData, error: unitError } = await supabase
                 .from('unidades')
-                .select('id, talle_especifico, codigo_qr, variante_id, estado')
-                .in('estado', ['DISPONIBLE', 'RESERVADO_ONLINE'])
+                .select('id, talle_especifico, codigo_qr, variante_id, estado, en_vidriera')
+                .in('estado', ['DISPONIBLE', 'RESERVADO_ONLINE', 'VENDIDO_ONLINE'])
                 .in('variante_id', variantIds)
 
             if (unitError) throw unitError
@@ -163,7 +164,12 @@ export default function GestionPage() {
                 const units = (unitData || []).filter(u => u.variante_id === v.id)
                     .sort((a, b) => a.talle_especifico.localeCompare(b.talle_especifico, undefined, { numeric: true }))
                 return { ...v, available_units: units }
-            }).filter(v => search ? true : v.available_units.length > 0) // If searching, show even if 0 stock so they can edit price
+            }).filter(v => {
+                if (showOnlyVidriera) {
+                    return v.available_units.some(u => u.en_vidriera)
+                }
+                return search ? true : v.available_units.length > 0
+            })
 
             setStock(results)
         } catch (err) {
@@ -248,6 +254,19 @@ export default function GestionPage() {
             }
         } catch (err) {
             alert("Error de conexión: " + err.message)
+        }
+    }
+
+    const handleToggleVidriera = async (unitId, current) => {
+        try {
+            const res = await toggleUnitVidriera(unitId, current)
+            if (res.success) {
+                fetchStock(searchQuery)
+            } else {
+                alert(res.message)
+            }
+        } catch (err) {
+            alert("Error: " + err.message)
         }
     }
 
@@ -366,14 +385,26 @@ export default function GestionPage() {
             </nav>
 
             <div className="card mt-md" style={{ padding: '10px' }}>
-                <input
-                    type="text"
-                    placeholder={`Buscar en ${tab === 'ventas' ? 'ventas' : tab === 'stock' ? 'stock' : 'fotos'}...`}
-                    className="input-field"
-                    style={{ margin: 0, fontSize: '0.9rem' }}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                        type="text"
+                        placeholder={`Buscar en ${tab === 'ventas' ? 'ventas' : tab === 'stock' ? 'stock' : 'fotos'}...`}
+                        className="input-field"
+                        style={{ margin: 0, fontSize: '0.9rem', flex: 1 }}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {tab === 'stock' && (
+                        <button
+                            onClick={() => setShowOnlyVidriera(!showOnlyVidriera)}
+                            className={showOnlyVidriera ? 'btn-primary' : 'btn-secondary'}
+                            style={{ padding: '8px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', minWidth: 'auto' }}
+                            title="Filtrar por vidriera"
+                        >
+                            {showOnlyVidriera ? '🪟 Todo' : '🪟 Vidriera'}
+                        </button>
+                    )}
+                </div>
             </div>
 
             <section className="mt-lg">
@@ -515,11 +546,12 @@ export default function GestionPage() {
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             gap: '5px',
-                                                            border: u.estado === 'RESERVADO_ONLINE' ? '1px solid #eab308' : '1px solid var(--card-border)',
+                                                            border: u.en_vidriera ? '1px solid #3b82f6' : (u.estado === 'RESERVADO_ONLINE' ? '1px solid #eab308' : '1px solid var(--card-border)'),
                                                             position: 'relative'
                                                         }}>
+                                                            {u.en_vidriera && <span title="En Vidriera" style={{ fontSize: '10px' }}>👁️</span>}
                                                             {u.estado === 'RESERVADO_ONLINE' && <span title="Reservado" style={{ fontSize: '10px' }}>⏳</span>}
-                                                            <span>T{u.talle_especifico}</span>
+                                                            <span onClick={() => handleToggleVidriera(u.id, u.en_vidriera)} style={{ cursor: 'pointer' }}>T{u.talle_especifico}</span>
                                                             <button
                                                                 onClick={() => handleDeleteUnit(u.id)}
                                                                 style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}

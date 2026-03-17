@@ -1109,6 +1109,25 @@ export async function deleteUnit(unitId) {
 }
 
 /**
+ * Toggles the 'en_vidriera' status of a specific unit.
+ */
+export async function toggleUnitVidriera(unitId, currentStatus) {
+    const supabase = createClient();
+    try {
+        const { error } = await supabase
+            .from('unidades')
+            .update({ en_vidriera: !currentStatus })
+            .eq('id', unitId);
+
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        console.error("[toggleUnitVidriera] Error:", err);
+        return { success: false, message: "No se pudo actualizar el estado de vidriera: " + err.message };
+    }
+}
+
+/**
  * Updates variant details (prices, color).
  */
 export async function updateVariant(variantId, updates) {
