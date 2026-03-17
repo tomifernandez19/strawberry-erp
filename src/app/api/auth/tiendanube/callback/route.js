@@ -22,18 +22,14 @@ export async function GET(req) {
 
         const data = await response.json();
 
-        // En una app multi-tienda, aquí guardaríamos el data.access_token en la DB.
-        // Como esta es para vos solo, te voy a mostrar el token en pantalla para que lo guardes en Vercel.
-
         return new NextResponse(`
             <html>
-                <body style="font-family: sans-serif; padding: 40px; text-align: center; background: #121212; color: white;">
-                    <h1 style="color: #4ade80;">¡Conexión Exitosa con Tiendanube! 🍓</h1>
-                    <p>Copiá este Access Token y pegalo en Vercel como <b>TIENDANUBE_ACCESS_TOKEN</b>:</p>
-                    <code style="background: #333; padding: 10px; border-radius: 5px; display: block; word-break: break-all; margin: 20px 0;">
+                <body style="font-family: sans-serif; padding: 40px; text-align: center; background: #000; color: #fff;">
+                    <h1 style="color: #4ade80;">TOKEN GENERADO CON ÉXITO 🍓</h1>
+                    <p>Copiá este código y pegalo en Vercel:</p>
+                    <div style="background: #222; padding: 20px; border: 2px dashed #4ade80; font-family: monospace; font-size: 1.2rem; margin: 20px auto; max-width: 600px; word-break: break-all;">
                         ${data.access_token}
-                    </code>
-                    <p style="opacity: 0.6;">Una vez que lo guardes en Vercel, el ERP ya podrá recibir tus pedidos.</p>
+                    </div>
                 </body>
             </html>
         `, { headers: { 'Content-Type': 'text/html' } });
