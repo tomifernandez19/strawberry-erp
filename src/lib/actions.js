@@ -370,7 +370,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             medio_pago,
             total: calculatedTotal,
             user_id: user?.id || null,
-            monto_efectivo: (isSena || medio_pago === 'DIVIDIR_PAGOS') ? monto_efectivo : (['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio_pago) ? calculatedTotal : 0),
+            monto_efectivo: (isSena || medio_pago === 'DIVIDIR_PAGOS') ? monto_efectivo : (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medio_pago) ? calculatedTotal : 0),
             monto_otro: (isSena || medio_pago === 'DIVIDIR_PAGOS') ? monto_otro : 0,
             otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
             facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
@@ -717,7 +717,7 @@ export async function getDailySummary(onlyUserId = null) {
     // 3. GLOBAL CASH CALCULATION (Perpetual balance)
     const { data: totalSalesCash, error: sErr } = await supabase
         .from('ventas')
-        .select('monto_efectivo');
+        .select('monto_efectivo, medio_pago');
 
     const { data: totalManualCash, error: mAllErr } = await supabase
         .from('movimientos_caja')
@@ -728,7 +728,10 @@ export async function getDailySummary(onlyUserId = null) {
         console.error("Error fetching global cash:", sErr || mAllErr);
     }
 
-    const cashFromSales = (totalSalesCash || []).reduce((acc, s) => acc + (parseFloat(s.monto_efectivo) || 0), 0);
+    const cashFromSales = (totalSalesCash || []).reduce((acc, s) => {
+        if (['TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(s.medio_pago)) return acc;
+        return acc + (parseFloat(s.monto_efectivo) || 0)
+    }, 0);
     const cashFromManual = (totalManualCash || []).reduce((acc, m) => acc + (parseFloat(m.monto) || 0), 0);
     const globalCashInHand = cashFromSales + cashFromManual;
 
@@ -871,7 +874,12 @@ export async function getFinanceSummary() {
     // 4. Process Sales
     sales?.forEach(s => {
         const total = parseFloat(s.total) || 0;
-        const efe = parseFloat(s.monto_efectivo) || 0;
+        let efe = parseFloat(s.monto_efectivo) || 0;
+
+        if (['TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(s.medio_pago)) {
+            efe = 0;
+        }
+
         const netoTotal = s.monto_neto !== null ? parseFloat(s.monto_neto) : total;
 
         // 1. Cash portion always goes to CAJA_LOCAL
