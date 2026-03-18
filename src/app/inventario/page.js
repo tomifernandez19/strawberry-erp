@@ -9,7 +9,7 @@ export default function InventarioPage() {
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(null)
     const [search, setSearch] = useState('')
-    const [fixing, setFixing] = useState(false)
+    const [filter, setFilter] = useState('ALL') // ALL, UNSYNCED, NO_LOCATION, LOW_STOCK
 
     useEffect(() => {
         fetchStock()
@@ -65,54 +65,74 @@ export default function InventarioPage() {
         }
     }
 
-    const handleFixPrices = async () => {
-        if (!confirm('¿Estás seguro de recalcular los precios de lista de todos los productos de "Proveedor"? (Redondeo a mil con salto en 100)')) return
-        setFixing(true);
-        try {
-            const result = await fixProveedorPrices();
-            if (result.success) {
-                alert(`✅ Se actualizaron ${result.updated} variantes.`);
-                fetchStock();
-            } else {
-                alert('❌ Error: ' + result.message);
-            }
-        } catch (e) {
-            alert('❌ Error: ' + e.message);
-        } finally {
-            setFixing(false);
-        }
-    }
+    // Pre-calculate additional flags for items for filtering
+    const processedStock = stock.map(item => ({
+        ...item,
+        isSynced: !!item.modelo?.tiendanube_id,
+        hasNoLocation: item.ubicaciones.length === 0,
+        isLowStock: item.count < 3
+    }));
 
-    const filteredStock = stock.filter(item =>
-        item.modelo.descripcion.toLowerCase().includes(search.toLowerCase())
-    )
+    const filteredStock = processedStock.filter(item => {
+        // Text Match
+        const matchesText = item.modelo.descripcion.toLowerCase().includes(search.toLowerCase());
+        if (!matchesText) return false;
+
+        // Button Filter
+        if (filter === 'UNSYNCED') return !item.isSynced;
+        if (filter === 'NO_LOCATION') return item.hasNoLocation;
+        if (filter === 'LOW_STOCK') return item.isLowStock;
+
+        return true;
+    });
 
     return (
         <div className="grid mt-lg">
             <header className="text-center">
                 <h1>Inventario</h1>
                 <p style={{ opacity: 0.7 }}>Stock disponible por modelo</p>
-                {isAdmin && (
-                    <button
-                        className="btn-secondary mt-md"
-                        style={{ fontSize: '0.7rem', padding: '6px 12px' }}
-                        onClick={handleFixPrices}
-                        disabled={fixing}
-                    >
-                        {fixing ? '⌛ Recalculando...' : '⚙️ Recalcular Precios Listas (Proveedor)'}
-                    </button>
-                )}
             </header>
 
-            <div className="card" style={{ padding: 'var(--spacing-md)' }}>
+            <div className="card mt-md" style={{ padding: 'var(--spacing-md)' }}>
                 <input
                     type="text"
                     placeholder="🔍 Buscar por modelo..."
                     className="input-field"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    style={{ marginBottom: 0 }}
+                    style={{ marginBottom: '15px' }}
                 />
+
+                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
+                    <button
+                        className={`btn-secondary ${filter === 'ALL' ? 'active-filter' : ''}`}
+                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'ALL' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', borderColor: filter === 'ALL' ? 'var(--accent)' : 'rgba(255,255,255,0.1)', color: filter === 'ALL' ? 'white' : 'inherit' }}
+                        onClick={() => setFilter('ALL')}
+                    >
+                        Todos
+                    </button>
+                    <button
+                        className={`btn-secondary ${filter === 'UNSYNCED' ? 'active-filter' : ''}`}
+                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'UNSYNCED' ? '#3b82f6' : 'rgba(255,255,255,0.05)', borderColor: filter === 'UNSYNCED' ? '#3b82f6' : 'rgba(255,255,255,0.1)', color: filter === 'UNSYNCED' ? 'white' : 'inherit' }}
+                        onClick={() => setFilter('UNSYNCED')}
+                    >
+                        ☁️ Faltan en Nube
+                    </button>
+                    <button
+                        className={`btn-secondary ${filter === 'NO_LOCATION' ? 'active-filter' : ''}`}
+                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'NO_LOCATION' ? '#ef4444' : 'rgba(255,255,255,0.05)', borderColor: filter === 'NO_LOCATION' ? '#ef4444' : 'rgba(255,255,255,0.1)', color: filter === 'NO_LOCATION' ? 'white' : 'inherit' }}
+                        onClick={() => setFilter('NO_LOCATION')}
+                    >
+                        ⚠️ Sin Ubicación
+                    </button>
+                    <button
+                        className={`btn-secondary ${filter === 'LOW_STOCK' ? 'active-filter' : ''}`}
+                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'LOW_STOCK' ? '#f59e0b' : 'rgba(255,255,255,0.05)', borderColor: filter === 'LOW_STOCK' ? '#f59e0b' : 'rgba(255,255,255,0.1)', color: filter === 'LOW_STOCK' ? 'white' : 'inherit' }}
+                        onClick={() => setFilter('LOW_STOCK')}
+                    >
+                        📉 Poco Stock
+                    </button>
+                </div>
             </div>
 
             {loading ? (
@@ -168,7 +188,7 @@ export default function InventarioPage() {
                                     </div>
                                 </div>
 
-                                {isAdmin && (
+                                {isAdmin && !item.isSynced && (
                                     <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
                                         <button
                                             className="btn-secondary"
@@ -176,8 +196,15 @@ export default function InventarioPage() {
                                             onClick={() => handleSync(item.modelo.id)}
                                             disabled={syncing === item.modelo.id}
                                         >
-                                            {syncing === item.modelo.id ? '⏳ Sincronizando...' : '🔄 Sincronizar con Tiendanube'}
+                                            {syncing === item.modelo.id ? '⏳ Creando publicación...' : '☁️ Publicar en Tiendanube'}
                                         </button>
+                                    </div>
+                                )}
+                                {isAdmin && item.isSynced && (
+                                    <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px', textAlign: 'center' }}>
+                                        <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '20px' }}>
+                                            ✅ Sincronizado en Tiendanube
+                                        </span>
                                     </div>
                                 )}
                             </div>

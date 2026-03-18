@@ -1859,7 +1859,7 @@ export async function getAvailableStockDetailed() {
         .from('unidades')
         .select(`
             id, talle_especifico, ubicacion,
-            variantes (id, color, precio_efectivo, precio_lista, modelos (id, descripcion, marca))
+            variantes (id, color, precio_efectivo, precio_lista, modelos (id, descripcion, marca, tiendanube_id))
         `)
         .eq('estado', 'DISPONIBLE');
 
