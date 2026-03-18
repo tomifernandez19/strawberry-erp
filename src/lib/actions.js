@@ -580,8 +580,8 @@ export async function getCustomRangeStats(startDate, endDate) {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
-            ventas (total, medio_pago, monto_neto, user_id, profiles (nombre)),
-            variantes (color, modelos (descripcion, codigo_proveedor))
+            ventas (id, total, medio_pago, monto_neto, user_id, profiles (nombre)),
+            variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
         .gte('fecha_venta', start.toISOString())
@@ -606,9 +606,38 @@ export async function getCustomRangeStats(startDate, endDate) {
         items: []
     };
 
+    const saleBaseTotals = {};
     unitsSold.forEach(unit => {
+        const vId = unit.ventas?.id;
+        if (!vId) return;
+        const medio = unit.ventas?.medio_pago;
+        const basePrice = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio)
+            ? (unit.variantes?.precio_efectivo || 1)
+            : (unit.variantes?.precio_lista || 1);
+        saleBaseTotals[vId] = (saleBaseTotals[vId] || 0) + basePrice;
+    });
+
+    unitsSold.forEach(unit => {
+        const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
         const neto = parseFloat(unit.ventas?.monto_neto) || total;
+
+        let perUnitTotal = 0;
+        let perUnitNeto = 0;
+
+        if (vId && saleBaseTotals[vId] > 0) {
+            const medio = unit.ventas?.medio_pago;
+            const basePrice = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio)
+                ? (unit.variantes?.precio_efectivo || 1)
+                : (unit.variantes?.precio_lista || 1);
+            const weight = basePrice / saleBaseTotals[vId];
+            perUnitTotal = total * weight;
+            perUnitNeto = neto * weight;
+        } else {
+            const siblingsCount = unitsSold.filter(u => u.ventas?.id === vId).length || 1;
+            perUnitTotal = total / siblingsCount;
+            perUnitNeto = neto / siblingsCount;
+        }
 
         const detailedItem = {
             id: unit.id,
@@ -617,15 +646,15 @@ export async function getCustomRangeStats(startDate, endDate) {
             modelo: unit.variantes?.modelos?.descripcion,
             color: unit.variantes?.color,
             talle: unit.talle_especifico,
-            precio: total,
-            neto: neto,
+            precio: perUnitTotal,
+            neto: perUnitNeto,
             medio_pago: unit.ventas?.medio_pago,
             vendedor: unit.ventas?.profiles?.nombre || unit.ventas?.user_id
         };
 
         stats.count++;
-        stats.total += total;
-        stats.neto += neto;
+        stats.total += perUnitTotal;
+        stats.neto += perUnitNeto;
         stats.items.push(detailedItem);
     });
 
@@ -697,7 +726,7 @@ export async function getDailySummary(onlyUserId = null) {
         .select(`
             id, fecha_venta, talle_especifico,
             ventas (id, total, medio_pago, user_id, monto_efectivo, monto_neto, profiles (nombre)),
-            variantes (color, modelos (descripcion, codigo_proveedor))
+            variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
         .gte('fecha_venta', today.toISOString())
@@ -735,12 +764,39 @@ export async function getDailySummary(onlyUserId = null) {
     const cashFromManual = (totalManualCash || []).reduce((acc, m) => acc + (parseFloat(m.monto) || 0), 0);
     const globalCashInHand = cashFromSales + cashFromManual;
 
+    const saleBaseTotals = {};
+    unitsSold.forEach(unit => {
+        const vId = unit.ventas?.id;
+        if (!vId) return;
+        const medio = unit.ventas?.medio_pago;
+        const basePrice = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio)
+            ? (unit.variantes?.precio_efectivo || 1)
+            : (unit.variantes?.precio_lista || 1);
+        saleBaseTotals[vId] = (saleBaseTotals[vId] || 0) + basePrice;
+    });
+
     // Daily items list
     const allItems = unitsSold.map(unit => {
+        const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
-        const perUnitTotal = total / (unitsSold.filter(u => u.ventas?.id === unit.ventas?.id).length || 1);
         const neto = parseFloat(unit.ventas?.monto_neto) || total;
-        const perUnitNeto = neto / (unitsSold.filter(u => u.ventas?.id === unit.ventas?.id).length || 1);
+
+        let perUnitTotal = 0;
+        let perUnitNeto = 0;
+
+        if (vId && saleBaseTotals[vId] > 0) {
+            const medio = unit.ventas?.medio_pago;
+            const basePrice = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio)
+                ? (unit.variantes?.precio_efectivo || 1)
+                : (unit.variantes?.precio_lista || 1);
+            const weight = basePrice / saleBaseTotals[vId];
+            perUnitTotal = total * weight;
+            perUnitNeto = neto * weight;
+        } else {
+            const siblingsCount = unitsSold.filter(u => u.ventas?.id === vId).length || 1;
+            perUnitTotal = total / siblingsCount;
+            perUnitNeto = neto / siblingsCount;
+        }
 
         return {
             id: unit.id,
