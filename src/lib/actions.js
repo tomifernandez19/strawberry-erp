@@ -1913,23 +1913,41 @@ export async function getPendingInvoicesSummary() {
     try {
         const { data, error } = await supabase
             .from('ventas')
-            .select('id, medio_pago, otro_medio_pago')
-            .eq('facturado', false);
+            .select('id, medio_pago, otro_medio_pago, cuenta_destino')
+            .eq('facturado', false)
+            .not('medio_pago', 'in', '("EFECTIVO", "MAYORISTA_EFECTIVO", "TRANSFERENCIA_PROVEEDOR")');
 
         if (error) throw error;
 
         const summary = {
             sofi: 0, // Debit, Credit, QR
-            tomi: 0, // Tiendanube
-            lucas: 0, // Transfer
-            total: data?.length || 0
+            tomi: 0, // Tiendanube, Transf. Tomi
+            lucas: 0, // Transf. Lucas
+            total: 0
         };
 
         data?.forEach(v => {
-            const mp = v.otro_medio_pago || v.medio_pago;
-            if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) summary.sofi++;
-            else if (mp === 'TRANSFERENCIA') summary.lucas++;
-            else summary.tomi++; // Tiendanube or anything else digital
+            let resp = 'tomi'; // Default (Tiendanube, etc)
+
+            if (v.cuenta_destino === 'SOFI_MP') {
+                resp = 'sofi';
+            } else if (v.cuenta_destino === 'LUCAS') {
+                resp = 'lucas';
+            } else if (v.cuenta_destino === 'TOMI') {
+                resp = 'tomi';
+            } else {
+                const mp = v.otro_medio_pago || v.medio_pago;
+                if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) {
+                    resp = 'sofi';
+                } else if (mp === 'TRANSFERENCIA' || mp === 'TRANSFERENCIA_LUCAS') {
+                    resp = 'lucas';
+                } else {
+                    resp = 'tomi';
+                }
+            }
+
+            summary[resp]++;
+            summary.total++;
         });
 
         return { success: true, count: summary };
