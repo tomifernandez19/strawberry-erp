@@ -509,7 +509,7 @@ export async function getExtendedStats() {
         .select(`
             id, fecha_venta, talle_especifico,
             ventas (id, total, medio_pago, monto_neto, user_id, profiles (nombre)),
-            variantes (color, modelos (descripcion, codigo_proveedor))
+            variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
         .gte('fecha_venta', startOfMonth.toISOString())
@@ -532,10 +532,39 @@ export async function getExtendedStats() {
         month: initStats()
     };
 
+    const saleBaseTotals = {};
+    unitsSold.forEach(unit => {
+        const vId = unit.ventas?.id;
+        if (!vId) return;
+        const medio = unit.ventas?.medio_pago;
+        const basePrice = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio)
+            ? (unit.variantes?.precio_efectivo || 1)
+            : (unit.variantes?.precio_lista || 1);
+        saleBaseTotals[vId] = (saleBaseTotals[vId] || 0) + basePrice;
+    });
+
     unitsSold.forEach(unit => {
         const saleDate = new Date(unit.fecha_venta);
+        const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
         const neto = parseFloat(unit.ventas?.monto_neto) || total;
+
+        let perUnitTotal = 0;
+        let perUnitNeto = 0;
+
+        if (vId && saleBaseTotals[vId] > 0) {
+            const medio = unit.ventas?.medio_pago;
+            const basePrice = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(medio)
+                ? (unit.variantes?.precio_efectivo || 1)
+                : (unit.variantes?.precio_lista || 1);
+            const weight = basePrice / saleBaseTotals[vId];
+            perUnitTotal = total * weight;
+            perUnitNeto = neto * weight;
+        } else {
+            const siblingsCount = unitsSold.filter(u => u.ventas?.id === vId).length || 1;
+            perUnitTotal = total / siblingsCount;
+            perUnitNeto = neto / siblingsCount;
+        }
 
         const detailedItem = {
             id: unit.id,
@@ -544,16 +573,16 @@ export async function getExtendedStats() {
             modelo: unit.variantes?.modelos?.descripcion,
             color: unit.variantes?.color,
             talle: unit.talle_especifico,
-            precio: total,
-            neto: neto,
+            precio: perUnitTotal,
+            neto: perUnitNeto,
             medio_pago: unit.ventas?.medio_pago,
             vendedor: unit.ventas?.profiles?.nombre || unit.ventas?.user_id
         };
 
         const update = (obj) => {
             obj.count++;
-            obj.total += total;
-            obj.neto += neto;
+            obj.total += perUnitTotal;
+            obj.neto += perUnitNeto;
             obj.items.push(detailedItem);
         };
 
