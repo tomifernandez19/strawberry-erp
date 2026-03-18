@@ -93,7 +93,7 @@ export default function InventarioPage() {
                 <p style={{ opacity: 0.7 }}>Stock disponible por modelo</p>
             </header>
 
-            <div className="card mt-md" style={{ padding: 'var(--spacing-md)' }}>
+            <div className="card mt-md" style={{ padding: 'var(--spacing-md)', overflow: 'hidden' }}>
                 <input
                     type="text"
                     placeholder="🔍 Buscar por modelo..."
@@ -144,10 +144,10 @@ export default function InventarioPage() {
                     ) : (
                         filteredStock.map(item => (
                             <div key={item.id} className="card">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                                            <h4 style={{ color: 'var(--primary)', margin: 0 }}>{item.modelo.descripcion}</h4>
+                                            <h4 style={{ color: 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word' }}>{item.modelo.descripcion}</h4>
                                         </div>
                                         <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>{item.modelo.marca} • {item.color}</p>
 
@@ -169,7 +169,7 @@ export default function InventarioPage() {
                                             </p>
                                         </div>
                                     </div>
-                                    <div style={{ textAlign: 'right' }}>
+                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                         <div style={{
                                             fontSize: '1.2rem',
                                             fontWeight: 'bold',
