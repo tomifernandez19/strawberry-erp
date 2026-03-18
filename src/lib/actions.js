@@ -1855,7 +1855,9 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
  */
 export async function getAvailableStockDetailed() {
     const supabase = createClient();
-    const { data, error } = await supabase
+
+    // 1. Fetch available stock
+    const { data: stockData, error: stockErr } = await supabase
         .from('unidades')
         .select(`
             id, talle_especifico, ubicacion,
@@ -1863,12 +1865,29 @@ export async function getAvailableStockDetailed() {
         `)
         .eq('estado', 'DISPONIBLE');
 
-    if (error) {
-        console.error("[Stock] Error fetching available stock:", error);
-        return [];
+    // 2. Fetch sales from the last 30 days to compute velocity
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { data: soldData } = await supabase
+        .from('unidades')
+        .select('variante_id')
+        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
+        .gte('fecha_venta', thirtyDaysAgo.toISOString());
+
+    const salesVelocity = {};
+    if (soldData) {
+        soldData.forEach(u => {
+            const vId = u.variante_id;
+            if (vId) salesVelocity[vId] = (salesVelocity[vId] || 0) + 1;
+        });
     }
 
-    return data || [];
+    if (stockErr) {
+        console.error("[Stock] Error fetching available stock:", stockErr);
+        return { stock: [], salesVelocity: {} };
+    }
+
+    return { stock: stockData || [], salesVelocity };
 }
 
 /**

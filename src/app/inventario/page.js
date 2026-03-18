@@ -17,9 +17,11 @@ export default function InventarioPage() {
 
     async function fetchStock() {
         setLoading(true)
-        const data = await getAvailableStockDetailed()
+        const response = await getAvailableStockDetailed()
+        const dataArr = response.stock || (Array.isArray(response) ? response : []);
+        const salesLast30 = response.salesVelocity || {};
 
-        const grouped = data.reduce((acc, unit) => {
+        const grouped = dataArr.reduce((acc, unit) => {
             const key = unit.variantes?.id;
             if (!key) return acc;
 
@@ -31,6 +33,7 @@ export default function InventarioPage() {
                     precio_efectivo: unit.variantes.precio_efectivo,
                     precio_lista: unit.variantes.precio_lista,
                     count: 0,
+                    ventas_30_dias: salesLast30[key] || 0,
                     talles: {},
                     ubicaciones: new Set()
                 }
@@ -70,7 +73,7 @@ export default function InventarioPage() {
         ...item,
         isSynced: !!item.modelo?.tiendanube_id,
         hasNoLocation: item.ubicaciones.length === 0,
-        isLowStock: item.count < 3
+        isLowStock: item.count <= 3 && item.ventas_30_dias >= 2 // Adaptive Logic
     }));
 
     const filteredStock = processedStock.filter(item => {
@@ -149,7 +152,10 @@ export default function InventarioPage() {
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
                                             <h4 style={{ color: 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word' }}>{item.modelo.descripcion}</h4>
                                         </div>
-                                        <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>{item.modelo.marca} • {item.color}</p>
+                                        <p style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '2px' }}>{item.modelo.marca} • {item.color}</p>
+                                        <p style={{ fontSize: '0.7rem', color: item.ventas_30_dias >= 2 ? '#10b981' : 'rgba(255,255,255,0.4)', marginTop: 0 }}>
+                                            {item.ventas_30_dias > 0 ? `🔥 Vendió ${item.ventas_30_dias} últ. 30 días` : `❄️ Sin ventas últ. 30 días`}
+                                        </p>
 
                                         <div style={{ marginTop: '10px' }}>
                                             <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>Talles disponibles:</p>
@@ -188,7 +194,7 @@ export default function InventarioPage() {
                                     </div>
                                 </div>
 
-                                {isAdmin && !item.isSynced && (
+                                {isAdmin && filter !== 'LOW_STOCK' && !item.isSynced && (
                                     <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
                                         <button
                                             className="btn-secondary"
@@ -200,7 +206,7 @@ export default function InventarioPage() {
                                         </button>
                                     </div>
                                 )}
-                                {isAdmin && item.isSynced && (
+                                {isAdmin && filter !== 'LOW_STOCK' && item.isSynced && (
                                     <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px', textAlign: 'center' }}>
                                         <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '20px' }}>
                                             ✅ Sincronizado en Tiendanube
