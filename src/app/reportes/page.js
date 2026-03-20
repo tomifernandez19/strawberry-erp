@@ -16,6 +16,9 @@ export default function ReportesPage() {
 
     const [contributions, setContributions] = useState({ byPerson: {}, history: [] })
 
+    const [billingByPerson, setBillingByPerson] = useState({})
+    const [dividendTotals, setDividendTotals] = useState(null)
+
     useEffect(() => {
         async function load() {
             const [vStats, fSummary, cReport] = await Promise.all([
@@ -24,7 +27,9 @@ export default function ReportesPage() {
                 getCapitalContributionsReport()
             ])
             setStats(vStats)
-            setFinance(fSummary)
+            setFinance(fSummary.accounts)
+            setBillingByPerson(fSummary.billingByPerson)
+            setDividendTotals(fSummary.dividendTotals)
             setContributions(cReport)
             setLoading(false)
         }
@@ -105,20 +110,27 @@ export default function ReportesPage() {
         <div className="grid mt-lg">
             <header className="text-center">
                 <h1>Reportes Financieros</h1>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '20px', flexWrap: 'wrap' }}>
                     <button
                         className={activeTab === 'ventas' ? 'btn-primary' : 'btn-secondary'}
                         onClick={() => setActiveTab('ventas')}
-                        style={{ padding: '8px 20px' }}
+                        style={{ padding: '8px 16px', fontSize: '0.85rem' }}
                     >
                         Ventas
                     </button>
                     <button
                         className={activeTab === 'cuentas' ? 'btn-primary' : 'btn-secondary'}
                         onClick={() => setActiveTab('cuentas')}
-                        style={{ padding: '8px 20px' }}
+                        style={{ padding: '8px 16px', fontSize: '0.85rem' }}
                     >
                         Estado de Cuentas
+                    </button>
+                    <button
+                        className={activeTab === 'sueldos' ? 'btn-primary' : 'btn-secondary'}
+                        onClick={() => setActiveTab('sueldos')}
+                        style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                    >
+                        Análisis Sueldos 💰
                     </button>
                 </div>
             </header>
@@ -181,6 +193,26 @@ export default function ReportesPage() {
                         </div>
                     </div>
 
+                    {/* NEW: Montos Facturados por Persona */}
+                    <div className="card mt-lg">
+                        <h4 style={{ fontSize: '0.85rem', marginBottom: '15px', color: 'var(--accent)' }}>📋 FACTURACIÓN POR DUEÑO (Histórico)</h4>
+                        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
+                            {Object.entries(billingByPerson).length === 0 ? (
+                                <p style={{ opacity: 0.5, fontStyle: 'italic', fontSize: '0.8rem' }}>No hay facturación registrada.</p>
+                            ) : (
+                                Object.entries(billingByPerson).map(([name, total]) => (
+                                    <div key={name} style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px' }}>
+                                        <p style={{ fontSize: '0.65rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '4px' }}>FACTURADO POR</p>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontWeight: 'bold' }}>{name}</span>
+                                            <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>$ {total.toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
                     {/* Resumen de Utilidad */}
                     <div className="card mt-lg" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.02) 100%)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -193,7 +225,54 @@ export default function ReportesPage() {
                             </h2>
                         </div>
                     </div>
+                </section>
+            )}
 
+            {activeTab === 'sueldos' && dividendTotals && (
+                <section className="grid mt-lg">
+                    <div className="card" style={{ borderLeft: '4px solid var(--accent)' }}>
+                        <h3 style={{ marginBottom: '20px' }}>💰 Cálculo de Dividendo / Sueldo</h3>
+                        <p style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '20px' }}>
+                            Análisis basado en la utilidad real disponible según la fórmula de los socios.
+                        </p>
+
+                        <div className="grid" style={{ gap: '15px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                <span style={{ opacity: 0.8 }}>(+) Ventas Totales (Neto)</span>
+                                <span style={{ color: 'var(--accent)' }}>$ {dividendTotals.sales.toLocaleString()}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                <span style={{ opacity: 0.8 }}>(-) Compras Proveedor (Stock)</span>
+                                <span style={{ color: '#ef4444' }}>- $ {dividendTotals.purchases.toLocaleString()}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                <span style={{ opacity: 0.8 }}>(-) Gastos Generales</span>
+                                <span style={{ color: '#ef4444' }}>- $ {dividendTotals.expenses.toLocaleString()}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                <span style={{ opacity: 0.8 }}>(+) Aportes (Capital / Cambio)</span>
+                                <span style={{ color: 'var(--accent)' }}>+ $ {dividendTotals.contributions.toLocaleString()}</span>
+                            </div>
+
+                            <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <h4 style={{ margin: 0 }}>Monto a Distribuir</h4>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Utilidad Total Acumulada</p>
+                                </div>
+                                <h3 style={{ margin: 0, color: 'var(--accent)' }}>
+                                    $ {(dividendTotals.sales - dividendTotals.purchases - dividendTotals.expenses + dividendTotals.contributions).toLocaleString()}
+                                </h3>
+                            </div>
+
+                            <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.7, marginBottom: '5px' }}>SUELDO ESTIMADO POR SOCIO (Div. 3)</p>
+                                <h2 style={{ margin: 0, color: '#ffbf00' }}>
+                                    $ {((dividendTotals.sales - dividendTotals.purchases - dividendTotals.expenses + dividendTotals.contributions) / 3).toLocaleString()}
+                                </h2>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '5px' }}>* Corresponde al retiro mensual sugerido por cada uno de los 3 socios.</p>
+                            </div>
+                        </div>
+                    </div>
                 </section>
             )}
 

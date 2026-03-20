@@ -925,8 +925,8 @@ export async function getFinanceSummary() {
 
     // Optimize by fetching in parallel and selecting only needed fields
     const [salesRes, movementsRes, purchasesRes] = await Promise.all([
-        supabase.from('ventas').select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago'),
-        supabase.from('movimientos_caja').select('monto, cuenta, categoria'),
+        supabase.from('ventas').select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, profiles (nombre)'),
+        supabase.from('movimientos_caja').select('monto, cuenta, categoria, tipo, persona'),
         supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)')
     ]);
 
@@ -946,6 +946,14 @@ export async function getFinanceSummary() {
         LUCAS: 0,
         CAROLINA: -13000000, // Initial debt
         PROVEEDOR: 0
+    };
+
+    const billingByPerson = {};
+    const dividendTotals = {
+        sales: 0,
+        purchases: 0,
+        expenses: 0,
+        contributions: 0
     };
 
     // Calculate Costs from Supplier Purchases
@@ -996,6 +1004,15 @@ export async function getFinanceSummary() {
         } else if (accounts[target] !== undefined && target !== 'CAJA_LOCAL') {
             accounts[target] += other;
         }
+
+        // --- NEW: Accumulate for Dividend / Sueldos formula (VENTAS) ---
+        dividendTotals.sales += netoTotal;
+
+        // --- NEW: Accumulate for Invoiced by Person ---
+        if (s.facturado) {
+            const name = (s.profiles?.nombre || 'VENTA_WEB').trim().toUpperCase();
+            billingByPerson[name] = (billingByPerson[name] || 0) + total;
+        }
     });
 
     // 5. Process Manual Movements
@@ -1015,9 +1032,24 @@ export async function getFinanceSummary() {
         } else if (m.categoria === 'INTERESES') {
             // Intereses are already added/subtracted to the account balance in the step above
         }
+
+        // --- NEW: Accumulate for Dividend / Sueldos formula (GASTOS / APORTES) ---
+        if (m.tipo === 'EGRESO') {
+            dividendTotals.expenses += Math.abs(monto);
+        } else if (m.tipo === 'INGRESO' && ['APORTE_CAPITAL', 'VUELTO_CAMBIO'].includes(m.categoria)) {
+            dividendTotals.contributions += monto;
+        }
     });
 
-    return accounts;
+    // --- NEW: Accumulate for Dividend / Sueldos formula (PURCHASES) ---
+    purchases?.forEach(p => {
+        if (p.compras?.propietario === 'Proveedor') {
+            const cost = (parseFloat(p.costo_unitario) || 0) * (p.cantidad || 0);
+            dividendTotals.purchases += cost;
+        }
+    });
+
+    return { accounts, billingByPerson, dividendTotals };
 }
 
 /**
