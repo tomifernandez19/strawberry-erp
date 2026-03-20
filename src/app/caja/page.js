@@ -33,7 +33,7 @@ export default function CajaPage() {
             import('@/lib/actions')
         ])
         setMovements(movs)
-        setBalances(fSummary)
+        setBalances(fSummary.accounts)
         const pers = await getRecentPersonas()
         setSuggestions(pers || [])
     }
