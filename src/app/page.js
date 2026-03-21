@@ -532,7 +532,7 @@ function SenaRow({ sena, onComplete }) {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
-                <span style={{ fontSize: '0.75rem', opacity: 0.4 }}>Total: ${sena.total.toLocaleString()} (Señó ${paid.toLocaleString()})</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.4 }}>Señó: ${paid.toLocaleString()} (Total: ${sena.total.toLocaleString()})</span>
                 {!showCobro ? (
                     <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#eab308' }} onClick={() => setShowCobro(true)}>Cobrar Saldo</button>
                 ) : (

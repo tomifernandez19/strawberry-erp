@@ -109,9 +109,10 @@ export default function VenderPage() {
             }
 
             if (isSena) {
-                if (!montoSena || Number(montoSena) <= 0) throw new Error("Debe ingresar el monto de la seña");
-                options.monto_efectivo = (['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago)) ? Number(montoSena) : 0;
-                options.monto_otro = (!['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medioPago)) ? Number(montoSena) : 0;
+                // Allow 0 deposit
+                const senaVal = Number(montoSena) || 0;
+                options.monto_efectivo = (['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'].includes(medioPago)) ? senaVal : 0;
+                options.monto_otro = (!['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medioPago)) ? senaVal : 0;
             } else if (medioPago === 'DIVIDIR_PAGOS') {
                 options.monto_efectivo = parseFloat(montoEfectivo);
                 options.monto_otro = parseFloat(montoOtro);
@@ -346,18 +347,18 @@ export default function VenderPage() {
 
                         {isSena && (
                             <div className="card mt-md" style={{ background: 'rgba(234, 179, 8, 0.05)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                                <label style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '8px' }}>Monto que deja de seña ($):</label>
+                                <label style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '8px' }}>PAGA AHORA (SEÑA):</label>
                                 <input
                                     type="number"
                                     className="input-field"
-                                    placeholder="¿Cuánto paga ahora?"
+                                    placeholder="0 (Solo reservar)"
                                     value={montoSena}
                                     onChange={(e) => setMontoSena(e.target.value)}
                                     autoFocus
                                 />
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '0.8rem' }}>
-                                    <span style={{ opacity: 0.6 }}>Saldo Pendiente:</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {(finalTotal - (Number(montoSena) || 0)).toLocaleString()}</span>
+                                    <span style={{ opacity: 0.6 }}>Resta Abonar:</span>
+                                    <span style={{ fontWeight: 'bold', color: '#eab308' }}>$ {(finalTotal - (Number(montoSena) || 0)).toLocaleString()}</span>
                                 </div>
                             </div>
                         )}
@@ -495,7 +496,7 @@ export default function VenderPage() {
 
                         <div className="card mt-md" style={{ border: '1px solid rgba(59, 130, 246, 0.2)', background: 'rgba(59, 130, 246, 0.05)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                <label style={{ fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.8 }}>¿Cuánto le vas a cobrar? ($)</label>
+                                <label style={{ fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.8 }}>PRECIO TOTAL DEL PRODUCTO ($)</label>
                                 {montoDescuento > 0 && <span className="badge" style={{ backgroundColor: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>-{currentPct}% OFF</span>}
                                 {montoDescuento < 0 && <span className="badge" style={{ backgroundColor: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>+{Math.abs(currentPct)}% REC</span>}
                             </div>
@@ -569,8 +570,8 @@ export default function VenderPage() {
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>VUELTO:</p>
-                                        <p style={{ fontSize: '1.4rem', fontWeight: 'bold', color: (Number(montoAbonado) - (medioPago === 'DIVIDIR_PAGOS' ? Number(montoEfectivo) : finalTotal)) >= 0 ? 'var(--accent)' : '#ef4444' }}>
-                                            $ {Math.max(0, (Number(montoAbonado) - (medioPago === 'DIVIDIR_PAGOS' ? Number(montoEfectivo) : finalTotal))).toLocaleString()}
+                                        <p style={{ fontSize: '1.4rem', fontWeight: 'bold', color: (Number(montoAbonado) - (isSena ? Number(montoSena) : (medioPago === 'DIVIDIR_PAGOS' ? Number(montoEfectivo) : finalTotal))) >= 0 ? 'var(--accent)' : '#ef4444' }}>
+                                            $ {Math.max(0, (Number(montoAbonado) - (isSena ? (Number(montoSena) || 0) : (medioPago === 'DIVIDIR_PAGOS' ? Number(montoEfectivo) : finalTotal)))).toLocaleString()}
                                         </p>
                                     </div>
                                 </div>
