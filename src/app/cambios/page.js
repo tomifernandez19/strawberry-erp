@@ -74,13 +74,21 @@ export default function CambiosPage() {
         }
     }
 
-    const difference = (newUnit?.variantes.precio_lista || 0) - (oldUnit?.ventas?.total || 0)
-    // Pre-calculated prices for split payment calculation (rounded up to 1000)
-    const precioEfectivoDiff = Math.ceil((difference * (100 / 121)) / 1000) * 1000
+    const [manualDifference, setManualDifference] = useState('')
+
+    useEffect(() => {
+        if (oldUnit && newUnit) {
+            const diff = (newUnit.variantes.precio_lista || 0) - (oldUnit.ventas?.total || 0)
+            setManualDifference(diff > 0 ? diff : 0)
+        } else {
+            setManualDifference('')
+        }
+    }, [oldUnit, newUnit])
 
     const handleConfirmExchange = async () => {
         setLoading(true)
         try {
+            const diffNum = parseFloat(manualDifference) || 0
             const options = {
                 ...(medioPago === 'DIVIDIR_PAGOS' ? {
                     monto_efectivo: parseFloat(montoEfectivo),
@@ -97,7 +105,7 @@ export default function CambiosPage() {
             const res = await recordProductExchange(
                 oldUnit.id,
                 newUnit.codigo_qr,
-                difference > 0 ? difference : 0,
+                diffNum,
                 medioPago,
                 options
             )
@@ -113,6 +121,10 @@ export default function CambiosPage() {
             setLoading(false)
         }
     }
+
+    const difference = (newUnit?.variantes.precio_lista || 0) - (oldUnit?.ventas?.total || 0)
+    const currentDiff = parseFloat(manualDifference) || 0
+    const precioEfectivoDiff = Math.ceil((currentDiff * (100 / 121)) / 1000) * 1000
 
     const [manualQR, setManualQR] = useState('')
 
@@ -221,15 +233,34 @@ export default function CambiosPage() {
                         </div>
                     </div>
 
-                    <div className="card mt-md text-center" style={{ background: difference > 0 ? 'rgba(234, 179, 8, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>DIFERENCIA A COBRAR:</p>
-                        <h2 style={{ margin: 0, color: difference > 0 ? '#eab308' : 'var(--accent)' }}>
-                            $ {difference > 0 ? difference.toLocaleString() : '0 (Sin cargo)'}
-                        </h2>
-                        {difference < 0 && <p style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '5px' }}>Queda un saldo a favor del cliente de ${Math.abs(difference).toLocaleString()}</p>}
+                    <div className="card mt-md text-center" style={{ background: currentDiff > 0 ? 'rgba(234, 179, 8, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '5px' }}>DIFERENCIA A COBRAR (EDITABLE):</p>
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>$</span>
+                            <input
+                                type="number"
+                                className="input-field"
+                                value={manualDifference}
+                                onChange={(e) => setManualDifference(e.target.value)}
+                                style={{
+                                    maxWidth: '150px',
+                                    textAlign: 'center',
+                                    fontSize: '1.5rem',
+                                    fontWeight: 'bold',
+                                    margin: 0,
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: currentDiff > 0 ? '#eab308' : 'var(--accent)'
+                                }}
+                            />
+                        </div>
+                        {difference !== currentDiff && (
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '5px' }}>Calculado originalmente: ${difference.toLocaleString()}</p>
+                        )}
+                        {currentDiff <= 0 && <p style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '5px' }}>Sin cargo (Cambio directo)</p>}
                     </div>
 
-                    {difference > 0 && (
+                    {currentDiff > 0 && (
                         <div className="grid mt-md">
                             <label style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '5px', display: 'block' }}>Medio de pago para la diferencia:</label>
                             <select value={medioPago} onChange={(e) => setMedioPago(e.target.value)} className="input-field">
@@ -261,7 +292,7 @@ export default function CambiosPage() {
                                                 setMontoEfectivo(val);
                                                 if (val && !isNaN(val)) {
                                                     const portion = parseFloat(val) / precioEfectivoDiff;
-                                                    const remaining = Math.round(difference * (1 - portion));
+                                                    const remaining = Math.round(currentDiff * (1 - portion));
                                                     setMontoOtro(remaining > 0 ? remaining : 0);
                                                 } else {
                                                     setMontoOtro('');
