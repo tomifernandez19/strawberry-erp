@@ -117,6 +117,16 @@ export default function CambiosPage() {
         }
     }
 
+    const [manualQR, setManualQR] = useState('')
+
+    const handleManualSubmit = (e, type) => {
+        e.preventDefault()
+        if (!manualQR) return
+        if (type === 'old') handleScanOld(manualQR)
+        else handleScanNew(manualQR)
+        setManualQR('')
+    }
+
     if (success) {
         return (
             <div className="grid mt-lg text-center">
@@ -127,7 +137,7 @@ export default function CambiosPage() {
                     <h4 style={{ margin: '10px 0' }}>{newUnit.variantes.modelos.descripcion}</h4>
                     <p>{newUnit.variantes.color} • Talle {newUnit.talle_especifico}</p>
                 </div>
-                <Link href="/" className="btn-primary mt-lg">Volver al Inicio</Link>
+                <Link href="/" className="btn-primary mt-lg" style={{ height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Volver al Inicio</Link>
             </div>
         )
     }
@@ -139,13 +149,29 @@ export default function CambiosPage() {
                 <p style={{ opacity: 0.7 }}>Siga los pasos para procesar el cambio</p>
             </header>
 
-            {error && <div className="card text-center" style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)' }}>{error}</div>}
+            {error && <div className="card text-center" style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', marginBottom: '20px' }}>{error}</div>}
 
             {/* STEP 1: SCAN OLD PRODUCT */}
             {!oldUnit ? (
                 <div className="grid">
                     <QRScanner onScanSuccess={handleScanOld} label="1. Escanee el producto que DEVUELVEN" />
-                    <Link href="/" className="btn-secondary mt-md text-center">Cancelar y Volver</Link>
+
+                    <div className="card mt-md" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--card-border)' }}>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '10px' }}>¿No funciona la cámara? Ingreso manual:</p>
+                        <form onSubmit={(e) => handleManualSubmit(e, 'old')} style={{ display: 'flex', gap: '10px' }}>
+                            <input
+                                type="text"
+                                className="input-field"
+                                placeholder="ST-000000"
+                                value={manualQR}
+                                onChange={e => setManualQR(e.target.value.toUpperCase())}
+                                style={{ margin: 0 }}
+                            />
+                            <button type="submit" className="btn-primary" style={{ padding: '0 20px' }}>OK</button>
+                        </form>
+                    </div>
+
+                    <Link href="/" className="btn-secondary mt-lg text-center" style={{ padding: '12px' }}>Cancelar y Volver</Link>
                 </div>
             ) : (
                 <div className="card" style={{ border: '1px solid var(--accent)', background: 'rgba(16, 185, 129, 0.05)' }}>
@@ -153,7 +179,7 @@ export default function CambiosPage() {
                         <div>
                             <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>PRODUCTO DEVUELTO:</p>
                             <h4 style={{ margin: 0 }}>{oldUnit.variantes.modelos.descripcion}</h4>
-                            <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Talle {oldUnit.talle_especifico} • Vendido a: <strong>${oldUnit.ventas?.total.toLocaleString()}</strong></p>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Talle {oldUnit.talle_especifico} • Vendido a: <strong>${(oldUnit.ventas?.total || 0).toLocaleString()}</strong></p>
                         </div>
                         <button className="btn-secondary" onClick={() => setOldUnit(null)} style={{ padding: '8px 12px', fontSize: '0.7rem' }}>🔄 Cambiar</button>
                     </div>
@@ -164,7 +190,23 @@ export default function CambiosPage() {
             {oldUnit && !newUnit && (
                 <div className="grid mt-md">
                     <QRScanner onScanSuccess={handleScanNew} label="2. Escanee el producto que se LLEVAN" />
-                    <button className="btn-secondary mt-md" onClick={resetState}>Cancelar Cambio</button>
+
+                    <div className="card mt-md" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--card-border)' }}>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '10px' }}>Ingreso manual del nuevo producto:</p>
+                        <form onSubmit={(e) => handleManualSubmit(e, 'new')} style={{ display: 'flex', gap: '10px' }}>
+                            <input
+                                type="text"
+                                className="input-field"
+                                placeholder="ST-000000"
+                                value={manualQR}
+                                onChange={e => setManualQR(e.target.value.toUpperCase())}
+                                style={{ margin: 0 }}
+                            />
+                            <button type="submit" className="btn-primary" style={{ padding: '0 20px' }}>OK</button>
+                        </form>
+                    </div>
+
+                    <button className="btn-secondary mt-lg" onClick={resetState} style={{ padding: '12px' }}>Cancelar Cambio</button>
                 </div>
             )}
 
