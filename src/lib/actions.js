@@ -239,7 +239,7 @@ export async function assignQRToUnit(unitId, qrCode) {
 /**
  * Fetches unit details for preview before confirming a sale.
  */
-export async function getUnitForSale(qrCode, includeReserved = false) {
+export async function getUnitForSale(qrCode, filter = 'AVAILABLE') {
     const supabase = createClient();
     try {
         // 0. Validate Format
@@ -251,13 +251,16 @@ export async function getUnitForSale(qrCode, includeReserved = false) {
         // 1. Find the unit
         let query = supabase
             .from('unidades')
-            .select('*, variantes(*, modelos(*))')
+            .select('*, variantes(*, modelos(*, lineas(nombre))), ventas(total)')
             .eq('codigo_qr', qrCode);
 
-        if (includeReserved) {
-            query = query.in('estado', ['DISPONIBLE', 'RESERVADO_ONLINE']);
-        } else {
+        // Filter by state
+        if (filter === 'AVAILABLE') {
             query = query.eq('estado', 'DISPONIBLE');
+        } else if (filter === 'AVAILABLE_AND_RESERVED') {
+            query = query.in('estado', ['DISPONIBLE', 'RESERVADO_ONLINE']);
+        } else if (filter === 'SOLD') {
+            query = query.in('estado', ['VENDIDO', 'VENDIDO_ONLINE']);
         }
 
         const { data: unidad, error: fetchError } = await query.maybeSingle();

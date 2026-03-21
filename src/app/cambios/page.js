@@ -41,11 +41,8 @@ export default function CambiosPage() {
 
         setLoading(true)
         try {
-            const res = await getUnitForSale(cleanQr, false) // false means include sold units
+            const res = await getUnitForSale(cleanQr, 'SOLD')
             if (res.success) {
-                if (res.data.estado !== 'VENDIDO' && res.data.estado !== 'VENDIDO_ONLINE') {
-                    throw new Error('Esta unidad no está marcada como vendida.')
-                }
                 setOldUnit(res.data)
             } else {
                 setError(res.message)
