@@ -251,7 +251,7 @@ export async function getUnitForSale(qrCode, filter = 'AVAILABLE') {
         // 1. Find the unit
         let query = supabase
             .from('unidades')
-            .select('*, variantes(*, modelos(*, lineas(nombre))), ventas(total)')
+            .select('*, variantes(*, modelos(*)), ventas(total)')
             .eq('codigo_qr', qrCode);
 
         // Filter by state
