@@ -196,7 +196,7 @@ export default function HomePage() {
     }
 
     const PendingGrid = ({ mode }) => {
-        const items = ['QR', 'LOC', 'DISPATCH', 'SENA', 'INVOICE', 'IMAGE'].map(t => renderCard(t, mode)).filter(Boolean)
+        const items = ['QR', 'LOC', 'DISPATCH', 'INVOICE', 'IMAGE'].map(t => renderCard(t, mode)).filter(Boolean)
         if (items.length === 0) return null;
         return (
             <div className="grid mt-md" style={{ gap: '15px' }}>
