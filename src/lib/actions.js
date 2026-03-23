@@ -2094,7 +2094,7 @@ export async function getPendingInvoicesSummary() {
             .from('ventas')
             .select('id, medio_pago, otro_medio_pago, cuenta_destino')
             .eq('facturado', false)
-            .not('medio_pago', 'in', '("EFECTIVO", "MAYORISTA_EFECTIVO", "TRANSFERENCIA_PROVEEDOR")');
+            .not('medio_pago', 'in', `(EFECTIVO,MAYORISTA_EFECTIVO,TRANSFERENCIA_PROVEEDOR)`);
 
         if (error) throw error;
 
@@ -2163,7 +2163,7 @@ export async function getPendingInvoicesList() {
             .from('ventas')
             .select('*, profiles(nombre), unidades(*, variantes(*, modelos(*)))')
             .eq('facturado', false)
-            .not('medio_pago', 'in', '("EFECTIVO", "MAYORISTA_EFECTIVO", "TRANSFERENCIA_PROVEEDOR")')
+            .not('medio_pago', 'in', `(EFECTIVO,MAYORISTA_EFECTIVO,TRANSFERENCIA_PROVEEDOR)`)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
