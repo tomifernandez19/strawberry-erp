@@ -155,6 +155,9 @@ export async function createPurchase({ nro_remito, items, supplier_type = 'CAROL
 
             const { error: unitsError } = await supabase.from('unidades').insert(unitsToCreate)
             if (unitsError) throw new Error(unitsError.message)
+
+            // 4. Auto-clear 'Pedido Pendiente' flag if it was set
+            await supabase.from('variantes').update({ pedido_pendiente: false }).eq('id', variante_id)
         }
 
         return { success: true, id: compra.id };
@@ -193,7 +196,24 @@ export async function addStock(variantId, talles) {
     const { error: unitsError } = await supabase.from('unidades').insert(unitsToCreate);
     if (unitsError) throw unitsError;
 
+    // 3. Auto-clear 'Pedido Pendiente' flag
+    await supabase.from('variantes').update({ pedido_pendiente: false }).eq('id', variantId);
+
     return true;
+}
+
+/**
+ * Toggles the 'Ordered' (pedido_pendiente) flag for a variant.
+ */
+export async function togglePendingOrder(variantId, isPending) {
+    const supabase = createClient();
+    const { error } = await supabase
+        .from('variantes')
+        .update({ pedido_pendiente: isPending })
+        .eq('id', variantId)
+
+    if (error) throw error
+    return true
 }
 
 /**
@@ -1896,7 +1916,7 @@ export async function getAvailableStockDetailed() {
         .from('unidades')
         .select(`
             id, talle_especifico, ubicacion,
-            variantes (id, color, precio_efectivo, precio_lista, modelos (id, descripcion, marca, tiendanube_id))
+            variantes (id, color, precio_efectivo, precio_lista, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_id))
         `)
         .eq('estado', 'DISPONIBLE');
 

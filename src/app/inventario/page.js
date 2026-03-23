@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { syncProductToTiendanube, getAvailableStockDetailed, fixProveedorPrices } from '@/lib/actions'
+import { syncProductToTiendanube, getAvailableStockDetailed, fixProveedorPrices, togglePendingOrder } from '@/lib/actions'
 import { useAuth } from '@/lib/context/AuthContext'
 
 export default function InventarioPage() {
@@ -9,7 +9,7 @@ export default function InventarioPage() {
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(null)
     const [search, setSearch] = useState('')
-    const [filter, setFilter] = useState('ALL') // ALL, UNSYNCED, NO_LOCATION, LOW_STOCK
+    const [filter, setFilter] = useState('ALL') // ALL, UNSYNCED, NO_LOCATION, LOW_STOCK, PEDIDOS
 
     useEffect(() => {
         fetchStock()
@@ -34,6 +34,7 @@ export default function InventarioPage() {
                     precio_lista: unit.variantes.precio_lista,
                     count: 0,
                     ventas_30_dias: salesLast30[key] || 0,
+                    pedido_pendiente: unit.variantes.pedido_pendiente,
                     talles: {},
                     ubicaciones: new Set()
                 }
@@ -50,6 +51,18 @@ export default function InventarioPage() {
             ubicaciones: Array.from(item.ubicaciones).sort()
         })))
         setLoading(false)
+    }
+
+    const handleTogglePedido = async (variantId, currentStatus) => {
+        try {
+            await togglePendingOrder(variantId, !currentStatus)
+            // Update local state for immediate feedback
+            setStock(prev => prev.map(item =>
+                item.id === variantId ? { ...item, pedido_pendiente: !currentStatus } : item
+            ))
+        } catch (e) {
+            alert('❌ Error al actualizar estado: ' + e.message)
+        }
     }
 
     const handleSync = async (modeloId) => {
@@ -73,18 +86,21 @@ export default function InventarioPage() {
         ...item,
         isSynced: !!item.modelo?.tiendanube_id,
         hasNoLocation: item.ubicaciones.length === 0,
-        isLowStock: item.count <= 3 && item.ventas_30_dias >= 2 // Adaptive Logic
+        isLowStock: item.count <= 3 && item.ventas_30_dias >= 2,
+        isOrdered: !!item.pedido_pendiente
     }));
 
     const filteredStock = processedStock.filter(item => {
         // Text Match
-        const matchesText = item.modelo.descripcion.toLowerCase().includes(search.toLowerCase());
-        if (!matchesText) return false;
+        const matchesText = (item.modelo.descripcion || '').toLowerCase().includes(search.toLowerCase());
+        const matchesColor = (item.color || '').toLowerCase().includes(search.toLowerCase());
+        if (!matchesText && !matchesColor) return false;
 
         // Button Filter
         if (filter === 'UNSYNCED') return !item.isSynced;
         if (filter === 'NO_LOCATION') return item.hasNoLocation;
-        if (filter === 'LOW_STOCK') return item.isLowStock;
+        if (filter === 'LOW_STOCK') return item.isLowStock && !item.isOrdered;
+        if (filter === 'PEDIDOS') return item.isOrdered;
 
         return true;
     });
@@ -99,7 +115,7 @@ export default function InventarioPage() {
             <div className="card mt-md" style={{ padding: 'var(--spacing-md)', overflow: 'hidden' }}>
                 <input
                     type="text"
-                    placeholder="🔍 Buscar por modelo..."
+                    placeholder="🔍 Buscar por modelo o color..."
                     className="input-field"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -135,6 +151,13 @@ export default function InventarioPage() {
                     >
                         📉 Poco Stock
                     </button>
+                    <button
+                        className={`btn-secondary ${filter === 'PEDIDOS' ? 'active-filter' : ''}`}
+                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'PEDIDOS' ? '#f59e0b' : 'rgba(255,255,255,0.05)', borderColor: filter === 'PEDIDOS' ? '#f59e0b' : 'rgba(255,255,255,0.1)', color: filter === 'PEDIDOS' ? 'white' : 'inherit' }}
+                        onClick={() => setFilter('PEDIDOS')}
+                    >
+                        🛒 Ya Pedidos
+                    </button>
                 </div>
             </div>
 
@@ -146,11 +169,15 @@ export default function InventarioPage() {
                         <p className="text-center mt-lg">No se encontraron modelos.</p>
                     ) : (
                         filteredStock.map(item => (
-                            <div key={item.id} className="card">
+                            <div key={item.id} className="card" style={{
+                                border: item.isOrdered ? '2px solid #f59e0b' : '1px solid var(--card-border)',
+                                background: item.isOrdered ? 'rgba(245, 158, 11, 0.03)' : 'var(--card-bg)'
+                            }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                                            <h4 style={{ color: 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word' }}>{item.modelo.descripcion}</h4>
+                                            <h4 style={{ color: item.isOrdered ? '#f59e0b' : 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word' }}>{item.modelo.descripcion}</h4>
+                                            {item.isOrdered && <span style={{ fontSize: '0.65rem', background: '#f59e0b', color: 'black', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold' }}>PEDIDO</span>}
                                         </div>
                                         <p style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '2px' }}>{item.modelo.marca} • {item.color}</p>
                                         <p style={{ fontSize: '0.7rem', color: item.ventas_30_dias >= 2 ? '#10b981' : 'rgba(255,255,255,0.4)', marginTop: 0 }}>
@@ -175,7 +202,7 @@ export default function InventarioPage() {
                                             </p>
                                         </div>
                                     </div>
-                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                    <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end' }}>
                                         <div style={{
                                             fontSize: '1.2rem',
                                             fontWeight: 'bold',
@@ -187,10 +214,25 @@ export default function InventarioPage() {
                                         }}>
                                             {item.count}u.
                                         </div>
-                                        <div style={{ marginTop: '10px', fontSize: '0.8rem', textAlign: 'right' }}>
-                                            <p style={{ color: 'var(--accent)' }}>Ef: ${item.precio_efectivo?.toLocaleString()}</p>
-                                            <p style={{ opacity: 0.6 }}>Li: ${item.precio_lista?.toLocaleString()}</p>
-                                        </div>
+
+                                        <button
+                                            className="btn-secondary"
+                                            onClick={() => handleTogglePedido(item.id, item.pedido_pendiente)}
+                                            style={{
+                                                padding: '8px 10px',
+                                                fontSize: '0.75rem',
+                                                background: item.isOrdered ? '#ef4444' : 'rgba(245, 158, 11, 0.15)',
+                                                borderColor: item.isOrdered ? '#ef4444' : '#f59e0b',
+                                                color: item.isOrdered ? 'white' : '#f59e0b',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px',
+                                                fontWeight: 'bold'
+                                            }}
+                                        >
+                                            {item.isOrdered ? '✕ Cancelar' : '🛒 Pedir'}
+                                        </button>
                                     </div>
                                 </div>
 
