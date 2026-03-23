@@ -1031,18 +1031,18 @@ export async function getFinanceSummary() {
         // --- NEW: Accumulate for Dividend / Sueldos formula (VENTAS) ---
         dividendTotals.sales += netoTotal;
 
-        // --- NEW: Accumulate for Invoiced by Person ---
-        if (s.facturado) {
-            // Updated logic: Attribute by target account (Sofi, Tomi, Lucas) instead of creator
+        // --- NEW: Accumulate for Invoiced by Person (Matching Arka logic) ---
+        // Exclude cash, wholesaler and supplier payments
+        const skipMethods = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_PROVEEDOR'];
+        if (!skipMethods.includes(s.medio_pago)) {
             let ownerName = 'DESCONOCIDO';
             if (target === 'SOFI_MP') ownerName = 'SOFI';
             else if (target === 'LUCAS') ownerName = 'LUCAS';
             else if (target === 'TOMI') ownerName = 'TOMI';
             else {
-                // Fallback to payment method logic
                 const mp = s.otro_medio_pago || s.medio_pago;
                 if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) ownerName = 'SOFI';
-                else if (mp === 'TRANSFERENCIA') ownerName = 'LUCAS';
+                else if (mp === 'TRANSFERENCIA' || mp === 'TRANSFERENCIA_LUCAS') ownerName = 'LUCAS';
                 else ownerName = 'TOMI';
             }
             billingByPerson[ownerName] = (billingByPerson[ownerName] || 0) + total;
