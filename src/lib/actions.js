@@ -735,6 +735,28 @@ export async function recordCashMovement({ monto, tipo, motivo, persona, cuenta 
         .single();
 
     if (error) throw error;
+
+    // --- NEW: Auto-update fixed expense budget if payment is higher ---
+    if (tipo === 'EGRESO') {
+        const absMonto = Math.abs(monto);
+        try {
+            const { data: config } = await supabase
+                .from('gastos_fijos_config')
+                .select('*')
+                .eq('categoria_movimiento', categoria)
+                .maybeSingle();
+
+            if (config && absMonto > (parseFloat(config.monto) || 0)) {
+                await supabase
+                    .from('gastos_fijos_config')
+                    .update({ monto: absMonto })
+                    .eq('id', config.id);
+            }
+        } catch (e) {
+            console.error("[AutoBudget] Update failed:", e);
+        }
+    }
+
     return data;
 }
 
@@ -947,10 +969,11 @@ export async function getFinanceSummary() {
     const now = new Date().toISOString();
 
     // Optimize by fetching in parallel and selecting only needed fields
-    const [salesRes, movementsRes, purchasesRes] = await Promise.all([
-        supabase.from('ventas').select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, profiles (nombre)'),
-        supabase.from('movimientos_caja').select('monto, cuenta, categoria, tipo, persona'),
-        supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)')
+    const [salesRes, movementsRes, purchasesRes, configRes] = await Promise.all([
+        supabase.from('ventas').select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
+        supabase.from('movimientos_caja').select('monto, cuenta, categoria, tipo, persona, created_at'),
+        supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)'),
+        supabase.from('gastos_fijos_config').select('*').eq('activo', true)
     ]);
 
     const sales = salesRes.data;
@@ -974,10 +997,16 @@ export async function getFinanceSummary() {
     const billingByPerson = {};
     const dividendTotals = {
         sales: 0,
-        paidPurchases: 0, // Actual payments made to suppliers/Carolina
-        expenses: 0,      // General expenses (rent, service, etc)
-        contributions: 0
+        paidPurchases: 0,
+        expenses: 0,
+        contributions: 0,
+        pendingProvisions: 0, // Reservas de gastos fijos presupuestados no pagados
+        provisionsDetails: [] // Detalles para mostrar en el reporte
     };
+
+    const fixedConfigs = configRes.data || [];
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
 
     // Calculate Costs from Supplier Purchases
     purchases?.forEach(p => {
@@ -1080,6 +1109,37 @@ export async function getFinanceSummary() {
         } else if (m.tipo === 'INGRESO' && ['APORTE_CAPITAL', 'VUELTO_CAMBIO'].includes(m.categoria)) {
             dividendTotals.contributions += monto;
         }
+    });
+
+    // --- NEW: Calculate Provisions (Monthly Budgeting) ---
+    fixedConfigs.forEach(conf => {
+        // Skip if expired (for Carolina Sept/2026 case)
+        if (conf.caduca_en) {
+            const caduca = new Date(conf.caduca_en);
+            if (new Date() > caduca) return;
+        }
+
+        // Sum what was ALREADY paid this month for this category
+        const paidThisMonth = (movements || [])
+            .filter(m => {
+                const date = new Date(m.created_at);
+                return m.categoria === conf.categoria_movimiento &&
+                    m.tipo === 'EGRESO' &&
+                    date.getMonth() === currentMonth &&
+                    date.getFullYear() === currentYear;
+            })
+            .reduce((sum, m) => sum + Math.abs(parseFloat(m.monto) || 0), 0);
+
+        const pending = Math.max(0, (parseFloat(conf.monto) || 0) - paidThisMonth);
+
+        dividendTotals.pendingProvisions += pending;
+        dividendTotals.provisionsDetails.push({
+            id: conf.id,
+            nombre: conf.descripcion,
+            presupuesto: parseFloat(conf.monto),
+            pagado: paidThisMonth,
+            pendiente: pending
+        });
     });
 
 

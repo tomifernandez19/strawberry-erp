@@ -246,9 +246,15 @@ export default function ReportesPage() {
                                 <span style={{ color: '#ef4444' }}>- $ {dividendTotals.paidPurchases.toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>(-) Gastos Generales</span>
+                                <span style={{ opacity: 0.8 }}>(-) Gastos Generales (Pagados)</span>
                                 <span style={{ color: '#ef4444' }}>- $ {dividendTotals.expenses.toLocaleString()}</span>
                             </div>
+                            {dividendTotals.pendingProvisions > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span style={{ opacity: 0.8 }}>⚠️ (-) Reservas Gastos Fijos (Pendientes)</span>
+                                    <span style={{ color: '#fbbf24' }}>- $ {dividendTotals.pendingProvisions.toLocaleString()}</span>
+                                </div>
+                            )}
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                                 <span style={{ opacity: 0.8 }}>(+) Aportes (Capital / Cambio)</span>
                                 <span style={{ color: 'var(--accent)' }}>+ $ {dividendTotals.contributions.toLocaleString()}</span>
@@ -256,20 +262,37 @@ export default function ReportesPage() {
 
                             <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
-                                    <h4 style={{ margin: 0 }}>Monto a Distribuir</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Efectivo Real Disponible</p>
+                                    <h4 style={{ margin: 0 }}>Monto Libra a Distribuir</h4>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Efectivo libre tras cubrir fijos</p>
                                 </div>
                                 <h3 style={{ margin: 0, color: 'var(--accent)' }}>
-                                    $ {(dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses + dividendTotals.contributions).toLocaleString()}
+                                    $ {(dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions).toLocaleString()}
                                 </h3>
                             </div>
+
+                            {/* Desglose de Gastos Fijos Pendientes */}
+                            {dividendTotals.provisionsDetails?.length > 0 && (
+                                <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px' }}>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.5, marginBottom: '10px', textTransform: 'uppercase' }}>Desglose de Gastos Fijos (Este mes):</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {dividendTotals.provisionsDetails.map(item => (
+                                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                                                <span style={{ opacity: 0.6 }}>{item.nombre}</span>
+                                                <span style={{ color: item.pendiente > 0 ? '#fbbf24' : '#10b981' }}>
+                                                    {item.pendiente > 0 ? `Falta pagar $${item.pendiente.toLocaleString()}` : '✅ Pagado'}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
                                 <p style={{ fontSize: '0.8rem', opacity: 0.7, marginBottom: '5px' }}>SUELDO ESTIMADO POR SOCIO (Div. 3)</p>
                                 <h2 style={{ margin: 0, color: '#ffbf00' }}>
-                                    $ {((dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses + dividendTotals.contributions) / 3).toLocaleString()}
+                                    $ {((dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions) / 3).toLocaleString()}
                                 </h2>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '5px' }}>* Basado en dinero real que entró menos lo que efectivamente se pagó.</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '5px' }}>* Basado en dinero real proyectado tras asegurar los gastos fijos.</p>
                             </div>
                         </div>
                     </div>
