@@ -1032,9 +1032,9 @@ export async function getFinanceSummary() {
         dividendTotals.sales += netoTotal;
 
         // --- NEW: Accumulate for Invoiced by Person (Matching Arka logic) ---
-        // Exclude cash, wholesaler and supplier payments
+        // Only count if it was ALREADY sent to the planilla (facturado = true)
         const skipMethods = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_PROVEEDOR'];
-        if (!skipMethods.includes(s.medio_pago)) {
+        if (s.facturado && !skipMethods.includes(s.medio_pago)) {
             let ownerName = 'DESCONOCIDO';
             if (target === 'SOFI_MP') ownerName = 'SOFI';
             else if (target === 'LUCAS') ownerName = 'LUCAS';
@@ -1045,7 +1045,10 @@ export async function getFinanceSummary() {
                 else if (mp === 'TRANSFERENCIA' || mp === 'TRANSFERENCIA_LUCAS') ownerName = 'LUCAS';
                 else ownerName = 'TOMI';
             }
-            billingByPerson[ownerName] = (billingByPerson[ownerName] || 0) + total;
+
+            // Calculation logic: For split payments, only count the non-cash portion (monto_otro)
+            const billingAmount = s.medio_pago === 'DIVIDIR_PAGOS' ? (parseFloat(s.monto_otro) || 0) : total;
+            billingByPerson[ownerName] = (billingByPerson[ownerName] || 0) + billingAmount;
         }
     });
 
