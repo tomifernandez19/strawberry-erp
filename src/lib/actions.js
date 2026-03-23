@@ -1979,7 +1979,7 @@ export async function getUnitByQR(qrCode) {
 /**
  * Assigns a warehouse location (zone) to a unit.
  */
-export async function assignLocation(qrCode, location, options = {}) {
+export async function assignLocation(qrCode, location) {
     const supabase = createClient();
     try {
         // 1. Find the unit
@@ -1995,18 +1995,7 @@ export async function assignLocation(qrCode, location, options = {}) {
 
         let newLocation = location.toUpperCase().trim();
 
-        // Handle modes: APPEND keeps previous and adds current
-        if (options.append && unit.ubicacion) {
-            // Avoid duplicates
-            const currentLocs = unit.ubicacion.split(',').map(l => l.trim().toUpperCase());
-            if (!currentLocs.includes(newLocation)) {
-                newLocation = `${unit.ubicacion}, ${newLocation}`;
-            } else {
-                newLocation = unit.ubicacion; // No change if already there
-            }
-        }
-
-        // 2. Update location
+        // 2. Update location (REPLACE ALWAYS as locations are unique)
         const { error: updateErr } = await supabase
             .from('unidades')
             .update({ ubicacion: newLocation })
