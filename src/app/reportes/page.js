@@ -242,8 +242,8 @@ export default function ReportesPage() {
                                 <span style={{ color: 'var(--accent)' }}>$ {dividendTotals.sales.toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>(-) Compras Proveedor (Stock)</span>
-                                <span style={{ color: '#ef4444' }}>- $ {dividendTotals.purchases.toLocaleString()}</span>
+                                <span style={{ opacity: 0.8 }}>(-) Pagos Efectuados (Prov/Caro)</span>
+                                <span style={{ color: '#ef4444' }}>- $ {dividendTotals.paidPurchases.toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                                 <span style={{ opacity: 0.8 }}>(-) Gastos Generales</span>
@@ -257,19 +257,19 @@ export default function ReportesPage() {
                             <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
                                     <h4 style={{ margin: 0 }}>Monto a Distribuir</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Utilidad Total Acumulada</p>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Efectivo Real Disponible</p>
                                 </div>
                                 <h3 style={{ margin: 0, color: 'var(--accent)' }}>
-                                    $ {(dividendTotals.sales - dividendTotals.purchases - dividendTotals.expenses + dividendTotals.contributions).toLocaleString()}
+                                    $ {(dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses + dividendTotals.contributions).toLocaleString()}
                                 </h3>
                             </div>
 
                             <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
                                 <p style={{ fontSize: '0.8rem', opacity: 0.7, marginBottom: '5px' }}>SUELDO ESTIMADO POR SOCIO (Div. 3)</p>
                                 <h2 style={{ margin: 0, color: '#ffbf00' }}>
-                                    $ {((dividendTotals.sales - dividendTotals.purchases - dividendTotals.expenses + dividendTotals.contributions) / 3).toLocaleString()}
+                                    $ {((dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses + dividendTotals.contributions) / 3).toLocaleString()}
                                 </h2>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '5px' }}>* Corresponde al retiro mensual sugerido por cada uno de los 3 socios.</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '5px' }}>* Basado en dinero real que entró menos lo que efectivamente se pagó.</p>
                             </div>
                         </div>
                     </div>
