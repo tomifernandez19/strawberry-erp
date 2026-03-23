@@ -1958,27 +1958,58 @@ export async function getAvailableStockDetailed() {
 }
 
 /**
+ * Fetches basic unit info for location assignment.
+ */
+export async function getUnitByQR(qrCode) {
+    const supabase = createClient();
+    try {
+        const { data, error } = await supabase
+            .from('unidades')
+            .select('id, ubicacion, talle_especifico, estado, variantes(*, modelos(*))')
+            .eq('codigo_qr', qrCode)
+            .maybeSingle();
+
+        if (error) throw error;
+        return { success: true, unit: data };
+    } catch (e) {
+        return { success: false, message: e.message };
+    }
+}
+
+/**
  * Assigns a warehouse location (zone) to a unit.
  */
-export async function assignLocation(qrCode, location) {
+export async function assignLocation(qrCode, location, options = {}) {
     const supabase = createClient();
     try {
         // 1. Find the unit
         const { data: unit, error: fetchErr } = await supabase
             .from('unidades')
-            .select('id, talle_especifico, variantes(color, modelos(descripcion))')
+            .select('id, ubicacion, talle_especifico, variantes(color, modelos(descripcion))')
             .eq('codigo_qr', qrCode)
-            .eq('estado', 'DISPONIBLE')
             .maybeSingle();
 
         if (fetchErr || !unit) {
-            return { success: false, message: 'QR no encontrado o no disponible.' };
+            return { success: false, message: 'QR no encontrado.' };
+        }
+
+        let newLocation = location.toUpperCase().trim();
+
+        // Handle modes: APPEND keeps previous and adds current
+        if (options.append && unit.ubicacion) {
+            // Avoid duplicates
+            const currentLocs = unit.ubicacion.split(',').map(l => l.trim().toUpperCase());
+            if (!currentLocs.includes(newLocation)) {
+                newLocation = `${unit.ubicacion}, ${newLocation}`;
+            } else {
+                newLocation = unit.ubicacion; // No change if already there
+            }
         }
 
         // 2. Update location
         const { error: updateErr } = await supabase
             .from('unidades')
-            .update({ ubicacion: location.toUpperCase() })
+            .update({ ubicacion: newLocation })
             .eq('id', unit.id);
 
         if (updateErr) throw updateErr;
