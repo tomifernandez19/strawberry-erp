@@ -239,6 +239,12 @@ export default function ReportesPage() {
                                 <span style={{ opacity: 0.8 }} title="Gastos fijos presupuestados y egresos varios (no proveedores)">(-) Gastos Op. (Egresos/Fijos)</span>
                                 <span style={{ color: '#ef4444' }}>- $ {(dividendTotals.expenses + dividendTotals.pendingProvisions).toLocaleString()}</span>
                             </div>
+                            {dividendTotals.contributions > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span style={{ opacity: 0.8 }} title="Ingresos externos como aportes de capital o vueltos">(+) Aportes de Capital / Vueltos</span>
+                                    <span style={{ color: 'var(--accent)' }}>+ $ {dividendTotals.contributions.toLocaleString()}</span>
+                                </div>
+                            )}
 
                             <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
