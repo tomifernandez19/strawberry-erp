@@ -1009,7 +1009,7 @@ export async function getFinanceSummary() {
         contributions: 0,
         pendingProvisions: 0,
         provisionsDetails: [],
-        supplierReserve: 0, // CMV - Cost of Goods Sold
+        supplierReserve: 0, // CMV reserve - (Paid + Sales Direct)
     };
 
     const fixedConfigs = configRes.data || [];
@@ -1088,7 +1088,7 @@ export async function getFinanceSummary() {
         } else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') {
             // Transfer to provider helps CMV but is NOT revenue
             if (isThisMonthSale) {
-                dividendTotals.supplierReserve += netoTotal;
+                dividendTotals.supplierReserve -= netoTotal; // Subtract from CMV because it’s already paid
             }
         } else if (cashMethods.includes(s.medio_pago) || s.medio_pago.startsWith('TRANSFERENCIA')) {
             // Immediate revenue
@@ -1187,14 +1187,14 @@ export async function getFinanceSummary() {
             pendiente: pending
         });
     });
-    // --- NEW: Calculate Supplier Reserve (Cost of Goods Sold / CMV) ---
+    // --- NEW: Calculate Net Supplier Reserve (Pending to pay) ---
     const soldUnits = soldUnitsRes.data || [];
-    dividendTotals.supplierReserve += soldUnits.reduce((sum, u) => {
+    const cmvThisMonth = soldUnits.reduce((sum, u) => {
         return sum + (parseFloat(u.variantes?.costo_promedio) || 0);
     }, 0);
 
-    // As per user request: add what was ALREADY paid to suppliers this month to the reserve/CMV
-    dividendTotals.supplierReserve += dividendTotals.paidPurchases;
+    // Final reserved amount = CMV Real - Paid Purchases - Transfers Already Sent
+    dividendTotals.supplierReserve += cmvThisMonth - dividendTotals.paidPurchases;
 
     return { accounts, billingByPerson, dividendTotals };
 }
