@@ -45,7 +45,7 @@ export default function ReportesPage() {
 
             // Set default estimated salary for closing month
             const dt = fSummary.dividendTotals;
-            const estimated = Math.floor((dt.sales - dt.paidPurchases - dt.expenses - dt.pendingProvisions - dt.supplierReserve + dt.contributions) / 3);
+            const estimated = Math.floor((dt.sales - dt.supplierReserve - dt.expenses - dt.pendingProvisions + dt.contributions) / 3);
             setClosingData(prev => prev.map(p => ({ ...p, amount: estimated > 0 ? estimated : 0 })));
 
         } catch (e) {
@@ -228,16 +228,16 @@ export default function ReportesPage() {
 
                         <div className="grid" style={{ gap: '15px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }} title="Ventas cuya fecha de acreditación es este mes">(+) Ventas Realizadas (Ticket Neto)</span>
+                                <span style={{ opacity: 0.8 }} title="Efectivo/Transferencias del mes y tarjetas acreditadas este mes">(+) Ventas Realizadas (Ticket Neto)</span>
                                 <span style={{ color: 'var(--accent)' }}>$ {dividendTotals.sales.toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }} title="Costo de reposición real de los productos vendidos">🏦 (-) Reposición Stock (CMV Real)</span>
+                                <span style={{ opacity: 0.8 }} title="Costo de stock vendido + Pagos ya realizados a proveedores">🏦 (-) Reposición Stock (CMV Real + Pagos)</span>
                                 <span style={{ color: '#fbbf24' }}>- $ {dividendTotals.supplierReserve.toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }} title="Pagos realizados a proveedores y gastos de operación del mes">(-) Gastos Op. (Egresos/Prov/Fijos)</span>
-                                <span style={{ color: '#ef4444' }}>- $ {(dividendTotals.paidPurchases + dividendTotals.expenses + dividendTotals.pendingProvisions).toLocaleString()}</span>
+                                <span style={{ opacity: 0.8 }} title="Gastos fijos presupuestados y egresos varios (no proveedores)">(-) Gastos Op. (Egresos/Fijos)</span>
+                                <span style={{ color: '#ef4444' }}>- $ {(dividendTotals.expenses + dividendTotals.pendingProvisions).toLocaleString()}</span>
                             </div>
 
                             <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -246,24 +246,24 @@ export default function ReportesPage() {
                                     <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Utilidad tras asegurar stock y gastos</p>
                                 </div>
                                 <h3 style={{ margin: 0, color: 'var(--accent)' }}>
-                                    $ {(dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions).toLocaleString()}
+                                    $ {(dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions).toLocaleString()}
                                 </h3>
                             </div>
 
                             <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
                                 <p style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '5px', letterSpacing: '1px' }}>SUELDO POR SOCIO ESTIMADO</p>
                                 <h2 style={{ margin: 0, color: '#ffbf00' }}>
-                                    $ {((dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions) / 3).toLocaleString()}
+                                    $ {((dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions) / 3).toLocaleString()}
                                 </h2>
                             </div>
 
                             <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '8px', fontSize: '0.75rem', color: '#888', border: '1px solid rgba(255,255,255,0.05)' }}>
                                 <p style={{ fontWeight: 'bold', color: '#aaa', marginBottom: '8px' }}>📌 ¿Cómo se calculan estos números?</p>
                                 <ul style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <li><strong>Ventas (Neto):</strong> Suma de lo cobrado este mes (según fecha de acreditación), menos comisiones de tarjetas/MP.</li>
-                                    <li><strong>CMV Real:</strong> Es una reserva automática. Restamos lo que nos costó el par que vendimos para asegurarnos que siempre tengamos dinero para reponer el stock.</li>
-                                    <li><strong>Gastos Op.:</strong> Suma de egresos manuales (sueldos de empleados, local, luz, pagos a proveedores hechos hoy).</li>
-                                    <li><strong>Ganancia Libre:</strong> Es el remanente real que queda para los socios después de cubrir reposición de stock y gastos fijos.</li>
+                                    <li><strong>Ventas (Neto):</strong> Incluye efectivo y transferencias realizadas este mes, más ventas con tarjeta ya acreditadas. Excluye transferencias directas a proveedores.</li>
+                                    <li><strong>CMV Real + Pagos:</strong> Suma del costo de reposición del stock vendido más todos los pagos ya realizados a proveedores (incluyendo transferencias directas).</li>
+                                    <li><strong>Gastos Op.:</strong> Gastos fijos (local, luz, sueldos empleados) y otros egresos varios que no son de mercadería.</li>
+                                    <li><strong>Ganancia Libre:</strong> El dinero real disponible tras asegurar la reposición de mercadería y cubrir los gastos operativos.</li>
                                 </ul>
                             </div>
                         </div>

@@ -975,7 +975,7 @@ export async function getFinanceSummary() {
 
     // Optimize by fetching in parallel and selecting only needed fields
     const [salesRes, movementsRes, purchasesRes, configRes, soldUnitsRes] = await Promise.all([
-        supabase.from('ventas').select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
+        supabase.from('ventas').select('created_at, total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
         supabase.from('movimientos_caja').select('monto, cuenta, categoria, tipo, persona, created_at'),
         supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)'),
         supabase.from('gastos_fijos_config').select('*').eq('activo', true),
@@ -1065,10 +1065,41 @@ export async function getFinanceSummary() {
         }
 
         // --- NEW: Accumulate for Dividend / Sueldos formula (VENTAS) ---
-        // ONLY count if the accreditation date is within THIS month
-        const accDate = new Date(s.fecha_acreditacion);
-        if (accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear) {
-            dividendTotals.sales += netoTotal;
+        const sDate = new Date(s.created_at);
+        const aDate = new Date(s.fecha_acreditacion);
+        const isThisMonthSale = sDate.getMonth() === currentMonth && sDate.getFullYear() === currentYear;
+        const isThisMonthAccreditation = aDate.getMonth() === currentMonth && aDate.getFullYear() === currentYear;
+
+        const cashMethods = ['EFECTIVO', 'MAYORISTA_EFECTIVO'];
+        const cardMethods = ['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'];
+
+        if (s.medio_pago === 'DIVIDIR_PAGOS') {
+            // Split handling
+            if (isThisMonthSale) {
+                dividendTotals.sales += (parseFloat(s.monto_efectivo) || 0);
+            }
+            const other = parseFloat(s.monto_neto) - parseFloat(s.monto_efectivo);
+            if (other > 0) {
+                const isOtherCard = cardMethods.includes(s.otro_medio_pago);
+                if ((isOtherCard && isThisMonthAccreditation) || (!isOtherCard && isThisMonthSale)) {
+                    dividendTotals.sales += other;
+                }
+            }
+        } else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') {
+            // Transfer to provider helps CMV but is NOT revenue
+            if (isThisMonthSale) {
+                dividendTotals.supplierReserve += netoTotal;
+            }
+        } else if (cashMethods.includes(s.medio_pago) || s.medio_pago.startsWith('TRANSFERENCIA')) {
+            // Immediate revenue
+            if (isThisMonthSale) {
+                dividendTotals.sales += netoTotal;
+            }
+        } else if (cardMethods.includes(s.medio_pago)) {
+            // Delayed revenue
+            if (isThisMonthAccreditation) {
+                dividendTotals.sales += netoTotal;
+            }
         }
 
         // --- NEW: Accumulate for Invoiced by Person (Matching Arka logic) ---
@@ -1158,9 +1189,12 @@ export async function getFinanceSummary() {
     });
     // --- NEW: Calculate Supplier Reserve (Cost of Goods Sold / CMV) ---
     const soldUnits = soldUnitsRes.data || [];
-    dividendTotals.supplierReserve = soldUnits.reduce((sum, u) => {
+    dividendTotals.supplierReserve += soldUnits.reduce((sum, u) => {
         return sum + (parseFloat(u.variantes?.costo_promedio) || 0);
     }, 0);
+
+    // As per user request: add what was ALREADY paid to suppliers this month to the reserve/CMV
+    dividendTotals.supplierReserve += dividendTotals.paidPurchases;
 
     return { accounts, billingByPerson, dividendTotals };
 }
