@@ -169,18 +169,30 @@ export default function ReportesPage() {
                     {/* Ficha de Saldos Globales */}
                     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
                         <div className="card" style={{ border: '1px solid var(--primary)' }}>
-                            <p style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 'bold' }}>💰 SALDOS ACUMULADOS TOTALES:</p>
+                            <p style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 'bold' }}>💰 SALDOS DISPONIBLES:</p>
                             <div className="grid mt-md" style={{ gap: '10px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Caja Local (Efectivo)</span>
                                     <span style={{ fontWeight: 'bold' }}>$ {accounts.CAJA_LOCAL.toLocaleString()}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Dueños (Sofi/Tomi/Luc)</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {(accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS).toLocaleString()}</span>
+                                    <span>Lucas (Transferencia)</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {accounts.LUCAS.toLocaleString()}</span>
                                 </div>
-                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ fontWeight: 'bold' }}>EFECTIVO REAL</span>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>Tomi (Transferencia)</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {accounts.TOMI.toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>Sofi (Mercado Pago)</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {accounts.SOFI_MP.toLocaleString()}</span>
+                                </div>
+                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px', marginTop: '5px', display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
+                                    <span style={{ fontSize: '0.8rem' }}>Sofi • Por Cobrar (Tarjetas)</span>
+                                    <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {accounts.SOFI_PENDING.toLocaleString()}</span>
+                                </div>
+                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '5px', display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ fontWeight: 'bold' }}>TOTAL EFECTIVO REAL</span>
                                     <span style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}>
                                         $ {(accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS).toLocaleString()}
                                     </span>
@@ -205,7 +217,10 @@ export default function ReportesPage() {
 
                     <div className="card mt-xl" style={{ border: '2px solid #444' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h3>🧬 Análisis del Mes / ROI</h3>
+                            <div>
+                                <h3 style={{ margin: 0 }}>🧬 Análisis del Mes / ROI</h3>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '4px' }}>Basado en fechas de acreditación y costos de reposición</p>
+                            </div>
                             <button onClick={() => setShowCloseModal(true)} className="btn-primary" style={{ padding: '8px 15px', fontSize: '0.8rem', background: '#3b82f6', borderColor: '#3b82f6' }}>
                                 📁 Cerrar Mes / Sueldos
                             </button>
@@ -213,22 +228,22 @@ export default function ReportesPage() {
 
                         <div className="grid" style={{ gap: '15px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>(+) Ventas Realizadas (Ticket Neto)</span>
+                                <span style={{ opacity: 0.8 }} title="Ventas cuya fecha de acreditación es este mes">(+) Ventas Realizadas (Ticket Neto)</span>
                                 <span style={{ color: 'var(--accent)' }}>$ {dividendTotals.sales.toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>🏦 (-) Reposición Stock (CMV Real)</span>
+                                <span style={{ opacity: 0.8 }} title="Costo de reposición real de los productos vendidos">🏦 (-) Reposición Stock (CMV Real)</span>
                                 <span style={{ color: '#fbbf24' }}>- $ {dividendTotals.supplierReserve.toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>(-) Gastos Op. (Sueldos/Prov/Fijos)</span>
+                                <span style={{ opacity: 0.8 }} title="Pagos realizados a proveedores y gastos de operación del mes">(-) Gastos Op. (Egresos/Prov/Fijos)</span>
                                 <span style={{ color: '#ef4444' }}>- $ {(dividendTotals.paidPurchases + dividendTotals.expenses + dividendTotals.pendingProvisions).toLocaleString()}</span>
                             </div>
 
                             <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
                                     <h4 style={{ margin: 0 }}>GANANCIA LIBRE</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Efectivo para repartir tras asegurar el stock y fijos</p>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Utilidad tras asegurar stock y gastos</p>
                                 </div>
                                 <h3 style={{ margin: 0, color: 'var(--accent)' }}>
                                     $ {(dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions).toLocaleString()}
@@ -236,10 +251,20 @@ export default function ReportesPage() {
                             </div>
 
                             <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.7, marginBottom: '5px' }}>SUELDO POR SOCIO ESTIMADO</p>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '5px', letterSpacing: '1px' }}>SUELDO POR SOCIO ESTIMADO</p>
                                 <h2 style={{ margin: 0, color: '#ffbf00' }}>
                                     $ {((dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions) / 3).toLocaleString()}
                                 </h2>
+                            </div>
+
+                            <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '8px', fontSize: '0.75rem', color: '#888', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <p style={{ fontWeight: 'bold', color: '#aaa', marginBottom: '8px' }}>📌 ¿Cómo se calculan estos números?</p>
+                                <ul style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <li><strong>Ventas (Neto):</strong> Suma de lo cobrado este mes (según fecha de acreditación), menos comisiones de tarjetas/MP.</li>
+                                    <li><strong>CMV Real:</strong> Es una reserva automática. Restamos lo que nos costó el par que vendimos para asegurarnos que siempre tengamos dinero para reponer el stock.</li>
+                                    <li><strong>Gastos Op.:</strong> Suma de egresos manuales (sueldos de empleados, local, luz, pagos a proveedores hechos hoy).</li>
+                                    <li><strong>Ganancia Libre:</strong> Es el remanente real que queda para los socios después de cubrir reposición de stock y gastos fijos.</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
