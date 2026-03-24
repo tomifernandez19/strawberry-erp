@@ -242,131 +242,124 @@ export default function ReportesPage() {
                                 </h2>
                             </div>
                         </div>
-                </section>
-                </section>
-    )
-}
-
-{/* CONTENIDO SOLAPA: VENTAS */ }
-{
-    activeTab === 'ventas' && stats && (
-        <section className="animate-in">
-            {/* Filtro Personalizado */}
-            <div className="card">
-                <h4 style={{ marginBottom: '15px' }}>🔍 Rango Personalizado</h4>
-                <form onSubmit={handleCustomSearch} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <input type="date" className="input-field" style={{ margin: 0 }} value={customRange.start} onChange={e => setCustomRange({ ...customRange, start: e.target.value })} />
-                        <input type="date" className="input-field" style={{ margin: 0 }} value={customRange.end} onChange={e => setCustomRange({ ...customRange, end: e.target.value })} />
                     </div>
-                    <button type="submit" className="btn-primary" disabled={customLoading}>
-                        {customLoading ? 'Calculando...' : 'Ver Período Custom'}
-                    </button>
-                </form>
-                {customStats && (
-                    <div className="mt-md pt-md" style={{ borderTop: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <p style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--accent)' }}>$ {customStats.neto.toLocaleString()} (Neto)</p>
-                            <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>{customStats.count} pares vendidos</p>
+                </section>
+                )}
+
+                {/* CONTENIDO SOLAPA: VENTAS */}
+                {activeTab === 'ventas' && stats && (
+                    <section className="animate-in">
+                        {/* Filtro Personalizado */}
+                        <div className="card">
+                            <h4 style={{ marginBottom: '15px' }}>🔍 Rango Personalizado</h4>
+                            <form onSubmit={handleCustomSearch} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <input type="date" className="input-field" style={{ margin: 0 }} value={customRange.start} onChange={e => setCustomRange({ ...customRange, start: e.target.value })} />
+                                    <input type="date" className="input-field" style={{ margin: 0 }} value={customRange.end} onChange={e => setCustomRange({ ...customRange, end: e.target.value })} />
+                                </div>
+                                <button type="submit" className="btn-primary" disabled={customLoading}>
+                                    {customLoading ? 'Calculando...' : 'Ver Período Custom'}
+                                </button>
+                            </form>
+                            {customStats && (
+                                <div className="mt-md pt-md" style={{ borderTop: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <p style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--accent)' }}>$ {customStats.neto.toLocaleString()} (Neto)</p>
+                                        <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>{customStats.count} pares vendidos</p>
+                                    </div>
+                                    <button className="btn-secondary" onClick={() => setViewDetail({ period: 'custom' })} style={{ fontSize: '0.75rem' }}>Ver Detalle 📋</button>
+                                </div>
+                            )}
                         </div>
-                        <button className="btn-secondary" onClick={() => setViewDetail({ period: 'custom' })} style={{ fontSize: '0.75rem' }}>Ver Detalle 📋</button>
+
+                        <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                            <div className="card text-center" style={{ borderLeft: '4px solid var(--accent)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today' })}>
+                                <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Hoy</p>
+                                <h2 style={{ color: 'var(--accent)' }}>$ {stats.today.neto.toLocaleString()}</h2>
+                            </div>
+                            <div className="card text-center" style={{ borderLeft: '4px solid var(--primary)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week' })}>
+                                <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Últimos 7 días</p>
+                                <h2 style={{ color: 'var(--primary)' }}>$ {stats.week.neto.toLocaleString()}</h2>
+                            </div>
+                            <div className="card text-center" style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month' })}>
+                                <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Últimos 30 días</p>
+                                <h2 style={{ color: '#8b5cf6' }}>$ {stats.month.neto.toLocaleString()}</h2>
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                {/* CONTENIDO SOLAPA: APORTES */}
+                {activeTab === 'aportes' && (
+                    <section className="animate-in">
+                        <div className="card">
+                            <h3>Aportes y Facturación Arka</h3>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '20px' }}>Historial de facturación por dueño (Matching Planilla)</p>
+                            <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                                {Object.entries(billingByPerson).map(([owner, amount]) => (
+                                    <div key={owner} className="card text-center" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
+                                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{owner}</p>
+                                        <h4 style={{ margin: 0 }}>$ {amount.toLocaleString()}</h4>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="card mt-lg">
+                            <h3>Historial de Capital Registrado</h3>
+                            <div className="grid mt-md" style={{ gap: '10px' }}>
+                                {contributions.history.map((m, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                                        <div>
+                                            <p style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{m.motivo}</p>
+                                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{new Date(m.created_at).toLocaleDateString()} • {m.persona}</p>
+                                        </div>
+                                        <p style={{ color: 'var(--accent)', fontWeight: 'bold' }}>+ $ {m.monto.toLocaleString()}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+                )}
+
+                {/* MODAL CIERRE */}
+                {showCloseModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                        <div className="card" style={{ maxWidth: '450px', width: '100%', animation: 'slideUp 0.3s ease-out' }}>
+                            <h2>Cierre y Distribución</h2>
+                            <div className="grid mt-md" style={{ gap: '15px' }}>
+                                {closingData.map((p, idx) => (
+                                    <div key={p.name} className="grid" style={{ gridTemplateColumns: '1fr 2fr', alignItems: 'center' }}>
+                                        <span style={{ fontWeight: 'bold' }}>{p.name}:</span>
+                                        <input type="number" value={p.amount} onChange={(e) => {
+                                            const newData = [...closingData];
+                                            newData[idx].amount = parseFloat(e.target.value) || 0;
+                                            setClosingData(newData);
+                                        }} className="input-field" style={{ margin: 0 }} />
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <button onClick={() => setShowCloseModal(false)} className="btn-secondary">Cancelar</button>
+                                <button onClick={handleCloseMonth} className="btn-primary" style={{ background: '#3b82f6', borderColor: '#3b82f6' }}>Confirmar ✅</button>
+                            </div>
+                        </div>
                     </div>
                 )}
-            </div>
 
-            <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                <div className="card text-center" style={{ borderLeft: '4px solid var(--accent)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today' })}>
-                    <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Hoy</p>
-                    <h2 style={{ color: 'var(--accent)' }}>$ {stats.today.neto.toLocaleString()}</h2>
-                </div>
-                <div className="card text-center" style={{ borderLeft: '4px solid var(--primary)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week' })}>
-                    <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Últimos 7 días</p>
-                    <h2 style={{ color: 'var(--primary)' }}>$ {stats.week.neto.toLocaleString()}</h2>
-                </div>
-                <div className="card text-center" style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month' })}>
-                    <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Últimos 30 días</p>
-                    <h2 style={{ color: '#8b5cf6' }}>$ {stats.month.neto.toLocaleString()}</h2>
-                </div>
+                <style jsx>{`
+                    .animate-in {
+                        animation: fadeIn 0.4s ease-out;
+                    }
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(10px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    @keyframes slideUp {
+                        from { opacity: 0; transform: translateY(20px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                `}</style>
             </div>
-        </section>
-    )
-}
-
-{/* CONTENIDO SOLAPA: APORTES */ }
-{
-    activeTab === 'aportes' && (
-        <section className="animate-in">
-            <div className="card">
-                <h3>Aportes y Facturación Arka</h3>
-                <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '20px' }}>Historial de facturación por dueño (Matching Planilla)</p>
-                <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-                    {Object.entries(billingByPerson).map(([owner, amount]) => (
-                        <div key={owner} className="card text-center" style={{ padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
-                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{owner}</p>
-                            <h4 style={{ margin: 0 }}>$ {amount.toLocaleString()}</h4>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            <div className="card mt-lg">
-                <h3>Historial de Capital Registrado</h3>
-                <div className="grid mt-md" style={{ gap: '10px' }}>
-                    {contributions.history.map((m, i) => (
-                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
-                            <div>
-                                <p style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{m.motivo}</p>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>{new Date(m.created_at).toLocaleDateString()} • {m.persona}</p>
-                            </div>
-                            <p style={{ color: 'var(--accent)', fontWeight: 'bold' }}>+ $ {m.monto.toLocaleString()}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </section>
-    )
-}
-
-{/* MODAL CIERRE */ }
-{
-    showCloseModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <div className="card" style={{ maxWidth: '450px', width: '100%', animation: 'slideUp 0.3s ease-out' }}>
-                <h2>Cierre y Distribución</h2>
-                <div className="grid mt-md" style={{ gap: '15px' }}>
-                    {closingData.map((p, idx) => (
-                        <div key={p.name} className="grid" style={{ gridTemplateColumns: '1fr 2fr', alignItems: 'center' }}>
-                            <span style={{ fontWeight: 'bold' }}>{p.name}:</span>
-                            <input type="number" value={p.amount} onChange={(e) => {
-                                const newData = [...closingData];
-                                newData[idx].amount = parseFloat(e.target.value) || 0;
-                                setClosingData(newData);
-                            }} className="input-field" style={{ margin: 0 }} />
-                        </div>
-                    ))}
-                </div>
-                <div className="grid mt-md" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <button onClick={() => setShowCloseModal(false)} className="btn-secondary">Cancelar</button>
-                    <button onClick={handleCloseMonth} className="btn-primary" style={{ background: '#3b82f6', borderColor: '#3b82f6' }}>Confirmar ✅</button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-<style jsx>{`
-                .animate-in {
-                    animation: fadeIn 0.4s ease-out;
-                }
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                @keyframes slideUp {
-                    from { opacity: 0; transform: translateY(20px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-            `}</style>
-        </div >
-    )
+        )
 }
