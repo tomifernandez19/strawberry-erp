@@ -966,14 +966,21 @@ export async function getRecentUnifiedCaja(accountId = null) {
  */
 export async function getFinanceSummary() {
     const supabase = createClient();
-    const now = new Date().toISOString();
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const monthStart = new Date(currentYear, currentMonth, 1).toISOString();
+    const nextMonth = new Date(currentYear, currentMonth + 1, 1).toISOString();
+    const nowStr = now.toISOString();
 
     // Optimize by fetching in parallel and selecting only needed fields
-    const [salesRes, movementsRes, purchasesRes, configRes] = await Promise.all([
+    const [salesRes, movementsRes, purchasesRes, configRes, soldUnitsRes] = await Promise.all([
         supabase.from('ventas').select('total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
         supabase.from('movimientos_caja').select('monto, cuenta, categoria, tipo, persona, created_at'),
         supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)'),
-        supabase.from('gastos_fijos_config').select('*').eq('activo', true)
+        supabase.from('gastos_fijos_config').select('*').eq('activo', true),
+        // Fetch units sold this month to calculate real replacement cost
+        supabase.from('unidades').select('variantes(costo_promedio)').gte('fecha_venta', monthStart).lt('fecha_venta', nextMonth)
     ]);
 
     const sales = salesRes.data;
@@ -1002,13 +1009,11 @@ export async function getFinanceSummary() {
         contributions: 0,
         pendingProvisions: 0,
         provisionsDetails: [],
-        supplierReserve: 0,
-        supplierReservePercent: 20
+        supplierReserve: 0, // CMV - Cost of Goods Sold
     };
 
     const fixedConfigs = configRes.data || [];
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
+    // currentMonth and currentYear are already defined at the top of the function
 
     // Calculate Costs from Supplier Purchases
     purchases?.forEach(p => {
@@ -1048,7 +1053,7 @@ export async function getFinanceSummary() {
 
         if (target === 'SOFI_MP') {
             const isReconciled = s.monto_neto !== null;
-            if (isReconciled && s.fecha_acreditacion <= now) {
+            if (isReconciled && s.fecha_acreditacion <= nowStr) {
                 accounts.SOFI_MP += other;
             } else {
                 accounts.SOFI_PENDING += other;
@@ -1151,8 +1156,11 @@ export async function getFinanceSummary() {
             pendiente: pending
         });
     });
-    // --- NEW: Calculate Supplier Reserve (20% of current month net sales) ---
-    dividendTotals.supplierReserve = Math.round(dividendTotals.sales * (dividendTotals.supplierReservePercent / 100));
+    // --- NEW: Calculate Supplier Reserve (Cost of Goods Sold / CMV) ---
+    const soldUnits = soldUnitsRes.data || [];
+    dividendTotals.supplierReserve = soldUnits.reduce((sum, u) => {
+        return sum + (parseFloat(u.variantes?.costo_promedio) || 0);
+    }, 0);
 
     return { accounts, billingByPerson, dividendTotals };
 }
