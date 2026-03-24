@@ -1146,7 +1146,7 @@ export async function getFinanceSummary() {
         const mDate = new Date(m.created_at);
         if (mDate.getMonth() === currentMonth && mDate.getFullYear() === currentYear) {
             if (m.tipo === 'EGRESO') {
-                if (['PAGO_PROVEEDOR', 'PAGO_CAROLINA'].includes(m.categoria)) {
+                if (m.categoria === 'PAGO_PROVEEDOR') {
                     dividendTotals.paidPurchases += Math.abs(monto);
                 } else {
                     dividendTotals.expenses += Math.abs(monto);
