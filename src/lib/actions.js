@@ -1000,8 +1000,10 @@ export async function getFinanceSummary() {
         paidPurchases: 0,
         expenses: 0,
         contributions: 0,
-        pendingProvisions: 0, // Reservas de gastos fijos presupuestados no pagados
-        provisionsDetails: [] // Detalles para mostrar en el reporte
+        pendingProvisions: 0,
+        provisionsDetails: [],
+        supplierReserve: 0,
+        supplierReservePercent: 20
     };
 
     const fixedConfigs = configRes.data || [];
@@ -1058,7 +1060,11 @@ export async function getFinanceSummary() {
         }
 
         // --- NEW: Accumulate for Dividend / Sueldos formula (VENTAS) ---
-        dividendTotals.sales += netoTotal;
+        // ONLY count if the accreditation date is within THIS month
+        const accDate = new Date(s.fecha_acreditacion);
+        if (accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear) {
+            dividendTotals.sales += netoTotal;
+        }
 
         // --- NEW: Accumulate for Invoiced by Person (Matching Arka logic) ---
         // Only count if it was ALREADY sent to the planilla (facturado = true)
@@ -1100,14 +1106,18 @@ export async function getFinanceSummary() {
         }
 
         // --- NEW: Accumulate for Dividend / Sueldos formula (GASTOS / APORTES / PAGOS) ---
-        if (m.tipo === 'EGRESO') {
-            if (['PAGO_PROVEEDOR', 'PAGO_CAROLINA'].includes(m.categoria)) {
-                dividendTotals.paidPurchases += Math.abs(monto);
-            } else {
-                dividendTotals.expenses += Math.abs(monto);
+        // ONLY count if created this month
+        const mDate = new Date(m.created_at);
+        if (mDate.getMonth() === currentMonth && mDate.getFullYear() === currentYear) {
+            if (m.tipo === 'EGRESO') {
+                if (['PAGO_PROVEEDOR', 'PAGO_CAROLINA'].includes(m.categoria)) {
+                    dividendTotals.paidPurchases += Math.abs(monto);
+                } else {
+                    dividendTotals.expenses += Math.abs(monto);
+                }
+            } else if (m.tipo === 'INGRESO' && ['APORTE_CAPITAL', 'VUELTO_CAMBIO'].includes(m.categoria)) {
+                dividendTotals.contributions += monto;
             }
-        } else if (m.tipo === 'INGRESO' && ['APORTE_CAPITAL', 'VUELTO_CAMBIO'].includes(m.categoria)) {
-            dividendTotals.contributions += monto;
         }
     });
 
@@ -1141,10 +1151,37 @@ export async function getFinanceSummary() {
             pendiente: pending
         });
     });
-
-
+    // --- NEW: Calculate Supplier Reserve (20% of current month net sales) ---
+    dividendTotals.supplierReserve = Math.round(dividendTotals.sales * (dividendTotals.supplierReservePercent / 100));
 
     return { accounts, billingByPerson, dividendTotals };
+}
+
+/**
+ * Records the formal closing of a month by logging partner distributions.
+ */
+export async function recordMonthClosing(distributions) {
+    const supabase = createClient();
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        const inserts = distributions.map(d => ({
+            monto: -Math.abs(d.amount),
+            tipo: 'EGRESO',
+            motivo: `CIERRE MES - SUELDO ${d.name}`,
+            persona: d.name,
+            cuenta: d.cuenta || 'CAJA_LOCAL',
+            categoria: 'RETIRO_PERSONAL',
+            user_id: user?.id
+        }));
+
+        const { error } = await supabase.from('movimientos_caja').insert(inserts);
+        if (error) throw error;
+
+        return { success: true };
+    } catch (e) {
+        return { success: false, message: e.message };
+    }
 }
 
 /**

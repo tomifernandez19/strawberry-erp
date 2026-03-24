@@ -1,439 +1,262 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getExtendedStats, getCustomRangeStats, getFinanceSummary, getCapitalContributionsReport } from '@/lib/actions'
+import { getFinanceSummary, getRecentPersonas, recordMonthClosing } from '@/lib/actions'
+import Loader from '@/components/Loader'
 
 export default function ReportesPage() {
-    const [stats, setStats] = useState(null)
     const [loading, setLoading] = useState(true)
-    const [viewDetail, setViewDetail] = useState(null) // { period: 'today'|'week'|'month'|'custom', owner: 'propia'|'carolina' }
-
-    // Custom range state
-    const [customRange, setCustomRange] = useState({ start: '', end: '' })
-    const [customStats, setCustomStats] = useState(null)
-    const [customLoading, setCustomLoading] = useState(false)
-    const [activeTab, setActiveTab] = useState('ventas') // 'ventas' or 'cuentas'
-    const [finance, setFinance] = useState(null)
-
-    const [contributions, setContributions] = useState({ byPerson: {}, history: [] })
-
-    const [billingByPerson, setBillingByPerson] = useState({})
-    const [dividendTotals, setDividendTotals] = useState(null)
+    const [data, setData] = useState(null)
+    const [showCloseModal, setShowCloseModal] = useState(false)
+    const [closingData, setClosingData] = useState([
+        { name: 'SOFI', amount: 0, cuenta: 'SOFI_MP' },
+        { name: 'TOMI', amount: 0, cuenta: 'TOMI' },
+        { name: 'LUCAS', amount: 0, cuenta: 'LUCAS' }
+    ])
 
     useEffect(() => {
-        async function load() {
-            const [vStats, fSummary, cReport] = await Promise.all([
-                getExtendedStats(),
-                getFinanceSummary(),
-                getCapitalContributionsReport()
-            ])
-            setStats(vStats)
-            setFinance(fSummary.accounts)
-            setBillingByPerson(fSummary.billingByPerson)
-            setDividendTotals(fSummary.dividendTotals)
-            setContributions(cReport)
-            setLoading(false)
-        }
-        load()
+        loadData()
     }, [])
 
-    const handleCustomSearch = async (e) => {
-        e.preventDefault()
-        if (!customRange.start || !customRange.end) return
-        setCustomLoading(true)
-        const data = await getCustomRangeStats(customRange.start, customRange.end)
-        setCustomStats(data)
-        setCustomLoading(false)
+    async function loadData() {
+        setLoading(true)
+        try {
+            const res = await getFinanceSummary()
+            setData(res)
+
+            // Set default estimated salary for closing month
+            const estimated = Math.floor((res.dividendTotals.sales - res.dividendTotals.paidPurchases - res.dividendTotals.expenses - res.dividendTotals.pendingProvisions - res.dividendTotals.supplierReserve + res.dividendTotals.contributions) / 3);
+            setClosingData(prev => prev.map(p => ({ ...p, amount: estimated > 0 ? estimated : 0 })));
+
+        } catch (e) {
+            console.error(e)
+        } finally {
+            setLoading(false)
+        }
     }
 
-    if (loading) return <div className="text-center mt-lg">Cargando reportes...</div>
+    const handleCloseMonth = async () => {
+        if (!confirm('¿Estás seguro de registrar los retiros de este mes? Esto quedará guardado como gastos de "Retiro Personal".')) return;
 
-    const DetailView = ({ period }) => {
-        const periodLabel = period === 'today' ? 'Hoy' : period === 'week' ? 'Semana' : period === 'month' ? 'Mes' : 'Personalizado';
-
-        if (!stats) return <p>Cargando datos...</p>;
-        if (stats.error) return <p style={{ color: 'var(--error)' }}>Error al cargar datos. Verifique los permisos de vendedor.</p>;
-
-        const periodData = period === 'custom' ? customStats : stats[period];
-        if (!periodData) return <p>No hay datos disponibles.</p>;
-
-        const items = periodData.items || [];
-
-        return (
-            <div className="grid mt-md">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3>Detalle de Ventas - {periodLabel}</h3>
-                    <button onClick={() => setViewDetail(null)} className="btn-secondary" style={{ padding: '4px 12px', fontSize: '0.8rem' }}>Cerrar</button>
-                </div>
-
-                <div className="grid mt-md" style={{ gap: '10px' }}>
-                    {items.length === 0 ? (
-                        <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No hay ventas en este periodo.</p>
-                    ) : (
-                        items.map((item, i) => (
-                            <div key={i} className="card" style={{ padding: '12px', fontSize: '0.85rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                    <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{item.codigo}</span>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: '0' }}>$ {item.neto.toLocaleString()} (Neto)</p>
-                                        <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: '0' }}>Lista: $ {item.precio.toLocaleString()}</p>
-                                    </div>
-                                </div>
-                                <p style={{ opacity: 0.9 }}>{item.modelo} - {item.color}</p>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', opacity: 0.6, fontSize: '0.75rem' }}>
-                                    <span>Talle: {item.talle} • {item.vendedor ? `Vendedor: ${item.vendedor}` : 'Sin registro'}</span>
-                                    <span>{new Date(item.fecha).toLocaleDateString()} {new Date(item.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {item.medio_pago}</span>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-        )
+        setLoading(true)
+        try {
+            const res = await recordMonthClosing(closingData);
+            if (res.success) {
+                alert('¡Mes cerrado y retiros registrados!');
+                setShowCloseModal(false);
+                loadData();
+            } else {
+                alert('Error: ' + res.message);
+            }
+        } catch (e) {
+            alert('Error crítico');
+        } finally {
+            setLoading(false)
+        }
     }
 
-    if (viewDetail) {
-        return (
-            <div className="grid mt-lg">
-                <header>
-                    <button onClick={() => setViewDetail(null)} style={{ border: 'none', background: 'none', color: 'var(--accent)', cursor: 'pointer', marginBottom: '20px' }}>
-                        ← Volver a Resumen
-                    </button>
-                    <h1>Detalle de Ventas</h1>
-                </header>
-                <DetailView period={viewDetail.period} />
-                <div style={{ height: '80px' }}></div>
-            </div>
-        )
-    }
+    if (loading && !data) return <Loader />
+
+    const { accounts, billingByPerson, dividendTotals } = data;
 
     return (
         <div className="grid mt-lg">
             <header className="text-center">
                 <h1>Reportes Financieros</h1>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '20px', flexWrap: 'wrap' }}>
-                    <button
-                        className={activeTab === 'ventas' ? 'btn-primary' : 'btn-secondary'}
-                        onClick={() => setActiveTab('ventas')}
-                        style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                    >
-                        Ventas
-                    </button>
-                    <button
-                        className={activeTab === 'cuentas' ? 'btn-primary' : 'btn-secondary'}
-                        onClick={() => setActiveTab('cuentas')}
-                        style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                    >
-                        Estado de Cuentas
-                    </button>
-                    <button
-                        className={activeTab === 'sueldos' ? 'btn-primary' : 'btn-secondary'}
-                        onClick={() => setActiveTab('sueldos')}
-                        style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                    >
-                        Análisis Sueldos 💰
-                    </button>
-                </div>
+                <p style={{ opacity: 0.7 }}>Resumen de caja y análisis de utilidades</p>
             </header>
 
-            {activeTab === 'cuentas' && finance && (
-                <section className="grid mt-lg">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-                        {/* Cuentas de Dueños */}
-                        <div className="card" style={{ borderLeft: '4px solid var(--accent)' }}>
-                            <h4 style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '15px' }}>DISPONIBLE POR CUENTA</h4>
-                            <div className="grid" style={{ gap: '12px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ opacity: 0.8 }}>💵 Caja Local (Efectivo)</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {finance.CAJA_LOCAL.toLocaleString()}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ opacity: 0.8 }}>📱 Cuenta Lucas</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {finance.LUCAS.toLocaleString()}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ opacity: 0.8 }}>📱 Cuenta Tomi / TN</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {finance.TOMI.toLocaleString()}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
-                                    <span style={{ opacity: 0.8 }}>💳 Sofi (Dispon. MP)</span>
-                                    <span style={{ fontWeight: 'bold', color: 'var(--accent)' }}>$ {finance.SOFI_MP.toLocaleString()}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>⏳ Sofi (A liberar)</span>
-                                    <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>$ {finance.SOFI_PENDING.toLocaleString()}</span>
-                                </div>
-                            </div>
+            {/* Ficha de Saldos Globales */}
+            <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                <div className="card" style={{ border: '1px solid var(--primary)' }}>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 'bold' }}>💰 SALDOS TOTALES ACUMULADOS:</p>
+                    <div className="grid mt-md" style={{ gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Caja Local (Efectivo)</span>
+                            <span style={{ fontWeight: 'bold' }}>$ {accounts.CAJA_LOCAL.toLocaleString()}</span>
                         </div>
-
-                        {/* Deudas y Compromisos */}
-                        <div className="card" style={{ borderLeft: '4px solid #ef4444' }}>
-                            <h4 style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '15px' }}>ESTADO DE DEUDAS</h4>
-                            <div className="grid" style={{ gap: '12px' }}>
-                                <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                                        <span style={{ opacity: 0.8 }}>👵 Deuda Carolina</span>
-                                        <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {finance.CAROLINA.toLocaleString()}</span>
-                                    </div>
-                                    <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
-                                        <div style={{ width: `${Math.min(100, Math.max(0, (1 - (Math.abs(finance.CAROLINA) / 13000000)) * 100))}%`, height: '100%', background: 'var(--accent)' }}></div>
-                                    </div>
-                                    <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '4px' }}>Restan pagar $ {Math.abs(finance.CAROLINA).toLocaleString()} de los $ 13M</p>
-                                </div>
-
-                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ opacity: 0.8 }}>🏢 Deuda Proveedores</span>
-                                        <span style={{ fontWeight: 'bold', color: finance.PROVEEDOR >= 0 ? 'var(--accent)' : '#ef4444' }}>$ {finance.PROVEEDOR.toLocaleString()}</span>
-                                    </div>
-                                    <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '2px' }}>
-                                        {finance.PROVEEDOR < 0 ? 'Saldo pendiente de pago' : 'Saldo a favor'}
-                                    </p>
-                                </div>
-                            </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Cuentas Dueños (Sofi/Tomi/Luc)</span>
+                            <span style={{ fontWeight: 'bold' }}>$ {(accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS).toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Tarjetas Pendientes</span>
+                            <span style={{ fontWeight: 'bold', color: '#666' }}>$ {accounts.SOFI_PENDING.toLocaleString()}</span>
+                        </div>
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 'bold' }}>EFECTIVO TOTAL REAL</span>
+                            <span style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}>
+                                $ {(accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS).toLocaleString()}
+                            </span>
                         </div>
                     </div>
+                </div>
 
-                    {/* NEW: Montos Facturados por Persona */}
-                    <div className="card mt-lg">
-                        <h4 style={{ fontSize: '0.85rem', marginBottom: '15px', color: 'var(--accent)' }}>📋 FACTURACIÓN POR DUEÑO (Histórico)</h4>
-                        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
-                            {Object.entries(billingByPerson).length === 0 ? (
-                                <p style={{ opacity: 0.5, fontStyle: 'italic', fontSize: '0.8rem' }}>No hay facturación registrada.</p>
-                            ) : (
-                                Object.entries(billingByPerson).map(([name, total]) => (
-                                    <div key={name} style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px' }}>
-                                        <p style={{ fontSize: '0.65rem', opacity: 0.5, textTransform: 'uppercase', marginBottom: '4px' }}>FACTURADO POR</p>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontWeight: 'bold' }}>{name}</span>
-                                            <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>$ {total.toLocaleString()}</span>
+                <div className="card" style={{ border: '1px solid #ef4444' }}>
+                    <p style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 'bold' }}>🚩 DEUDAS PENDIENTES:</p>
+                    <div className="grid mt-md" style={{ gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Deuda con Carolina</span>
+                            <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {Math.abs(accounts.CAROLINA).toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Deuda a Proveedor</span>
+                            <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {Math.abs(accounts.PROVEEDOR).toLocaleString()}</span>
+                        </div>
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 'bold' }}>PASIVO TOTAL</span>
+                            <span style={{ fontWeight: 'bold', color: '#ef4444', fontSize: '1.2rem' }}>
+                                $ {(Math.abs(accounts.CAROLINA) + Math.abs(accounts.PROVEEDOR)).toLocaleString()}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Sección de Facturación por Dueño */}
+            <section className="mt-xl">
+                <h3>📊 Facturación por Dueño (Histórico Planilla)</h3>
+                <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '20px' }}>Basado solo en ventas enviadas a Arka (Excluye Efectivo/Mayorista)</p>
+                <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
+                    {Object.entries(billingByPerson).map(([owner, amount]) => (
+                        <div key={owner} className="card text-center" style={{ borderLeft: '4px solid var(--accent)' }}>
+                            <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>{owner}</p>
+                            <h3 style={{ margin: 0 }}>$ {amount.toLocaleString()}</h3>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* ANÁLISIS DE SUELDOS / DIVIDENDOS */}
+            <section className="mt-xl">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                    <h3>🧬 Análisis de Sueldos / Resultado del Mes</h3>
+                    <button
+                        onClick={() => setShowCloseModal(true)}
+                        className="btn-primary"
+                        style={{ padding: '8px 15px', fontSize: '0.8rem', background: '#3b82f6', borderColor: '#3b82f6' }}
+                    >
+                        📁 Registrar Sueldos (Cierre Mes)
+                    </button>
+                </div>
+
+                <div className="card" style={{ border: '2px solid #555' }}>
+                    <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px' }}>
+                        <div>
+                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold', borderBottom: '1px solid #444', paddingBottom: '10px', marginBottom: '15px' }}>FLUJO DE CAJA (ESTE MES):</p>
+
+                            <div className="grid" style={{ gap: '15px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span style={{ opacity: 0.8 }}>(+) Ventas Acreditadas (Solo Mes Actual)</span>
+                                    <span style={{ color: 'var(--accent)' }}>$ {dividendTotals.sales.toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span style={{ opacity: 0.8 }}>(-) Pagos Efectuados (Prov/Caro)</span>
+                                    <span style={{ color: '#ef4444' }}>- $ {dividendTotals.paidPurchases.toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span style={{ opacity: 0.8 }}>(-) Gastos Generales (Pagados)</span>
+                                    <span style={{ color: '#ef4444' }}>- $ {dividendTotals.expenses.toLocaleString()}</span>
+                                </div>
+                                {dividendTotals.pendingProvisions > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                        <span style={{ opacity: 0.8 }}>⚠️ (-) Reservas Gastos Fijos (Pendientes)</span>
+                                        <span style={{ color: '#fbbf24' }}>- $ {dividendTotals.pendingProvisions.toLocaleString()}</span>
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span style={{ opacity: 0.8 }}>🏦 (-) Fondo para Proveedores ({dividendTotals.supplierReservePercent}%)</span>
+                                    <span style={{ color: '#fbbf24' }}>- $ {dividendTotals.supplierReserve.toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span style={{ opacity: 0.8 }}>(+) Aportes (Capital / Cambio)</span>
+                                    <span style={{ color: 'var(--accent)' }}>+ $ {dividendTotals.contributions.toLocaleString()}</span>
+                                </div>
+
+                                <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <h4 style={{ margin: 0 }}>Monto Libra a Distribuir</h4>
+                                        <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Efectivo libre tras reservas y fijos</p>
+                                    </div>
+                                    <h3 style={{ margin: 0, color: 'var(--accent)' }}>
+                                        $ {(dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions - dividendTotals.supplierReserve + dividendTotals.contributions).toLocaleString()}
+                                    </h3>
+                                </div>
+
+                                {/* Desglose de Gastos Fijos Pendientes */}
+                                {dividendTotals.provisionsDetails?.length > 0 && (
+                                    <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px' }}>
+                                        <p style={{ fontSize: '0.7rem', opacity: 0.5, marginBottom: '10px', textTransform: 'uppercase' }}>Desglose de Gastos Fijos (Pendientes/Pagados):</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {dividendTotals.provisionsDetails.map(item => (
+                                                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                                                    <span style={{ opacity: 0.6 }}>{item.nombre}</span>
+                                                    <span style={{ color: item.pendiente > 0 ? '#fbbf24' : '#10b981' }}>
+                                                        {item.pendiente > 0 ? `-$${item.pendiente.toLocaleString()}` : '✅ OK'}
+                                                    </span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
+                                )}
 
-                    {/* Resumen de Utilidad */}
-                    <div className="card mt-lg" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.02) 100%)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <h3 style={{ margin: 0 }}>Utilidad Neta Estimada</h3>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>Ventas - Costos - Gastos (Todo el tiempo)</p>
+                                <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
+                                    <p style={{ fontSize: '0.8rem', opacity: 0.7, marginBottom: '5px' }}>SUELDO ESTIMADO POR SOCIO</p>
+                                    <h2 style={{ margin: 0, color: '#ffbf00' }}>
+                                        $ {((dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions - dividendTotals.supplierReserve + dividendTotals.contributions) / 3).toLocaleString()}
+                                    </h2>
+                                    <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '5px' }}>* Resultado del mes proyectado tras asegurar el futuro del negocio.</p>
+                                </div>
                             </div>
-                            <h2 style={{ color: 'var(--accent)', margin: 0 }}>
-                                $ {(finance.CAJA_LOCAL + finance.SOFI_MP + finance.SOFI_PENDING + finance.TOMI + finance.LUCAS).toLocaleString()}
-                            </h2>
                         </div>
                     </div>
-                </section>
-            )}
+                </div>
+            </section>
 
-            {activeTab === 'sueldos' && dividendTotals && (
-                <section className="grid mt-lg">
-                    <div className="card" style={{ borderLeft: '4px solid var(--accent)' }}>
-                        <h3 style={{ marginBottom: '20px' }}>💰 Cálculo de Dividendo / Sueldo</h3>
-                        <p style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '20px' }}>
-                            Análisis basado en la utilidad real disponible según la fórmula de los socios.
-                        </p>
+            {/* MODAL CIERRE DE MES */}
+            {showCloseModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                    <div className="card" style={{ maxWidth: '500px', width: '100%', animation: 'slideUp 0.3s ease-out' }}>
+                        <h2 style={{ marginBottom: '10px' }}>Cierre de Mes / Distribución</h2>
+                        <p style={{ opacity: 0.6, fontSize: '0.85rem', marginBottom: '20px' }}>Confirmá cuánto dinero retira cada socio este mes. Esto se cargará como un egreso de "Retiro Personal".</p>
 
                         <div className="grid" style={{ gap: '15px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>(+) Ventas Totales (Neto)</span>
-                                <span style={{ color: 'var(--accent)' }}>$ {dividendTotals.sales.toLocaleString()}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>(-) Pagos Efectuados (Prov/Caro)</span>
-                                <span style={{ color: '#ef4444' }}>- $ {dividendTotals.paidPurchases.toLocaleString()}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>(-) Gastos Generales (Pagados)</span>
-                                <span style={{ color: '#ef4444' }}>- $ {dividendTotals.expenses.toLocaleString()}</span>
-                            </div>
-                            {dividendTotals.pendingProvisions > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                    <span style={{ opacity: 0.8 }}>⚠️ (-) Reservas Gastos Fijos (Pendientes)</span>
-                                    <span style={{ color: '#fbbf24' }}>- $ {dividendTotals.pendingProvisions.toLocaleString()}</span>
-                                </div>
-                            )}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }}>(+) Aportes (Capital / Cambio)</span>
-                                <span style={{ color: 'var(--accent)' }}>+ $ {dividendTotals.contributions.toLocaleString()}</span>
-                            </div>
-
-                            <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <h4 style={{ margin: 0 }}>Monto Libra a Distribuir</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Efectivo libre tras cubrir fijos</p>
-                                </div>
-                                <h3 style={{ margin: 0, color: 'var(--accent)' }}>
-                                    $ {(dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions).toLocaleString()}
-                                </h3>
-                            </div>
-
-                            {/* Desglose de Gastos Fijos Pendientes */}
-                            {dividendTotals.provisionsDetails?.length > 0 && (
-                                <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px' }}>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5, marginBottom: '10px', textTransform: 'uppercase' }}>Desglose de Gastos Fijos (Este mes):</p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {dividendTotals.provisionsDetails.map(item => (
-                                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                                                <span style={{ opacity: 0.6 }}>{item.nombre}</span>
-                                                <span style={{ color: item.pendiente > 0 ? '#fbbf24' : '#10b981' }}>
-                                                    {item.pendiente > 0 ? `Falta pagar $${item.pendiente.toLocaleString()}` : '✅ Pagado'}
-                                                </span>
-                                            </div>
-                                        ))}
+                            {closingData.map((p, idx) => (
+                                <div key={p.name} className="grid" style={{ gridTemplateColumns: '1fr 2fr', alignItems: 'center' }}>
+                                    <span style={{ fontWeight: 'bold' }}>{p.name}:</span>
+                                    <div style={{ position: 'relative' }}>
+                                        <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>$</span>
+                                        <input
+                                            type="number"
+                                            value={p.amount}
+                                            onChange={(e) => {
+                                                const newData = [...closingData];
+                                                newData[idx].amount = parseFloat(e.target.value) || 0;
+                                                setClosingData(newData);
+                                            }}
+                                            className="input-field"
+                                            style={{ margin: 0, paddingLeft: '25px' }}
+                                        />
                                     </div>
                                 </div>
-                            )}
+                            ))}
+                        </div>
 
-                            <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.7, marginBottom: '5px' }}>SUELDO ESTIMADO POR SOCIO (Div. 3)</p>
-                                <h2 style={{ margin: 0, color: '#ffbf00' }}>
-                                    $ {((dividendTotals.sales - dividendTotals.paidPurchases - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions) / 3).toLocaleString()}
-                                </h2>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '5px' }}>* Basado en dinero real proyectado tras asegurar los gastos fijos.</p>
-                            </div>
+                        <div className="grid mt-xl" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <button onClick={() => setShowCloseModal(false)} className="btn-secondary">Cancelar</button>
+                            <button onClick={handleCloseMonth} className="btn-primary" style={{ background: '#3b82f6', borderColor: '#3b82f6' }}>Confirmar Payout ✅</button>
                         </div>
                     </div>
-                </section>
-            )}
-
-            {activeTab === 'cuentas' && contributions && (
-                <section className="mt-xl">
-                    <h3 style={{ fontSize: '1rem', marginBottom: '15px' }}>💰 Aportes de Capital y Cambio</h3>
-
-                    {/* Resumen por Persona */}
-                    <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                        {Object.entries(contributions.byPerson).length === 0 ? (
-                            <p style={{ opacity: 0.5, fontStyle: 'italic' }}>No hay aportes registrados aún.</p>
-                        ) : (
-                            Object.entries(contributions.byPerson).map(([name, total]) => (
-                                <div key={name} className="card" style={{ padding: '15px', borderTop: '4px solid var(--accent)' }}>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.6, textTransform: 'uppercase' }}>APORTE TOTAL</p>
-                                    <h4 style={{ margin: '5px 0' }}>{name}</h4>
-                                    <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)', margin: 0 }}>$ {total.toLocaleString()}</p>
-                                </div>
-                            ))
-                        )}
-                    </div>
-
-                    {/* Historial Reciente de Aportes */}
-                    {contributions.history.length > 0 && (
-                        <div className="card mt-lg">
-                            <h4 style={{ fontSize: '0.85rem', marginBottom: '15px', opacity: 0.8 }}>Últimos Aportes Registrados</h4>
-                            <div className="grid" style={{ gap: '10px' }}>
-                                {contributions.history.slice(0, 10).map((m, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', fontSize: '0.8rem' }}>
-                                        <div>
-                                            <p style={{ fontWeight: 'bold', margin: 0 }}>{m.motivo}</p>
-                                            <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: 0 }}>
-                                                👤 {m.persona} • {new Date(m.created_at).toLocaleDateString()} • {m.categoria.replace(/_/g, ' ')}
-                                            </p>
-                                        </div>
-                                        <p style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '0.9rem' }}>+ $ {m.monto.toLocaleString()}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </section>
-            )}
-
-            {activeTab === 'ventas' && stats && (
-                <>
-
-                    {/* Selector de Fecha Personalizado */}
-                    <section className="card mt-md">
-                        <h4 style={{ marginBottom: '15px' }}>🔍 Filtro Personalizado</h4>
-                        <form onSubmit={handleCustomSearch} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>Desde:</label>
-                                    <input
-                                        type="date"
-                                        className="input-field"
-                                        style={{ margin: 0, padding: '8px' }}
-                                        value={customRange.start}
-                                        onChange={e => setCustomRange({ ...customRange, start: e.target.value })}
-                                    />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>Hasta:</label>
-                                    <input
-                                        type="date"
-                                        className="input-field"
-                                        style={{ margin: 0, padding: '8px' }}
-                                        value={customRange.end}
-                                        onChange={e => setCustomRange({ ...customRange, end: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                            <button type="submit" className="btn-primary" style={{ padding: '10px' }} disabled={customLoading}>
-                                {customLoading ? 'Calculando...' : 'Consultar Rango'}
-                            </button>
-                        </form>
-
-                        {customStats && (
-                            <div className="mt-lg" style={{ borderTop: '1px solid var(--card-border)', paddingTop: '15px' }}>
-                                <p style={{ fontSize: '0.9rem', opacity: 0.7 }}>Resultado del Rango:</p>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>Neto: $ {customStats.neto.toLocaleString()}</h2>
-                                        <p style={{ fontSize: '0.8rem', opacity: 0.5 }}>Lista: $ {customStats.total.toLocaleString()} ({customStats.count} pares)</p>
-                                    </div>
-                                    <button className="btn-secondary" style={{ padding: '8px 15px' }} onClick={() => setViewDetail({ period: 'custom' })}>
-                                        Ver Listado 📋
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </section>
-
-                    <section className="grid mt-lg">
-                        {/* Hoy */}
-                        <div className="card" style={{ borderLeft: '4px solid var(--accent)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today' })}>
-                            <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Ingreso Real de Hoy (Neto)</p>
-                            <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {stats?.today.neto.toLocaleString()}</h2>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Lista: $ {stats?.today.total.toLocaleString()}</p>
-                                <span style={{ fontSize: '0.7rem', color: 'var(--accent)' }}>Ver detalle →</span>
-                            </div>
-                        </div>
-
-                        {/* Semana */}
-                        <div className="card" style={{ borderLeft: '4px solid var(--primary)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week' })}>
-                            <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Ingreso Real 7 días</p>
-                            <h2 style={{ color: 'var(--primary)', margin: '5px 0' }}>$ {stats?.week.neto.toLocaleString()}</h2>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Lista: $ {stats?.week.total.toLocaleString()}</p>
-                                <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>Ver detalle →</span>
-                            </div>
-                        </div>
-
-                        {/* Mes */}
-                        <div className="card" style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month' })}>
-                            <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Ingreso Real 30 días</p>
-                            <h2 style={{ color: '#8b5cf6', margin: '5px 0' }}>$ {stats?.month.neto.toLocaleString()}</h2>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Lista: $ {stats?.month.total.toLocaleString()}</p>
-                                <span style={{ fontSize: '0.7rem', color: '#8b5cf6' }}>Ver detalle →</span>
-                            </div>
-                        </div>
-                    </section>
-
-                    <div className="card mt-lg" style={{ backgroundColor: 'var(--secondary)' }}>
-                        <h4>Análisis Rápido</h4>
-                        <p style={{ fontSize: '0.9rem', marginTop: '10px', lineHeight: '1.4' }}>
-                            Tu promedio de venta por par en los últimos 30 días es de
-                            <strong> $ {stats?.month.count > 0 ? (stats.month.total / stats.month.count).toFixed(2) : 0}</strong>.
-                        </p>
-                    </div>
-
-                </>
+                </div>
             )}
 
             <div style={{ height: '80px' }}></div>
+
+            <style jsx>{`
+                @keyframes slideUp {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
         </div>
     )
 }
