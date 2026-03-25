@@ -263,6 +263,21 @@ export default function ReportesPage() {
                                 </h2>
                             </div>
 
+                            {/* Detalle de Gastos Fijos Pendientes */}
+                            {dividendTotals.provisionsDetails?.filter(p => p.pendiente > 0).length > 0 && (
+                                <div style={{ marginTop: '20px', background: 'rgba(239, 68, 68, 0.03)', border: '1px solid rgba(239, 68, 68, 0.1)', padding: '15px', borderRadius: '12px' }}>
+                                    <p style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#ef4444', marginBottom: '10px', textTransform: 'uppercase' }}>📉 Gastos Fijos Pendientes de Pagar:</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {dividendTotals.provisionsDetails.filter(p => p.pendiente > 0).map(p => (
+                                            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', opacity: 0.9 }}>
+                                                <span>{p.nombre}</span>
+                                                <span style={{ fontWeight: 'bold' }}>$ {p.pendiente.toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '8px', fontSize: '0.75rem', color: '#888', border: '1px solid rgba(255,255,255,0.05)' }}>
                                 <p style={{ fontWeight: 'bold', color: '#aaa', marginBottom: '8px' }}>📌 ¿Cómo se calculan estos números?</p>
                                 <ul style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
