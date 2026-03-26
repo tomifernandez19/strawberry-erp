@@ -23,7 +23,7 @@ export default function InventarioPage() {
 
     useEffect(() => {
         fetchStock()
-        fetchTNStatuses()
+        // fetchTNStatuses()
     }, [])
 
     async function fetchTNStatuses() {
