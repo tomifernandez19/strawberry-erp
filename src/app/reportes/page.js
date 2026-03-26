@@ -188,13 +188,17 @@ export default function ReportesPage() {
                                     <span style={{ fontWeight: 'bold' }}>$ {accounts.SOFI_MP.toLocaleString()}</span>
                                 </div>
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px', marginTop: '5px', display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
-                                    <span style={{ fontSize: '0.8rem' }}>Sofi • Por Cobrar (Tarjetas)</span>
+                                    <span style={{ fontSize: '0.8rem' }}>Sofi • MARZO (Por Cobrar)</span>
                                     <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {accounts.SOFI_PENDING.toLocaleString()}</span>
                                 </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.5 }}>
+                                    <span style={{ fontSize: '0.8rem' }}>Sofi • ABRIL+ (Pendiente)</span>
+                                    <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {(accounts.SOFI_NEXT_MONTH || 0).toLocaleString()}</span>
+                                </div>
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '5px', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ fontWeight: 'bold' }}>TOTAL EFECTIVO REAL</span>
+                                    <span style={{ fontWeight: 'bold' }}>TOTAL LIQUIDEZ MARZO</span>
                                     <span style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}>
-                                        $ {(accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS).toLocaleString()}
+                                        $ {(accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS + accounts.SOFI_PENDING).toLocaleString()}
                                     </span>
                                 </div>
                             </div>

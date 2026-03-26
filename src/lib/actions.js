@@ -997,6 +997,7 @@ export async function getFinanceSummary() {
         SOFI_PENDING: 0,
         TOMI: 0,
         LUCAS: 0,
+        SOFI_NEXT_MONTH: 0,
         CAROLINA: -13000000, // Initial debt
         PROVEEDOR: 0
     };
@@ -1056,7 +1057,13 @@ export async function getFinanceSummary() {
             if (isReconciled && s.fecha_acreditacion <= nowStr) {
                 accounts.SOFI_MP += other;
             } else {
-                accounts.SOFI_PENDING += other;
+                // Check if it clears within THIS MONTH
+                const accDate = new Date(s.fecha_acreditacion);
+                if (accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear) {
+                    accounts.SOFI_PENDING += other;
+                } else {
+                    accounts.SOFI_NEXT_MONTH += other;
+                }
             }
         } else if (target === 'PROVEEDOR') {
             accounts.PROVEEDOR += other;
