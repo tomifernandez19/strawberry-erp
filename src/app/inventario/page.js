@@ -1,6 +1,13 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { syncProductToTiendanube, getAvailableStockDetailed, fixProveedorPrices, togglePendingOrder, syncImageToTiendanube, getTiendanubeImageStatuses } from '@/lib/actions'
+import { 
+    syncProductToTiendanube, 
+    getAvailableStockDetailed, 
+    fixProveedorPrices, 
+    togglePendingOrder, 
+    syncImageToTiendanube, 
+    getTiendanubeImageStatuses,
+    uploadProductImage
+} from '@/lib/actions'
 import { useAuth } from '@/lib/context/AuthContext'
 
 export default function InventarioPage() {
@@ -10,6 +17,7 @@ export default function InventarioPage() {
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(null)
     const [syncingImage, setSyncingImage] = useState(null)
+    const [uploading, setUploading] = useState(null)
     const [search, setSearch] = useState('')
     const [filter, setFilter] = useState('ALL') // ALL, UNSYNCED, NO_LOCATION, LOW_STOCK, PEDIDOS
 
@@ -60,6 +68,61 @@ export default function InventarioPage() {
             ubicaciones: Array.from(item.ubicaciones).sort()
         })))
         setLoading(false)
+    }
+
+    const handleUploadClick = (variantId) => {
+        document.getElementById(`file-input-${variantId}`).click();
+    }
+
+    const handleFileChange = async (variantId, modeloId, e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setUploading(variantId);
+        try {
+            // Client-side compression with Canvas (same as NuevaCompra)
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = async () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 1000;
+                    const scaleSize = MAX_WIDTH / img.width;
+                    canvas.width = MAX_WIDTH;
+                    canvas.height = img.height * scaleSize;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                    
+                    const res = await uploadProductImage(variantId, compressedBase64);
+                    if (res.success) {
+                        // 1. Update local state image
+                        setStock(prev => prev.map(item => 
+                            item.id === variantId ? { ...item, imagen_url: res.url } : item
+                        ));
+                        
+                        // 2. Allow re-syncing to Tiendanube (reset the TN status locally)
+                        setTnImageIds(prev => {
+                            const next = new Set(prev);
+                            next.delete(String(modeloId));
+                            return next;
+                        });
+
+                        alert("✅ Foto actualizada en el ERP. Ahora puedes volver a subirla a Tiendanube.");
+                    } else {
+                        alert("❌ Error al subir: " + res.message);
+                    }
+                    setUploading(null);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        } catch (err) {
+            console.error("Upload error:", err);
+            setUploading(null);
+        }
     }
 
     const handleTogglePedido = async (variantId, currentStatus) => {
@@ -201,42 +264,72 @@ export default function InventarioPage() {
                                 padding: '15px'
                             }}>
                                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-                                    {/* Imagen a la izquierda */}
-                                    <div style={{ width: '80px', height: '80px', flexShrink: 0, borderRadius: '8px', overflow: 'hidden', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    {/* Imagen a la izquierda con botón de cambio */}
+                                    <div style={{ position: 'relative', width: '85px', height: '85px', flexShrink: 0, borderRadius: '12px', overflow: 'hidden', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.08)' }}>
                                         {item.imagen_url ? (
-                                            <img src={item.imagen_url} alt={item.modelo.descripcion} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            <img src={item.imagen_url} alt={item.modelo.descripcion} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: uploading === item.id ? 0.3 : 1 }} />
                                         ) : (
                                             <span style={{ fontSize: '1.5rem', opacity: 0.2 }}>📷</span>
                                         )}
+                                        
+                                        {/* Overlay para cambiar foto */}
+                                        <div 
+                                            onClick={() => handleUploadClick(item.id)}
+                                            style={{ 
+                                                position: 'absolute', bottom: 0, left: 0, right: 0, 
+                                                background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '0.6rem', 
+                                                padding: '4px', textAlign: 'center', cursor: 'pointer',
+                                                fontWeight: 'bold', display: uploading === item.id ? 'none' : 'block'
+                                            }}
+                                        >
+                                            {item.imagen_url ? 'CAMBIAR' : 'SUBIR'}
+                                        </div>
+
+                                        {uploading === item.id && (
+                                            <div style={{ position: 'absolute', fontSize: '0.7rem', color: 'var(--accent)' }}>⏳...</div>
+                                        )}
+
+                                        <input 
+                                            id={`file-input-${item.id}`}
+                                            type="file" 
+                                            accept="image/*" 
+                                            capture="environment" 
+                                            style={{ display: 'none' }} 
+                                            onChange={(e) => handleFileChange(item.id, item.modelo.id, e)} 
+                                        />
                                     </div>
 
                                     {/* Información central */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-                                            <h4 style={{ color: item.isOrdered ? '#f59e0b' : 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word' }}>{item.modelo.descripcion}</h4>
+                                            <h4 style={{ color: item.isOrdered ? '#f59e0b' : 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '1rem' }}>{item.modelo.descripcion}</h4>
                                             {item.isOrdered && <span style={{ fontSize: '0.65rem', background: '#f59e0b', color: 'black', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold' }}>PEDIDO</span>}
                                         </div>
-                                        <p style={{ fontSize: '0.85rem', opacity: 0.8, margin: 0 }}>{item.modelo.marca} • {item.color}</p>
-                                        <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                        <p style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>{item.modelo.marca} • {item.color}</p>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                                             {Object.entries(item.talles).sort((a, b) => a[0] - b[0]).map(([t, q]) => (
-                                                <span key={t} style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 5px', borderRadius: '4px' }}>T{t}: <b>{q}</b></span>
+                                                <span key={t} style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>T{t}: <b>{q}</b></span>
                                             ))}
                                         </div>
                                     </div>
 
                                     {/* Acciones Rápidas */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                                        <p style={{ fontSize: '1rem', fontWeight: 'bold', margin: '0' }}>{item.count} <span style={{ fontSize: '0.7rem', opacity: 0.5 }}>u.</span></p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end', minWidth: '80px' }}>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)' }}>{item.count}</span>
+                                            <span style={{ fontSize: '0.7rem', opacity: 0.5, marginLeft: '4px' }}>u.</span>
+                                        </div>
                                         <button
                                             className="btn-secondary"
                                             onClick={() => handleTogglePedido(item.id, item.pedido_pendiente)}
                                             style={{
-                                                padding: '5px 10px',
+                                                padding: '6px 10px',
                                                 fontSize: '0.7rem',
-                                                background: item.isOrdered ? '#ef4444' : 'transparent',
-                                                borderColor: item.isOrdered ? '#ef4444' : '#f59e0b',
-                                                color: item.isOrdered ? 'white' : '#f59e0b',
-                                                fontWeight: 'bold'
+                                                background: item.isOrdered ? '#ef4444' : 'rgba(255,255,255,0.05)',
+                                                borderColor: item.isOrdered ? '#ef4444' : 'rgba(255,255,255,0.1)',
+                                                color: item.isOrdered ? 'white' : 'inherit',
+                                                fontWeight: 'bold',
+                                                borderRadius: '8px'
                                             }}
                                         >
                                             {item.isOrdered ? '✕ Quitar' : '🛒 Pedir'}
@@ -249,7 +342,7 @@ export default function InventarioPage() {
                                         {!item.isSynced ? (
                                             <button
                                                 className="btn-secondary"
-                                                style={{ flex: 1, fontSize: '0.75rem', padding: '8px' }}
+                                                style={{ flex: 1, fontSize: '0.75rem', padding: '10px', borderRadius: '10px' }}
                                                 onClick={() => handleSync(item.modelo.id)}
                                                 disabled={syncing === item.modelo.id}
                                             >
@@ -259,24 +352,26 @@ export default function InventarioPage() {
                                             <>
                                                 <button
                                                     className="btn-secondary"
-                                                    style={{ flex: 1, fontSize: '0.75rem', padding: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: '#10b981' }}
+                                                    style={{ flex: 1, fontSize: '0.75rem', padding: '10px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.05)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.2)' }}
                                                     onClick={() => handleSync(item.modelo.id)}
                                                     disabled={syncing === item.modelo.id}
                                                 >
                                                     {syncing === item.modelo.id ? '⏳' : '🔄 Actualizar Nube'}
                                                 </button>
-                                                {item.imagen_url && !tnImageIds.has(String(item.modelo.tiendanube_id)) && (
+                                                
+                                                {!tnImageIds.has(String(item.modelo.tiendanube_id)) ? (
                                                     <button
                                                         className="btn-secondary"
-                                                        style={{ flex: 1, fontSize: '0.75rem', padding: '8px', borderColor: '#3b82f6', color: '#3b82f6' }}
+                                                        style={{ flex: 1, fontSize: '0.75rem', padding: '10px', borderRadius: '10px', borderColor: '#3b82f6', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}
                                                         onClick={() => handleSyncImage(item.modelo.id, item.imagen_url, item.id)}
-                                                        disabled={syncingImage === item.id}
+                                                        disabled={syncingImage === item.id || !item.imagen_url}
                                                     >
                                                         {syncingImage === item.id ? '⏳' : '📤 Subir Foto'}
                                                     </button>
-                                                )}
-                                                {item.imagen_url && tnImageIds.has(String(item.modelo.tiendanube_id)) && (
-                                                   <span style={{ fontSize: '0.65rem', color: '#10b981', padding: '8px', opacity: 0.8 }}>📸 En Nube</span>
+                                                ) : (
+                                                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.03)', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                                                       <span style={{ fontSize: '0.7rem', color: '#10b981', opacity: 0.9 }}>✅ Foto en Nube</span>
+                                                   </div>
                                                 )}
                                             </>
                                         )}
