@@ -1883,6 +1883,7 @@ export async function getTiendanubeImageStatuses() {
         const response = await fetch(`${baseUrl}/products?per_page=200`, { headers });
         if (!response.ok) return [];
         const products = await response.json();
+        if (!Array.isArray(products)) return [];
         
         return products
             .filter(p => p.images && p.images.length > 0)

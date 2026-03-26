@@ -33,41 +33,50 @@ export default function InventarioPage() {
 
     async function fetchStock() {
         setLoading(true)
-        const response = await getAvailableStockDetailed()
-        const dataArr = response.stock || (Array.isArray(response) ? response : []);
-        const salesLast30 = response.salesVelocity || {};
-
-        const grouped = dataArr.reduce((acc, unit) => {
-            const key = unit.variantes?.id;
-            if (!key) return acc;
-
-            if (!acc[key]) {
-                acc[key] = {
-                    id: key,
-                    modelo: unit.variantes.modelos || { descripcion: "Sin nombre", marca: "S/M" },
-                    color: unit.variantes.color,
-                    imagen_url: unit.variantes.imagen_url,
-                    precio_efectivo: unit.variantes.precio_efectivo,
-                    precio_lista: unit.variantes.precio_lista,
-                    count: 0,
-                    ventas_30_dias: salesLast30[key] || 0,
-                    pedido_pendiente: unit.variantes.pedido_pendiente,
-                    talles: {},
-                    ubicaciones: new Set()
-                }
+        try {
+            const response = await getAvailableStockDetailed()
+            if (!response) {
+                setLoading(false)
+                return
             }
-            acc[key].count++;
-            const talle = unit.talle_especifico;
-            acc[key].talles[talle] = (acc[key].talles[talle] || 0) + 1;
-            if (unit.ubicacion) acc[key].ubicaciones.add(unit.ubicacion);
-            return acc;
-        }, {});
+            const dataArr = response.stock || (Array.isArray(response) ? response : [])
+            const salesLast30 = response.salesVelocity || {}
 
-        setStock(Object.values(grouped).map(item => ({
-            ...item,
-            ubicaciones: Array.from(item.ubicaciones).sort()
-        })))
-        setLoading(false)
+            const grouped = dataArr.reduce((acc, unit) => {
+                if (!unit || !unit.variantes?.id) return acc;
+                const key = unit.variantes.id;
+
+                if (!acc[key]) {
+                    acc[key] = {
+                        id: key,
+                        modelo: unit.variantes.modelos || { descripcion: "Sin nombre", marca: "S/M" },
+                        color: unit.variantes.color || 'S/D',
+                        imagen_url: unit.variantes.imagen_url,
+                        precio_efectivo: unit.variantes.precio_efectivo,
+                        precio_lista: unit.variantes.precio_lista,
+                        count: 0,
+                        ventas_30_dias: salesLast30[key] || 0,
+                        pedido_pendiente: unit.variantes.pedido_pendiente,
+                        talles: {},
+                        ubicaciones: new Set()
+                    }
+                }
+                acc[key].count++;
+                const talle = unit.talle_especifico || 'U';
+                acc[key].talles[talle] = (acc[key].talles[talle] || 0) + 1;
+                if (unit.ubicacion) acc[key].ubicaciones.add(unit.ubicacion);
+                return acc;
+            }, {});
+
+            setStock(Object.values(grouped).map(item => ({
+                ...item,
+                ubicaciones: Array.from(item.ubicaciones || []).sort()
+            })))
+        } catch (err) {
+            console.error("Error fetching stock:", err);
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleUploadClick = (variantId) => {
