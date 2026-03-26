@@ -1872,6 +1872,27 @@ export async function syncImageToTiendanube(modeloId, imageUrl) {
     }
 }
 
+export async function getTiendanubeImageStatuses() {
+    const storeId = process.env.TIENDANUBE_STORE_ID;
+    const token = process.env.TIENDANUBE_ACCESS_TOKEN;
+    const baseUrl = `https://api.tiendanube.com/v1/${storeId}`;
+    const headers = { 'Authentication': `bearer ${token}`, 'Content-Type': 'application/json' };
+
+    try {
+        // Fetch up to 200 products to avoid excessive pagination for 126 items
+        const response = await fetch(`${baseUrl}/products?per_page=200`, { headers });
+        if (!response.ok) return [];
+        const products = await response.json();
+        
+        return products
+            .filter(p => p.images && p.images.length > 0)
+            .map(p => String(p.id));
+    } catch (e) {
+        console.error("Error fetching TN image statuses:", e);
+        return [];
+    }
+}
+
 export async function recordOnlineOrder(orderData) {
     const supabase = createClient();
     const { id: tnId, customer, products, number } = orderData;

@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { syncProductToTiendanube, getAvailableStockDetailed, fixProveedorPrices, togglePendingOrder, syncImageToTiendanube } from '@/lib/actions'
+import { syncProductToTiendanube, getAvailableStockDetailed, fixProveedorPrices, togglePendingOrder, syncImageToTiendanube, getTiendanubeImageStatuses } from '@/lib/actions'
 import { useAuth } from '@/lib/context/AuthContext'
 
 export default function InventarioPage() {
     const { isAdmin } = useAuth()
     const [stock, setStock] = useState([])
+    const [tnImageIds, setTnImageIds] = useState(new Set())
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(null)
     const [syncingImage, setSyncingImage] = useState(null)
@@ -14,7 +15,13 @@ export default function InventarioPage() {
 
     useEffect(() => {
         fetchStock()
+        fetchTNStatuses()
     }, [])
+
+    async function fetchTNStatuses() {
+        const statuses = await getTiendanubeImageStatuses()
+        setTnImageIds(new Set(statuses))
+    }
 
     async function fetchStock() {
         setLoading(true)
@@ -89,6 +96,7 @@ export default function InventarioPage() {
             const result = await syncImageToTiendanube(modeloId, imageUrl)
             if (result.success) {
                 alert('✅ ' + result.message)
+                setTnImageIds(prev => new Set([...prev, String(modeloId)]))
             } else {
                 alert('❌ ' + result.message)
             }
@@ -257,7 +265,7 @@ export default function InventarioPage() {
                                                 >
                                                     {syncing === item.modelo.id ? '⏳' : '🔄 Actualizar Nube'}
                                                 </button>
-                                                {item.imagen_url && (
+                                                {item.imagen_url && !tnImageIds.has(String(item.modelo.tiendanube_id)) && (
                                                     <button
                                                         className="btn-secondary"
                                                         style={{ flex: 1, fontSize: '0.75rem', padding: '8px', borderColor: '#3b82f6', color: '#3b82f6' }}
@@ -266,6 +274,9 @@ export default function InventarioPage() {
                                                     >
                                                         {syncingImage === item.id ? '⏳' : '📤 Subir Foto'}
                                                     </button>
+                                                )}
+                                                {item.imagen_url && tnImageIds.has(String(item.modelo.tiendanube_id)) && (
+                                                   <span style={{ fontSize: '0.65rem', color: '#10b981', padding: '8px', opacity: 0.8 }}>📸 En Nube</span>
                                                 )}
                                             </>
                                         )}
