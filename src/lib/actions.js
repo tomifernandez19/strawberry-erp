@@ -2129,29 +2129,39 @@ export async function getAvailableStockDetailed() {
         `)
         .eq('estado', 'DISPONIBLE');
 
-    // 2. Fetch sales from the last 30 days to compute velocity
+    // 2. Fetch sales from the last 30 days WITH metadata for intelligent replenishment
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const { data: soldData } = await supabase
         .from('unidades')
-        .select('variante_id')
+        .select(`
+            variante_id,
+            variantes (id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_id))
+        `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
         .gte('fecha_venta', thirtyDaysAgo.toISOString());
 
     const salesVelocity = {};
+    const soldOutMetas = {}; // To store metadata for items with 0 stock
     if (soldData) {
         soldData.forEach(u => {
             const vId = u.variante_id;
-            if (vId) salesVelocity[vId] = (salesVelocity[vId] || 0) + 1;
+            if (vId) {
+                salesVelocity[vId] = (salesVelocity[vId] || 0) + 1;
+                // If this is a sold variant, store its metadata in case it's out of stock
+                if (u.variantes) {
+                    soldOutMetas[vId] = u.variantes;
+                }
+            }
         });
     }
 
     if (stockErr) {
         console.error("[Stock] Error fetching available stock:", stockErr);
-        return { stock: [], salesVelocity: {} };
+        return { stock: [], salesVelocity: {}, soldOutMetas: {} };
     }
 
-    return { stock: stockData || [], salesVelocity };
+    return { stock: stockData || [], salesVelocity, soldOutMetas };
 }
 
 /**

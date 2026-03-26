@@ -43,6 +43,7 @@ export default function InventarioPage() {
             }
             const dataArr = response.stock || (Array.isArray(response) ? response : [])
             const salesLast30 = response.salesVelocity || {}
+            const soldOutMetas = response.soldOutMetas || {}
 
             const grouped = dataArr.reduce((acc, unit) => {
                 if (!unit || !unit.variantes?.id) return acc;
@@ -69,6 +70,26 @@ export default function InventarioPage() {
                 if (unit.ubicacion) acc[key].ubicaciones.add(unit.ubicacion);
                 return acc;
             }, {});
+
+            // Intelligent Step: Add sold-out items (0 units) that have velocity
+            Object.keys(salesLast30).forEach(vId => {
+                if (!grouped[vId] && soldOutMetas[vId]) {
+                    const vMeta = soldOutMetas[vId];
+                    grouped[vId] = {
+                        id: vId,
+                        modelo: vMeta.modelos || { descripcion: "Sin nombre", marca: "S/M" },
+                        color: vMeta.color || 'S/D',
+                        imagen_url: vMeta.imagen_url,
+                        precio_efectivo: vMeta.precio_efectivo,
+                        precio_lista: vMeta.precio_lista,
+                        count: 0,
+                        ventas_30_dias: salesLast30[vId] || 0,
+                        pedido_pendiente: vMeta.pedido_pendiente,
+                        talles: {},
+                        ubicaciones: new Set()
+                    }
+                }
+            })
 
             setStock(Object.values(grouped).map(item => ({
                 ...item,
@@ -191,8 +212,9 @@ export default function InventarioPage() {
             isSynced: !!item.modelo?.tiendanube_id,
             hasPhotoInNube,
             hasNoLocation: (item.ubicaciones || []).length === 0,
-            // Intelligent Low Stock: 1 unit always, or <4 units IF it sells well (velocity > 1)
-            isLowStock: (item.count <= 1) || (item.count <= 3 && item.ventas_30_dias >= 1.5),
+            // Smart Replenishment: ONLY show items that SELL (velocity >= 1.5) and are running low (<= 4 units)
+            // This ignores "dead stock" (items with 1 unit but 0 sales)
+            isLowStock: (item.ventas_30_dias >= 1.5 && item.count <= 4),
             isOrdered: !!item.pedido_pendiente
         }
     });
