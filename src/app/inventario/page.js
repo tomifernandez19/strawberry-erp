@@ -1,4 +1,5 @@
 'use client'
+import { useState, useEffect } from 'react'
 import { 
     syncProductToTiendanube, 
     getAvailableStockDetailed, 
@@ -23,7 +24,7 @@ export default function InventarioPage() {
 
     useEffect(() => {
         fetchStock()
-        // fetchTNStatuses()
+        fetchTNStatuses()
     }, [])
 
     async function fetchTNStatuses() {
