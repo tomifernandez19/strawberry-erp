@@ -2759,7 +2759,8 @@ export async function completeSena(ventaId, paymentData) {
             monto_efectivo: newMontoEfectivo,
             monto_otro: newMontoOtro,
             medio_pago: medio_pago || venta.medio_pago,
-            cuenta_destino: cuenta_destino || venta.cuenta_destino
+            cuenta_destino: cuenta_destino || venta.cuenta_destino,
+            fecha: new Date().toISOString() // Marcamos la venta como realizada HOY al completarse
         })
         .eq('id', ventaId);
 

@@ -257,10 +257,38 @@ export default function ReportesPage() {
                             </div>
 
                             <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '5px', letterSpacing: '1px' }}>SUELDO POR SOCIO ESTIMADO</p>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '5px', letterSpacing: '1px' }}>SUELDO POR SOCIO (GANANCIA TEÓRICA)</p>
                                 <h2 style={{ margin: 0, color: '#ffbf00' }}>
                                     $ {((dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions) / 3).toLocaleString()}
                                 </h2>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '8px' }}>* Basado en márgenes sobre lo vendido. No considera cuánto efectivo hay en el banco.</p>
+                            </div>
+
+                            {/* NUEVA SECCIÓN DE LIQUIDEZ CONSERVADORA */}
+                            <div className="mt-xl" style={{ borderTop: '2px dashed #333', paddingTop: '30px' }}>
+                                <h4 style={{ margin: 0, letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.8rem', color: '#3b82f6' }}>🛡️ Análisis de Liquidez (Efectivo Real)</h4>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '5px' }}>¿Cuánta plata real queda si pagamos todo lo pendiente hoy?</p>
+                                
+                                <div className="mt-md" style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem' }}>
+                                        <span>Total en Cuentas + Tarjetas x Cobrar</span>
+                                        <span style={{ fontWeight: 'bold' }}>$ {(accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS + accounts.SOFI_PENDING).toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '0.9rem', color: '#ef4444' }}>
+                                        <span>Gastos Fijos Pendientes (Alquiler, etc.)</span>
+                                        <span style={{ fontWeight: 'bold' }}>- $ {dividendTotals.pendingProvisions.toLocaleString()}</span>
+                                    </div>
+                                    
+                                    <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.2)', paddingTop: '15px', textAlign: 'center' }}>
+                                        <p style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '5px', textTransform: 'uppercase', color: '#3b82f6' }}>Sueldo Líquido Máximo Sugerido</p>
+                                        <h2 style={{ margin: 0, color: '#3b82f6' }}>
+                                            $ {Math.max(0, Math.floor(((accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS + accounts.SOFI_PENDING) - dividendTotals.pendingProvisions) / 3)).toLocaleString()}
+                                        </h2>
+                                        <p style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '10px', lineHeight: '1.4' }}>
+                                            💡 <b>Consejo:</b> Si este número es menor al de Ganancia Teórica, significa que parte de la ganancia está "atrapada" en mercadería o deudas viejas. No la retiren para no descapitalizar el negocio.
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Detalle de Gastos Fijos Pendientes */}
