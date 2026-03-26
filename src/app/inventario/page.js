@@ -44,7 +44,7 @@ export default function InventarioPage() {
             if (!acc[key]) {
                 acc[key] = {
                     id: key,
-                    modelo: unit.variantes.modelos,
+                    modelo: unit.variantes.modelos || { descripcion: "Sin nombre", marca: "S/M" },
                     color: unit.variantes.color,
                     imagen_url: unit.variantes.imagen_url,
                     precio_efectivo: unit.variantes.precio_efectivo,
@@ -174,14 +174,14 @@ export default function InventarioPage() {
     const processedStock = stock.map(item => ({
         ...item,
         isSynced: !!item.modelo?.tiendanube_id,
-        hasNoLocation: item.ubicaciones.length === 0,
+        hasNoLocation: (item.ubicaciones || []).length === 0,
         isLowStock: item.count <= 3 && item.ventas_30_dias >= 2,
         isOrdered: !!item.pedido_pendiente
     }));
 
     const filteredStock = processedStock.filter(item => {
         // Text Match
-        const matchesText = (item.modelo.descripcion || '').toLowerCase().includes(search.toLowerCase());
+        const matchesText = (item.modelo?.descripcion || '').toLowerCase().includes(search.toLowerCase());
         const matchesColor = (item.color || '').toLowerCase().includes(search.toLowerCase());
         if (!matchesText && !matchesColor) return false;
 
@@ -267,7 +267,7 @@ export default function InventarioPage() {
                                     {/* Imagen a la izquierda con botón de cambio */}
                                     <div style={{ position: 'relative', width: '85px', height: '85px', flexShrink: 0, borderRadius: '12px', overflow: 'hidden', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.08)' }}>
                                         {item.imagen_url ? (
-                                            <img src={item.imagen_url} alt={item.modelo.descripcion} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: uploading === item.id ? 0.3 : 1 }} />
+                                            <img src={item.imagen_url} alt={item.modelo?.descripcion || ""} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: uploading === item.id ? 0.3 : 1 }} />
                                         ) : (
                                             <span style={{ fontSize: '1.5rem', opacity: 0.2 }}>📷</span>
                                         )}
@@ -302,10 +302,10 @@ export default function InventarioPage() {
                                     {/* Información central */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-                                            <h4 style={{ color: item.isOrdered ? '#f59e0b' : 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '1rem' }}>{item.modelo.descripcion}</h4>
+                                            <h4 style={{ color: item.isOrdered ? '#f59e0b' : 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '1rem' }}>{item.modelo?.descripcion || 'Sin nombre'}</h4>
                                             {item.isOrdered && <span style={{ fontSize: '0.65rem', background: '#f59e0b', color: 'black', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold' }}>PEDIDO</span>}
                                         </div>
-                                        <p style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>{item.modelo.marca} • {item.color}</p>
+                                        <p style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>{item.modelo?.marca || 'S/M'} • {item.color}</p>
                                         <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                                             {Object.entries(item.talles).sort((a, b) => a[0] - b[0]).map(([t, q]) => (
                                                 <span key={t} style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>T{t}: <b>{q}</b></span>
