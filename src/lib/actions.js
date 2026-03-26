@@ -1843,6 +1843,35 @@ export async function syncProductToTiendanube(modeloId) {
     }
 }
 
+export async function syncImageToTiendanube(modeloId, imageUrl) {
+    if (!imageUrl) return { success: false, message: "No hay URL de imagen para subir." };
+    const supabase = createClient();
+    const storeId = process.env.TIENDANUBE_STORE_ID;
+    const token = process.env.TIENDANUBE_ACCESS_TOKEN;
+    const baseUrl = `https://api.tiendanube.com/v1/${storeId}`;
+    const headers = { 'Authentication': `bearer ${token}`, 'Content-Type': 'application/json' };
+
+    try {
+        const { data: modelo } = await supabase.from('modelos').select('tiendanube_id').eq('id', modeloId).single();
+        if (!modelo?.tiendanube_id) return { success: false, message: "El producto aún no está sincronizado con TN." };
+
+        const response = await fetch(`${baseUrl}/products/${modelo.tiendanube_id}/images`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ src: imageUrl })
+        });
+
+        if (!response.ok) {
+            const err = await response.text();
+            return { success: false, message: "Error al subir imagen a TN", details: err };
+        }
+
+        return { success: true, message: "Imagen subida a Tiendanube con éxito." };
+    } catch (e) {
+        return { success: false, message: "Excepción al subir imagen: " + e.message };
+    }
+}
+
 export async function recordOnlineOrder(orderData) {
     const supabase = createClient();
     const { id: tnId, customer, products, number } = orderData;
@@ -2074,7 +2103,7 @@ export async function getAvailableStockDetailed() {
         .from('unidades')
         .select(`
             id, talle_especifico, ubicacion,
-            variantes (id, color, precio_efectivo, precio_lista, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_id))
+            variantes (id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_id))
         `)
         .eq('estado', 'DISPONIBLE');
 

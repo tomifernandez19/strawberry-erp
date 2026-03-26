@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { syncProductToTiendanube, getAvailableStockDetailed, fixProveedorPrices, togglePendingOrder } from '@/lib/actions'
+import { syncProductToTiendanube, getAvailableStockDetailed, fixProveedorPrices, togglePendingOrder, syncImageToTiendanube } from '@/lib/actions'
 import { useAuth } from '@/lib/context/AuthContext'
 
 export default function InventarioPage() {
@@ -8,6 +8,7 @@ export default function InventarioPage() {
     const [stock, setStock] = useState([])
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(null)
+    const [syncingImage, setSyncingImage] = useState(null)
     const [search, setSearch] = useState('')
     const [filter, setFilter] = useState('ALL') // ALL, UNSYNCED, NO_LOCATION, LOW_STOCK, PEDIDOS
 
@@ -30,6 +31,7 @@ export default function InventarioPage() {
                     id: key,
                     modelo: unit.variantes.modelos,
                     color: unit.variantes.color,
+                    imagen_url: unit.variantes.imagen_url,
                     precio_efectivo: unit.variantes.precio_efectivo,
                     precio_lista: unit.variantes.precio_lista,
                     count: 0,
@@ -78,6 +80,22 @@ export default function InventarioPage() {
             alert('❌ Error inesperado: ' + e.message)
         } finally {
             setSyncing(null)
+        }
+    }
+
+    const handleSyncImage = async (modeloId, imageUrl, variantId) => {
+        setSyncingImage(variantId)
+        try {
+            const result = await syncImageToTiendanube(modeloId, imageUrl)
+            if (result.success) {
+                alert('✅ ' + result.message)
+            } else {
+                alert('❌ ' + result.message)
+            }
+        } catch (e) {
+            alert('❌ Error: ' + e.message)
+        } finally {
+            setSyncingImage(null)
         }
     }
 
@@ -164,95 +182,93 @@ export default function InventarioPage() {
             {loading ? (
                 <p className="text-center mt-lg">Cargando stock...</p>
             ) : (
-                <section className="grid">
+                <section className="grid" style={{ gridTemplateColumns: '1fr' }}>
                     {filteredStock.length === 0 ? (
                         <p className="text-center mt-lg">No se encontraron modelos.</p>
                     ) : (
                         filteredStock.map(item => (
                             <div key={item.id} className="card" style={{
                                 border: item.isOrdered ? '2px solid #f59e0b' : '1px solid var(--card-border)',
-                                background: item.isOrdered ? 'rgba(245, 158, 11, 0.03)' : 'var(--card-bg)'
+                                background: item.isOrdered ? 'rgba(245, 158, 11, 0.03)' : 'var(--card-bg)',
+                                padding: '15px'
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                                <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                                    {/* Imagen a la izquierda */}
+                                    <div style={{ width: '80px', height: '80px', flexShrink: 0, borderRadius: '8px', overflow: 'hidden', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                        {item.imagen_url ? (
+                                            <img src={item.imagen_url} alt={item.modelo.descripcion} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : (
+                                            <span style={{ fontSize: '1.5rem', opacity: 0.2 }}>📷</span>
+                                        )}
+                                    </div>
+
+                                    {/* Información central */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
                                             <h4 style={{ color: item.isOrdered ? '#f59e0b' : 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word' }}>{item.modelo.descripcion}</h4>
                                             {item.isOrdered && <span style={{ fontSize: '0.65rem', background: '#f59e0b', color: 'black', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold' }}>PEDIDO</span>}
                                         </div>
-                                        <p style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '2px' }}>{item.modelo.marca} • {item.color}</p>
-                                        <p style={{ fontSize: '0.7rem', color: item.ventas_30_dias >= 2 ? '#10b981' : 'rgba(255,255,255,0.4)', marginTop: 0 }}>
-                                            {item.ventas_30_dias > 0 ? `🔥 Vendió ${item.ventas_30_dias} últ. 30 días` : `❄️ Sin ventas últ. 30 días`}
-                                        </p>
-
-                                        <div style={{ marginTop: '10px' }}>
-                                            <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>Talles disponibles:</p>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '4px' }}>
-                                                {Object.entries(item.talles).sort((a, b) => a[0] - b[0]).map(([t, q]) => (
-                                                    <span key={t} style={{ fontSize: '0.8rem', background: 'var(--secondary)', padding: '2px 6px', borderRadius: '4px' }}>
-                                                        T{t}: <strong>{q}</strong>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '8px' }}>
-                                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>Ubicación:</p>
-                                            <p style={{ fontSize: '0.85rem', fontWeight: 'bold', color: item.ubicaciones.length > 0 ? 'var(--accent)' : '#ef4444' }}>
-                                                {item.ubicaciones.length > 0 ? item.ubicaciones.join(', ') : '⚠️ No asignada'}
-                                            </p>
+                                        <p style={{ fontSize: '0.85rem', opacity: 0.8, margin: 0 }}>{item.modelo.marca} • {item.color}</p>
+                                        <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                            {Object.entries(item.talles).sort((a, b) => a[0] - b[0]).map(([t, q]) => (
+                                                <span key={t} style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', padding: '2px 5px', borderRadius: '4px' }}>T{t}: <b>{q}</b></span>
+                                            ))}
                                         </div>
                                     </div>
-                                    <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end' }}>
-                                        <div style={{
-                                            fontSize: '1.2rem',
-                                            fontWeight: 'bold',
-                                            background: 'rgba(59, 130, 246, 0.1)',
-                                            padding: '8px 12px',
-                                            borderRadius: '12px',
-                                            color: 'var(--primary)',
-                                            border: '1px solid rgba(59, 130, 246, 0.3)'
-                                        }}>
-                                            {item.count}u.
-                                        </div>
 
+                                    {/* Acciones Rápidas */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                                        <p style={{ fontSize: '1rem', fontWeight: 'bold', margin: '0' }}>{item.count} <span style={{ fontSize: '0.7rem', opacity: 0.5 }}>u.</span></p>
                                         <button
                                             className="btn-secondary"
                                             onClick={() => handleTogglePedido(item.id, item.pedido_pendiente)}
                                             style={{
-                                                padding: '8px 10px',
-                                                fontSize: '0.75rem',
-                                                background: item.isOrdered ? '#ef4444' : 'rgba(245, 158, 11, 0.15)',
+                                                padding: '5px 10px',
+                                                fontSize: '0.7rem',
+                                                background: item.isOrdered ? '#ef4444' : 'transparent',
                                                 borderColor: item.isOrdered ? '#ef4444' : '#f59e0b',
                                                 color: item.isOrdered ? 'white' : '#f59e0b',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '5px',
                                                 fontWeight: 'bold'
                                             }}
                                         >
-                                            {item.isOrdered ? '✕ Cancelar' : '🛒 Pedir'}
+                                            {item.isOrdered ? '✕ Quitar' : '🛒 Pedir'}
                                         </button>
                                     </div>
                                 </div>
 
-                                {isAdmin && filter !== 'LOW_STOCK' && !item.isSynced && (
-                                    <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px' }}>
-                                        <button
-                                            className="btn-secondary"
-                                            style={{ width: '100%', fontSize: '0.75rem', padding: '8px' }}
-                                            onClick={() => handleSync(item.modelo.id)}
-                                            disabled={syncing === item.modelo.id}
-                                        >
-                                            {syncing === item.modelo.id ? '⏳ Creando publicación...' : '☁️ Publicar en Tiendanube'}
-                                        </button>
-                                    </div>
-                                )}
-                                {isAdmin && filter !== 'LOW_STOCK' && item.isSynced && (
-                                    <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px', textAlign: 'center' }}>
-                                        <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '20px' }}>
-                                            ✅ Sincronizado en Tiendanube
-                                        </span>
+                                {isAdmin && (
+                                    <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px', display: 'flex', gap: '10px' }}>
+                                        {!item.isSynced ? (
+                                            <button
+                                                className="btn-secondary"
+                                                style={{ flex: 1, fontSize: '0.75rem', padding: '8px' }}
+                                                onClick={() => handleSync(item.modelo.id)}
+                                                disabled={syncing === item.modelo.id}
+                                            >
+                                                {syncing === item.modelo.id ? '⏳ Creando...' : '☁️ Publicar en Tiendanube'}
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    className="btn-secondary"
+                                                    style={{ flex: 1, fontSize: '0.75rem', padding: '8px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: '#10b981' }}
+                                                    onClick={() => handleSync(item.modelo.id)}
+                                                    disabled={syncing === item.modelo.id}
+                                                >
+                                                    {syncing === item.modelo.id ? '⏳' : '🔄 Actualizar Nube'}
+                                                </button>
+                                                {item.imagen_url && (
+                                                    <button
+                                                        className="btn-secondary"
+                                                        style={{ flex: 1, fontSize: '0.75rem', padding: '8px', borderColor: '#3b82f6', color: '#3b82f6' }}
+                                                        onClick={() => handleSyncImage(item.modelo.id, item.imagen_url, item.id)}
+                                                        disabled={syncingImage === item.id}
+                                                    >
+                                                        {syncingImage === item.id ? '⏳' : '📤 Subir Foto'}
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>
