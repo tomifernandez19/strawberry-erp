@@ -21,6 +21,7 @@ export default function InventarioPage() {
     const [uploading, setUploading] = useState(null)
     const [search, setSearch] = useState('')
     const [filter, setFilter] = useState('ALL') // ALL, UNSYNCED, NO_LOCATION, LOW_STOCK, PEDIDOS
+    const [sortBy, setSortBy] = useState('ABC') // ABC, STOCK, SALES
 
     useEffect(() => {
         fetchStock()
@@ -181,81 +182,107 @@ export default function InventarioPage() {
     }
 
     // Pre-calculate additional flags for items for filtering
-    const processedStock = stock.map(item => ({
-        ...item,
-        isSynced: !!item.modelo?.tiendanube_id,
-        hasNoLocation: (item.ubicaciones || []).length === 0,
-        isLowStock: item.count <= 3 && item.ventas_30_dias >= 2,
-        isOrdered: !!item.pedido_pendiente
-    }));
-
-    const filteredStock = processedStock.filter(item => {
-        // Text Match
-        const matchesText = (item.modelo?.descripcion || '').toLowerCase().includes(search.toLowerCase());
-        const matchesColor = (item.color || '').toLowerCase().includes(search.toLowerCase());
-        if (!matchesText && !matchesColor) return false;
-
-        // Button Filter
-        if (filter === 'UNSYNCED') return !item.isSynced;
-        if (filter === 'NO_LOCATION') return item.hasNoLocation;
-        if (filter === 'LOW_STOCK') return item.isLowStock && !item.isOrdered;
-        if (filter === 'PEDIDOS') return item.isOrdered;
-
-        return true;
+    const processedStock = stock.map(item => {
+        const tnIdStr = String(item.modelo?.tiendanube_id || '');
+        const hasPhotoInNube = tnImageIds.has(tnIdStr);
+        
+        return {
+            ...item,
+            isSynced: !!item.modelo?.tiendanube_id,
+            hasPhotoInNube,
+            hasNoLocation: (item.ubicaciones || []).length === 0,
+            // Intelligent Low Stock: 1 unit always, or <4 units IF it sells well (velocity > 1)
+            isLowStock: (item.count <= 1) || (item.count <= 3 && item.ventas_30_dias >= 1.5),
+            isOrdered: !!item.pedido_pendiente
+        }
     });
+
+    const filteredAndSortedStock = processedStock
+        .filter(item => {
+            // Text Match
+            const matchesText = (item.modelo?.descripcion || '').toLowerCase().includes(search.toLowerCase());
+            const matchesColor = (item.color || '').toLowerCase().includes(search.toLowerCase());
+            if (!matchesText && !matchesColor) return false;
+
+            // Button Filter
+            if (filter === 'UNSYNCED') return !item.isSynced || !item.hasPhotoInNube;
+            if (filter === 'NO_LOCATION') return item.hasNoLocation;
+            if (filter === 'LOW_STOCK') return item.isLowStock && !item.isOrdered;
+            if (filter === 'PEDIDOS') return item.isOrdered;
+
+            return true;
+        })
+        .sort((a, b) => {
+            if (sortBy === 'STOCK') return b.count - a.count;
+            if (sortBy === 'SALES') return b.ventas_30_dias - a.ventas_30_dias;
+            // Alphabetical
+            return (a.modelo?.descripcion || '').localeCompare(b.modelo?.descripcion || '');
+        });
 
     return (
         <div className="grid mt-lg">
             <header className="text-center">
                 <h1>Inventario</h1>
-                <p style={{ opacity: 0.7 }}>Stock disponible por modelo</p>
+                <p style={{ opacity: 0.7 }}>Gestión inteligente de productos</p>
             </header>
 
             <div className="card mt-md" style={{ padding: 'var(--spacing-md)', overflow: 'hidden' }}>
-                <input
-                    type="text"
-                    placeholder="🔍 Buscar por modelo o color..."
-                    className="input-field"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    style={{ marginBottom: '15px' }}
-                />
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                    <input
+                        type="text"
+                        placeholder="🔍 Buscar..."
+                        className="input-field"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        style={{ flex: 2, marginBottom: 0 }}
+                    />
+                    <select 
+                        className="input-field" 
+                        style={{ flex: 1, marginBottom: 0, paddingRight: '10px' }}
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                    >
+                        <option value="ABC">A-Z</option>
+                        <option value="STOCK">Mucho Stock</option>
+                        <option value="SALES">Ventas 30d</option>
+                    </select>
+                </div>
 
                 <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
                     <button
                         className={`btn-secondary ${filter === 'ALL' ? 'active-filter' : ''}`}
-                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'ALL' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', borderColor: filter === 'ALL' ? 'var(--accent)' : 'rgba(255,255,255,0.1)', color: filter === 'ALL' ? 'white' : 'inherit' }}
+                        style={{ padding: '8px 15px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'ALL' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', borderColor: filter === 'ALL' ? 'var(--accent)' : 'rgba(255,255,255,0.1)', color: filter === 'ALL' ? 'white' : 'inherit' }}
                         onClick={() => setFilter('ALL')}
                     >
-                        Todos
+                        Ver Todos
                     </button>
                     <button
                         className={`btn-secondary ${filter === 'UNSYNCED' ? 'active-filter' : ''}`}
-                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'UNSYNCED' ? '#3b82f6' : 'rgba(255,255,255,0.05)', borderColor: filter === 'UNSYNCED' ? '#3b82f6' : 'rgba(255,255,255,0.1)', color: filter === 'UNSYNCED' ? 'white' : 'inherit' }}
+                        style={{ padding: '8px 15px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'UNSYNCED' ? '#3b82f6' : 'rgba(255,255,255,0.05)', borderColor: filter === 'UNSYNCED' ? '#3b82f6' : 'rgba(255,255,255,0.1)', color: filter === 'UNSYNCED' ? 'white' : 'inherit' }}
                         onClick={() => setFilter('UNSYNCED')}
                     >
-                        ☁️ Faltan en Nube
-                    </button>
-                    <button
-                        className={`btn-secondary ${filter === 'NO_LOCATION' ? 'active-filter' : ''}`}
-                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'NO_LOCATION' ? '#ef4444' : 'rgba(255,255,255,0.05)', borderColor: filter === 'NO_LOCATION' ? '#ef4444' : 'rgba(255,255,255,0.1)', color: filter === 'NO_LOCATION' ? 'white' : 'inherit' }}
-                        onClick={() => setFilter('NO_LOCATION')}
-                    >
-                        ⚠️ Sin Ubicación
+                        ☁️ Sincronizar Nube
                     </button>
                     <button
                         className={`btn-secondary ${filter === 'LOW_STOCK' ? 'active-filter' : ''}`}
-                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'LOW_STOCK' ? '#f59e0b' : 'rgba(255,255,255,0.05)', borderColor: filter === 'LOW_STOCK' ? '#f59e0b' : 'rgba(255,255,255,0.1)', color: filter === 'LOW_STOCK' ? 'white' : 'inherit' }}
+                        style={{ padding: '8px 15px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'LOW_STOCK' ? '#f59e0b' : 'rgba(255,255,255,0.05)', borderColor: filter === 'LOW_STOCK' ? '#f59e0b' : 'rgba(255,255,255,0.1)', color: filter === 'LOW_STOCK' ? 'white' : 'inherit' }}
                         onClick={() => setFilter('LOW_STOCK')}
                     >
-                        📉 Poco Stock
+                        📈 Reponer (Smart)
                     </button>
                     <button
                         className={`btn-secondary ${filter === 'PEDIDOS' ? 'active-filter' : ''}`}
-                        style={{ padding: '6px 12px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'PEDIDOS' ? '#f59e0b' : 'rgba(255,255,255,0.05)', borderColor: filter === 'PEDIDOS' ? '#f59e0b' : 'rgba(255,255,255,0.1)', color: filter === 'PEDIDOS' ? 'white' : 'inherit' }}
+                        style={{ padding: '8px 15px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'PEDIDOS' ? '#10b981' : 'rgba(255,255,255,0.05)', borderColor: filter === 'PEDIDOS' ? '#10b981' : 'rgba(255,255,255,0.1)', color: filter === 'PEDIDOS' ? 'white' : 'inherit' }}
                         onClick={() => setFilter('PEDIDOS')}
                     >
                         🛒 Ya Pedidos
+                    </button>
+                    <button
+                        className={`btn-secondary ${filter === 'NO_LOCATION' ? 'active-filter' : ''}`}
+                        style={{ padding: '8px 15px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'NO_LOCATION' ? '#ef4444' : 'rgba(255,255,255,0.05)', borderColor: filter === 'NO_LOCATION' ? '#ef4444' : 'rgba(255,255,255,0.1)', color: filter === 'NO_LOCATION' ? 'white' : 'inherit' }}
+                        onClick={() => setFilter('NO_LOCATION')}
+                    >
+                        ⚠️ Sin Ubicación
                     </button>
                 </div>
             </div>
@@ -264,17 +291,17 @@ export default function InventarioPage() {
                 <p className="text-center mt-lg">Cargando stock...</p>
             ) : (
                 <section className="grid" style={{ gridTemplateColumns: '1fr' }}>
-                    {filteredStock.length === 0 ? (
+                    {filteredAndSortedStock.length === 0 ? (
                         <p className="text-center mt-lg">No se encontraron modelos.</p>
                     ) : (
-                        filteredStock.map(item => (
+                        filteredAndSortedStock.map(item => (
                             <div key={item.id} className="card" style={{
-                                border: item.isOrdered ? '2px solid #f59e0b' : '1px solid var(--card-border)',
-                                background: item.isOrdered ? 'rgba(245, 158, 11, 0.03)' : 'var(--card-bg)',
+                                border: item.isOrdered ? '2px solid #10b981' : '1px solid var(--card-border)',
+                                background: item.isOrdered ? 'rgba(16, 185, 129, 0.03)' : 'var(--card-bg)',
                                 padding: '15px'
                             }}>
                                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-                                    {/* Imagen a la izquierda con botón de cambio */}
+                                    {/* Imagen a la izquierda con botón de cambio (solo fuera de ALL) */}
                                     <div style={{ position: 'relative', width: '85px', height: '85px', flexShrink: 0, borderRadius: '12px', overflow: 'hidden', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.08)' }}>
                                         {item.imagen_url ? (
                                             <img src={item.imagen_url} alt={item.modelo?.descripcion || ""} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: uploading === item.id ? 0.3 : 1 }} />
@@ -282,18 +309,20 @@ export default function InventarioPage() {
                                             <span style={{ fontSize: '1.5rem', opacity: 0.2 }}>📷</span>
                                         )}
                                         
-                                        {/* Overlay para cambiar foto */}
-                                        <div 
-                                            onClick={() => handleUploadClick(item.id)}
-                                            style={{ 
-                                                position: 'absolute', bottom: 0, left: 0, right: 0, 
-                                                background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '0.6rem', 
-                                                padding: '4px', textAlign: 'center', cursor: 'pointer',
-                                                fontWeight: 'bold', display: uploading === item.id ? 'none' : 'block'
-                                            }}
-                                        >
-                                            {item.imagen_url ? 'CAMBIAR' : 'SUBIR'}
-                                        </div>
+                                        {/* Overlay para cambiar foto (Solo en filtros de gestión) */}
+                                        {filter !== 'ALL' && (
+                                            <div 
+                                                onClick={() => handleUploadClick(item.id)}
+                                                style={{ 
+                                                    position: 'absolute', bottom: 0, left: 0, right: 0, 
+                                                    background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '0.6rem', 
+                                                    padding: '4px', textAlign: 'center', cursor: 'pointer',
+                                                    fontWeight: 'bold', display: uploading === item.id ? 'none' : 'block'
+                                                }}
+                                            >
+                                                {item.imagen_url ? 'CAMBIAR' : 'SUBIR'}
+                                            </div>
+                                        )}
 
                                         {uploading === item.id && (
                                             <div style={{ position: 'absolute', fontSize: '0.7rem', color: 'var(--accent)' }}>⏳...</div>
@@ -305,75 +334,80 @@ export default function InventarioPage() {
                                             accept="image/*" 
                                             capture="environment" 
                                             style={{ display: 'none' }} 
-                                            onChange={(e) => handleFileChange(item.id, item.modelo.id, e)} 
+                                            onChange={(e) => handleFileChange(item.id, item.modelo?.id, e)} 
                                         />
                                     </div>
 
                                     {/* Información central */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
-                                            <h4 style={{ color: item.isOrdered ? '#f59e0b' : 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '1rem' }}>{item.modelo?.descripcion || 'Sin nombre'}</h4>
-                                            {item.isOrdered && <span style={{ fontSize: '0.65rem', background: '#f59e0b', color: 'black', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold' }}>PEDIDO</span>}
+                                            <h4 style={{ color: item.isOrdered ? '#10b981' : 'var(--primary)', margin: 0, whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '1rem' }}>{item.modelo?.descripcion || 'Sin nombre'}</h4>
+                                            {item.isOrdered && <span style={{ fontSize: '0.65rem', background: '#10b981', color: 'black', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold' }}>PEDIDO</span>}
                                         </div>
                                         <p style={{ fontSize: '0.8rem', opacity: 0.7, margin: 0 }}>{item.modelo?.marca || 'S/M'} • {item.color}</p>
                                         <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
-                                            {Object.entries(item.talles).sort((a, b) => a[0] - b[0]).map(([t, q]) => (
+                                            {Object.entries(item.talles || {}).sort((a, b) => a[0] - b[0]).map(([t, q]) => (
                                                 <span key={t} style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>T{t}: <b>{q}</b></span>
                                             ))}
                                         </div>
                                     </div>
 
-                                    {/* Acciones Rápidas */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end', minWidth: '80px' }}>
+                                    {/* Estadísticas Rápidas */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end', minWidth: '85px' }}>
                                         <div style={{ textAlign: 'right' }}>
-                                            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)' }}>{item.count}</span>
-                                            <span style={{ fontSize: '0.7rem', opacity: 0.5, marginLeft: '4px' }}>u.</span>
+                                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary)', lineHeight: 1 }}>{item.count} <span style={{ fontSize: '0.7rem', opacity: 0.5 }}>u.</span></div>
+                                            <div style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '2px' }}>Ventas 30d: <b>{item.ventas_30_dias}</b></div>
                                         </div>
-                                        <button
-                                            className="btn-secondary"
-                                            onClick={() => handleTogglePedido(item.id, item.pedido_pendiente)}
-                                            style={{
-                                                padding: '6px 10px',
-                                                fontSize: '0.7rem',
-                                                background: item.isOrdered ? '#ef4444' : 'rgba(255,255,255,0.05)',
-                                                borderColor: item.isOrdered ? '#ef4444' : 'rgba(255,255,255,0.1)',
-                                                color: item.isOrdered ? 'white' : 'inherit',
-                                                fontWeight: 'bold',
-                                                borderRadius: '8px'
-                                            }}
-                                        >
-                                            {item.isOrdered ? '✕ Quitar' : '🛒 Pedir'}
-                                        </button>
+                                        
+                                        {/* Botón de Pedido SOLO en filtros específicos */}
+                                        {(filter === 'LOW_STOCK' || filter === 'PEDIDOS') && (
+                                            <button
+                                                className="btn-secondary"
+                                                onClick={() => handleTogglePedido(item.id, item.pedido_pendiente)}
+                                                style={{
+                                                    padding: '6px 10px',
+                                                    fontSize: '0.7rem',
+                                                    background: item.isOrdered ? '#ef4444' : 'rgba(16, 185, 129, 0.1)',
+                                                    borderColor: item.isOrdered ? '#ef4444' : '#10b981',
+                                                    color: item.isOrdered ? 'white' : '#10b981',
+                                                    fontWeight: 'bold',
+                                                    borderRadius: '8px'
+                                                }}
+                                            >
+                                                {item.isOrdered ? '✕ Quitar' : '🛒 Pedir'}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
-                                {isAdmin && (
+                                {/* Acciones de Nube SOLO en filtro de Nube */}
+                                {isAdmin && filter === 'UNSYNCED' && (
                                     <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px', display: 'flex', gap: '10px' }}>
                                         {!item.isSynced ? (
                                             <button
                                                 className="btn-secondary"
                                                 style={{ flex: 1, fontSize: '0.75rem', padding: '10px', borderRadius: '10px' }}
-                                                onClick={() => handleSync(item.modelo.id)}
-                                                disabled={syncing === item.modelo.id}
+                                                onClick={() => handleSync(item.modelo?.id)}
+                                                disabled={syncing === item.modelo?.id}
                                             >
-                                                {syncing === item.modelo.id ? '⏳ Creando...' : '☁️ Publicar en Tiendanube'}
+                                                {syncing === item.modelo?.id ? '⏳ Creando...' : '☁️ Publicar en Tiendanube'}
                                             </button>
                                         ) : (
                                             <>
                                                 <button
                                                     className="btn-secondary"
                                                     style={{ flex: 1, fontSize: '0.75rem', padding: '10px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.05)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.2)' }}
-                                                    onClick={() => handleSync(item.modelo.id)}
-                                                    disabled={syncing === item.modelo.id}
+                                                    onClick={() => handleSync(item.modelo?.id)}
+                                                    disabled={syncing === item.modelo?.id}
                                                 >
-                                                    {syncing === item.modelo.id ? '⏳' : '🔄 Actualizar Nube'}
+                                                    {syncing === item.modelo?.id ? '⏳' : '🔄 Actualizar Nube'}
                                                 </button>
                                                 
-                                                {!tnImageIds.has(String(item.modelo.tiendanube_id)) ? (
+                                                {!item.hasPhotoInNube ? (
                                                     <button
                                                         className="btn-secondary"
                                                         style={{ flex: 1, fontSize: '0.75rem', padding: '10px', borderRadius: '10px', borderColor: '#3b82f6', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}
-                                                        onClick={() => handleSyncImage(item.modelo.id, item.imagen_url, item.id)}
+                                                        onClick={() => handleSyncImage(item.modelo?.id, item.imagen_url, item.id)}
                                                         disabled={syncingImage === item.id || !item.imagen_url}
                                                     >
                                                         {syncingImage === item.id ? '⏳' : '📤 Subir Foto'}
