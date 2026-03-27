@@ -798,7 +798,7 @@ export async function getDailySummary(onlyUserId = null) {
     const { data: unitsSold, error: uError } = await supabase
         .from('unidades')
         .select(`
-            id, fecha_venta, talle_especifico,
+            id, fecha_venta, talle_especifico, codigo_qr,
             ventas (id, total, medio_pago, user_id, monto_efectivo, monto_neto, profiles (nombre)),
             variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
@@ -875,6 +875,7 @@ export async function getDailySummary(onlyUserId = null) {
         return {
             id: unit.id,
             fecha: unit.fecha_venta,
+            codigo_qr: unit.codigo_qr,
             codigo: unit.variantes?.modelos?.codigo_proveedor,
             modelo: unit.variantes?.modelos?.descripcion,
             color: unit.variantes?.color,

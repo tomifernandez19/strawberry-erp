@@ -361,7 +361,12 @@ export default function HomePage() {
                                     <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.modelo}</span>
-                                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--secondary)', borderRadius: '4px', opacity: 0.8 }}>{item.talle}</span>
+                                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'var(--secondary)', borderRadius: '4px', opacity: 0.8 }}>T{item.talle}</span>
+                                            {item.codigo_qr && (
+                                                <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', color: 'var(--accent)', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                                                    QR: {item.codigo_qr}
+                                                </span>
+                                            )}
                                             {isAdmin && (
                                                 <span style={{ fontSize: '0.6rem', padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', opacity: 0.6 }}>
                                                     👤 {item.vendedor_nombre}
