@@ -402,7 +402,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             email_cliente: customerData.email?.toUpperCase() || null,
             // New Finance fields
             monto_neto: monto_neto || null,
-            fecha_acreditacion: fechaAcreditacion.toISOString(),
+            fecha_acreditacion: getArgentinaIso(fechaAcreditacion),
             cuenta_destino: targetAccount,
             tipo: isSena ? 'SENA' : 'VENTA_LOCAL'
         }])
@@ -417,7 +417,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
         .update({
             estado: isSena ? 'RESERVADO_ONLINE' : 'VENDIDO',
             venta_id: venta.id,
-            fecha_venta: new Date().toISOString()
+            fecha_venta: getArgentinaIso()
         })
         .in('id', units.map(u => u.id))
 
@@ -774,15 +774,36 @@ export async function getRecentPersonas() {
     return [...new Set(names)];
 }
 
+function getArgentinaIso(date = new Date()) {
+    // Retorna un string ISO con el offset de Argentina (-03:00)
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(date);
+    const timeFmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+    }).format(date);
+    return `${fmt}T${timeFmt}-03:00`;
+}
+
+function getTodayArgentinaStart() {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date());
+    return `${fmt}T00:00:00-03:00`;
+}
+
 export async function getCashMovements() {
     const supabase = createClient();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayIso = getTodayArgentinaStart();
 
     const { data, error } = await supabase
         .from('movimientos_caja')
         .select('*')
-        .gte('created_at', today.toISOString())
+        .gte('created_at', todayIso)
         .order('created_at', { ascending: false });
 
     if (error) return [];
@@ -791,8 +812,7 @@ export async function getCashMovements() {
 
 export async function getDailySummary(onlyUserId = null) {
     const supabase = createClient();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayIso = getTodayArgentinaStart();
 
     // Fetch units sold today (VENDIDO or VENDIDO_ONLINE)
     const { data: unitsSold, error: uError } = await supabase
@@ -803,14 +823,14 @@ export async function getDailySummary(onlyUserId = null) {
             variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
-        .gte('fecha_venta', today.toISOString())
+        .gte('fecha_venta', todayIso)
         .order('fecha_venta', { ascending: false });
 
     // Fetch manual movements today
     const { data: movements, error: mError } = await supabase
         .from('movimientos_caja')
         .select('monto')
-        .gte('created_at', today.toISOString());
+        .gte('created_at', todayIso);
 
     if (uError || mError) {
         console.error("Error fetching summary:", uError || mError);
@@ -967,12 +987,28 @@ export async function getRecentUnifiedCaja(accountId = null) {
  */
 export async function getFinanceSummary() {
     const supabase = createClient();
+    
+    // Boundary check for current month in Argentina
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const monthStart = new Date(currentYear, currentMonth, 1).toISOString();
-    const nextMonth = new Date(currentYear, currentMonth + 1, 1).toISOString();
-    const nowStr = now.toISOString();
+    const argParts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(now).split('-');
+    
+    const year = Number(argParts[0]);
+    const month = Number(argParts[1]); // 1-12
+    
+    const monthStart = `${year}-${String(month).padStart(2, '0')}-01T00:00:00-03:00`;
+    
+    // Calc next month for LTE/GT boundaries
+    let nextMonthYear = year;
+    let nextMonthVal = month + 1;
+    if (nextMonthVal > 12) {
+        nextMonthVal = 1;
+        nextMonthYear++;
+    }
+    const nextMonth = `${nextMonthYear}-${String(nextMonthVal).padStart(2, '0')}-01T00:00:00-03:00`;
+    const nowStr = getArgentinaIso(now);
 
     // Optimize by fetching in parallel and selecting only needed fields
     const [salesRes, movementsRes, purchasesRes, configRes, soldUnitsRes] = await Promise.all([
