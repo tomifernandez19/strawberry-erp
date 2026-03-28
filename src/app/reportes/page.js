@@ -91,12 +91,12 @@ export default function ReportesPage() {
 
     if (loading && !data) return <Loader />
 
-    const { accounts, billingByPerson, dividendTotals } = data;
+    const { accounts = {}, billingByPerson = {}, dividendTotals = {} } = data || {};
 
     // View de Detalle de Ventas
     if (viewDetail) {
         const periodLabel = viewDetail.period === 'today' ? 'Hoy' : viewDetail.period === 'week' ? 'Semana' : viewDetail.period === 'month' ? 'Mes' : 'Personalizado';
-        const periodData = viewDetail.period === 'custom' ? customStats : stats[viewDetail.period];
+        const periodData = viewDetail.period === 'custom' ? customStats : (stats?.[viewDetail.period] || {});
         const items = periodData?.items || [];
 
         return (
@@ -117,8 +117,8 @@ export default function ReportesPage() {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                     <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{item.codigo}</span>
                                     <div style={{ textAlign: 'right' }}>
-                                        <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: '0' }}>$ {item.neto.toLocaleString()} (Neto)</p>
-                                        <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: '0' }}>Lista: $ {item.precio?.toLocaleString()}</p>
+                                        <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: '0' }}>$ {(Number(item.neto) || 0).toLocaleString()} (Neto)</p>
+                                        <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: '0' }}>Lista: $ {(Number(item.precio) || 0).toLocaleString()}</p>
                                     </div>
                                 </div>
                                 <p style={{ opacity: 0.9 }}>{item.modelo} - {item.color}</p>
@@ -173,23 +173,23 @@ export default function ReportesPage() {
                             <div className="grid mt-md" style={{ gap: '10px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Caja Local (Efectivo)</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {accounts.CAJA_LOCAL.toLocaleString()}</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.CAJA_LOCAL) || 0).toLocaleString()}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Lucas (Transferencia)</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {accounts.LUCAS.toLocaleString()}</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.LUCAS) || 0).toLocaleString()}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Tomi (Transferencia)</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {accounts.TOMI.toLocaleString()}</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.TOMI) || 0).toLocaleString()}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Sofi (Mercado Pago)</span>
-                                    <span style={{ fontWeight: 'bold' }}>$ {accounts.SOFI_MP.toLocaleString()}</span>
+                                    <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.SOFI_MP) || 0).toLocaleString()}</span>
                                 </div>
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px', marginTop: '5px', display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
                                     <span style={{ fontSize: '0.8rem' }}>Sofi • MARZO (Por Cobrar)</span>
-                                    <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {accounts.SOFI_PENDING.toLocaleString()}</span>
+                                    <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {(Number(accounts.SOFI_PENDING) || 0).toLocaleString()}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.5 }}>
                                     <span style={{ fontSize: '0.8rem' }}>Sofi • ABRIL+ (Pendiente)</span>
@@ -198,7 +198,7 @@ export default function ReportesPage() {
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '5px', display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ fontWeight: 'bold' }}>TOTAL LIQUIDEZ MARZO</span>
                                     <span style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}>
-                                        $ {(accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS + accounts.SOFI_PENDING).toLocaleString()}
+                                        $ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)).toLocaleString()}
                                     </span>
                                 </div>
                             </div>
@@ -209,11 +209,11 @@ export default function ReportesPage() {
                             <div className="grid mt-md" style={{ gap: '10px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Resto Carolina</span>
-                                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {Math.abs(accounts.CAROLINA).toLocaleString()}</span>
+                                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {(Math.abs(Number(accounts.CAROLINA) || 0)).toLocaleString()}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Proveedores Pendientes</span>
-                                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {Math.abs(accounts.PROVEEDOR).toLocaleString()}</span>
+                                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {(Math.abs(Number(accounts.PROVEEDOR) || 0)).toLocaleString()}</span>
                                 </div>
                             </div>
                         </div>
@@ -233,20 +233,20 @@ export default function ReportesPage() {
                         <div className="grid" style={{ gap: '15px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                                 <span style={{ opacity: 0.8 }} title="Efectivo/Transferencias del mes y tarjetas acreditadas este mes">(+) Ventas Realizadas (Ticket Neto)</span>
-                                <span style={{ color: 'var(--accent)' }}>$ {dividendTotals.sales.toLocaleString()}</span>
+                                <span style={{ color: 'var(--accent)' }}>$ {(Number(dividendTotals.sales) || 0).toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                                 <span style={{ opacity: 0.8 }} title="Costo de stock vendido + Pagos ya realizados a proveedores">🏦 (-) Reposición Stock (CMV Real + Pagos)</span>
-                                <span style={{ color: '#fbbf24' }}>- $ {dividendTotals.supplierReserve.toLocaleString()}</span>
+                                <span style={{ color: '#fbbf24' }}>- $ {(Number(dividendTotals.supplierReserve) || 0).toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                                 <span style={{ opacity: 0.8 }} title="Gastos fijos presupuestados y egresos varios (no proveedores)">(-) Gastos Op. (Egresos/Fijos)</span>
-                                <span style={{ color: '#ef4444' }}>- $ {(dividendTotals.expenses + dividendTotals.pendingProvisions).toLocaleString()}</span>
+                                <span style={{ color: '#ef4444' }}>- $ {(Number(dividendTotals.expenses || 0) + Number(dividendTotals.pendingProvisions || 0)).toLocaleString()}</span>
                             </div>
-                            {dividendTotals.contributions > 0 && (
+                            {(Number(dividendTotals.contributions) || 0) > 0 && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                                     <span style={{ opacity: 0.8 }} title="Ingresos externos como aportes de capital o vueltos">(+) Aportes de Capital / Vueltos</span>
-                                    <span style={{ color: 'var(--accent)' }}>+ $ {dividendTotals.contributions.toLocaleString()}</span>
+                                    <span style={{ color: 'var(--accent)' }}>+ $ {(Number(dividendTotals.contributions) || 0).toLocaleString()}</span>
                                 </div>
                             )}
 
@@ -256,14 +256,14 @@ export default function ReportesPage() {
                                     <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Utilidad tras asegurar stock y gastos</p>
                                 </div>
                                 <h3 style={{ margin: 0, color: 'var(--accent)' }}>
-                                    $ {(dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions).toLocaleString()}
+                                    $ {(Number(dividendTotals.sales || 0) - Number(dividendTotals.supplierReserve || 0) - Number(dividendTotals.expenses || 0) - Number(dividendTotals.pendingProvisions || 0) + Number(dividendTotals.contributions || 0)).toLocaleString()}
                                 </h3>
                             </div>
 
                             <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
                                 <p style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '5px', letterSpacing: '1px' }}>SUELDO POR SOCIO (GANANCIA TEÓRICA)</p>
                                 <h2 style={{ margin: 0, color: '#ffbf00' }}>
-                                    $ {((dividendTotals.sales - dividendTotals.supplierReserve - dividendTotals.expenses - dividendTotals.pendingProvisions + dividendTotals.contributions) / 3).toLocaleString()}
+                                    $ {(Math.floor((Number(dividendTotals.sales || 0) - Number(dividendTotals.supplierReserve || 0) - Number(dividendTotals.expenses || 0) - Number(dividendTotals.pendingProvisions || 0) + Number(dividendTotals.contributions || 0)) / 3)).toLocaleString()}
                                 </h2>
                                 <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '8px' }}>* Basado en márgenes sobre lo vendido. No considera cuánto efectivo hay en el banco.</p>
                             </div>
@@ -276,17 +276,17 @@ export default function ReportesPage() {
                                 <div className="mt-md" style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem' }}>
                                         <span>Total en Cuentas + Tarjetas x Cobrar</span>
-                                        <span style={{ fontWeight: 'bold' }}>$ {(accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS + accounts.SOFI_PENDING).toLocaleString()}</span>
+                                        <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)).toLocaleString()}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '0.9rem', color: '#ef4444' }}>
                                         <span>Gastos Fijos Pendientes (Alquiler, etc.)</span>
-                                        <span style={{ fontWeight: 'bold' }}>- $ {dividendTotals.pendingProvisions.toLocaleString()}</span>
+                                        <span style={{ fontWeight: 'bold' }}>- $ {(Number(dividendTotals.pendingProvisions) || 0).toLocaleString()}</span>
                                     </div>
                                     
                                     <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.2)', paddingTop: '15px', textAlign: 'center' }}>
                                         <p style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '5px', textTransform: 'uppercase', color: '#3b82f6' }}>Sueldo Líquido Máximo Sugerido</p>
                                         <h2 style={{ margin: 0, color: '#3b82f6' }}>
-                                            $ {Math.max(0, Math.floor(((accounts.CAJA_LOCAL + accounts.SOFI_MP + accounts.TOMI + accounts.LUCAS + accounts.SOFI_PENDING) - dividendTotals.pendingProvisions) / 3)).toLocaleString()}
+                                            $ {Math.max(0, Math.floor(((Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)) - (Number(dividendTotals.pendingProvisions) || 0)) / 3)).toLocaleString()}
                                         </h2>
                                         <p style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '10px', lineHeight: '1.4' }}>
                                             💡 <b>Consejo:</b> Si este número es menor al de Ganancia Teórica, significa que parte de la ganancia está "atrapada" en mercadería o deudas viejas. No la retiren para no descapitalizar el negocio.

@@ -516,15 +516,16 @@ export async function getExtendedStats() {
     });
 
     const now = new Date();
+    const todayStart = getTodayArgentinaStart();
+    const startOfDay = new Date(todayStart);
 
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(todayStart);
+    startOfWeek.setDate(startOfWeek.getDate() - 7);
 
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - 7);
+    const startOfMonth = new Date(todayStart);
+    startOfMonth.setDate(startOfMonth.getDate() - 30);
 
-    const startOfMonth = new Date(now);
-    startOfMonth.setDate(now.getDate() - 30);
+    const startOfMonthIso = startOfMonth.toISOString();
 
     // Join with unidades, ventas, variantes and modelos to get all details
     const { data: unitsSold, error } = await supabase
@@ -535,7 +536,7 @@ export async function getExtendedStats() {
             variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
-        .gte('fecha_venta', startOfMonth.toISOString())
+        .gte('fecha_venta', startOfMonthIso)
         .order('fecha_venta', { ascending: false });
 
     if (error) {
@@ -997,6 +998,8 @@ export async function getFinanceSummary() {
     
     const year = Number(argParts[0]);
     const month = Number(argParts[1]); // 1-12
+    const currentMonth = month - 1; // 0-11 for Date.getMonth() comparison
+    const currentYear = year;
     
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01T00:00:00-03:00`;
     
