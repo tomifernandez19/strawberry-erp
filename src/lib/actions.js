@@ -2211,6 +2211,55 @@ export async function getAvailableStockDetailed() {
 }
 
 /**
+ * Fetches the full product catalog (even with 0 stock) to manage Tiendanube synchronization.
+ */
+export async function getSyncReport() {
+    const supabase = createClient();
+    const { data: models, error } = await supabase
+        .from('modelos')
+        .select(`
+            id, descripcion, marca, tiendanube_id,
+            variantes (
+                id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente,
+                unidades (id, estado, talle_especifico)
+            )
+        `)
+        .order('descripcion');
+
+    if (error) {
+        console.error("[getSyncReport] Error:", error);
+        return [];
+    }
+
+    // Transform into the structure InventarioPage expects
+    const results = [];
+    models.forEach(m => {
+        m.variantes?.forEach(v => {
+            const availableUnits = (v.unidades || []).filter(u => u.estado === 'DISPONIBLE');
+            const talles = availableUnits.reduce((acc, u) => {
+                acc[u.talle_especifico] = (acc[u.talle_especifico] || 0) + 1;
+                return acc;
+            }, {});
+
+            results.push({
+                id: v.id,
+                modelo: { id: m.id, descripcion: m.descripcion, marca: m.marca, tiendanube_id: m.tiendanube_id },
+                color: v.color,
+                imagen_url: v.imagen_url,
+                precio_efectivo: v.precio_efectivo,
+                precio_lista: v.precio_lista,
+                count: availableUnits.length,
+                pedido_pendiente: v.pedido_pendiente,
+                talles,
+                ventas_30_dias: 0 // We don't strictly need velocity for sync management
+            });
+        });
+    });
+
+    return results;
+}
+
+/**
  * Fetches basic unit info for location assignment.
  */
 export async function getUnitByQR(qrCode) {

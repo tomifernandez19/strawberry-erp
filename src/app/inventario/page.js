@@ -20,8 +20,9 @@ export default function InventarioPage() {
     const [syncingImage, setSyncingImage] = useState(null)
     const [uploading, setUploading] = useState(null)
     const [search, setSearch] = useState('')
-    const [filter, setFilter] = useState('ALL') // ALL, UNSYNCED, NO_LOCATION, LOW_STOCK, PEDIDOS
+    const [filter, setFilter] = useState('ALL') // ALL, UNSYNCED, NO_LOCATION, LOW_STOCK, PEDIDOS, TIENDANUBE
     const [sortBy, setSortBy] = useState('ABC') // ABC, STOCK, SALES
+    const [isSyncingAll, setIsSyncingAll] = useState(false)
 
     useEffect(() => {
         fetchStock()
@@ -33,72 +34,98 @@ export default function InventarioPage() {
         setTnImageIds(new Set(statuses))
     }
 
-    async function fetchStock() {
+    async function fetchStock(isFullSyncView = false) {
         setLoading(true)
         try {
-            const response = await getAvailableStockDetailed()
-            if (!response) {
-                setLoading(false)
-                return
+            if (isFullSyncView) {
+                const results = await getSyncReport()
+                setStock(results)
+            } else {
+                const response = await getAvailableStockDetailed()
+                if (!response) {
+                    setLoading(false)
+                    return
+                }
+                const dataArr = response.stock || (Array.isArray(response) ? response : [])
+                const salesLast30 = response.salesVelocity || {}
+                const soldOutMetas = response.soldOutMetas || {}
+
+                const grouped = dataArr.reduce((acc, unit) => {
+                    if (!unit || !unit.variantes?.id) return acc;
+                    const key = unit.variantes.id;
+
+                    if (!acc[key]) {
+                        acc[key] = {
+                            id: key,
+                            modelo: unit.variantes.modelos || { descripcion: "Sin nombre", marca: "S/M" },
+                            color: unit.variantes.color || 'S/D',
+                            imagen_url: unit.variantes.imagen_url,
+                            precio_efectivo: unit.variantes.precio_efectivo,
+                            precio_lista: unit.variantes.precio_lista,
+                            count: 0,
+                            ventas_30_dias: salesLast30[key] || 0,
+                            pedido_pendiente: unit.variantes.pedido_pendiente,
+                            talles: {},
+                            ubicaciones: new Set()
+                        }
+                    }
+                    acc[key].count++;
+                    const talle = unit.talle_especifico || 'U';
+                    acc[key].talles[talle] = (acc[key].talles[talle] || 0) + 1;
+                    if (unit.ubicacion) acc[key].ubicaciones.add(unit.ubicacion);
+                    return acc;
+                }, {});
+
+                // Intelligent Step: Add sold-out items (0 units) that have velocity
+                Object.keys(salesLast30).forEach(vId => {
+                    if (!grouped[vId] && soldOutMetas[vId]) {
+                        const vMeta = soldOutMetas[vId];
+                        grouped[vId] = {
+                            id: vId,
+                            modelo: vMeta.modelos || { descripcion: "Sin nombre", marca: "S/M" },
+                            color: vMeta.color || 'S/D',
+                            imagen_url: vMeta.imagen_url,
+                            precio_efectivo: vMeta.precio_efectivo,
+                            precio_lista: vMeta.precio_lista,
+                            count: 0,
+                            ventas_30_dias: salesLast30[vId] || 0,
+                            pedido_pendiente: vMeta.pedido_pendiente,
+                            talles: {},
+                            ubicaciones: new Set()
+                        }
+                    }
+                })
+
+                setStock(Object.values(grouped).map(item => ({
+                    ...item,
+                    ubicaciones: Array.from(item.ubicaciones || []).sort()
+                })))
             }
-            const dataArr = response.stock || (Array.isArray(response) ? response : [])
-            const salesLast30 = response.salesVelocity || {}
-            const soldOutMetas = response.soldOutMetas || {}
-
-            const grouped = dataArr.reduce((acc, unit) => {
-                if (!unit || !unit.variantes?.id) return acc;
-                const key = unit.variantes.id;
-
-                if (!acc[key]) {
-                    acc[key] = {
-                        id: key,
-                        modelo: unit.variantes.modelos || { descripcion: "Sin nombre", marca: "S/M" },
-                        color: unit.variantes.color || 'S/D',
-                        imagen_url: unit.variantes.imagen_url,
-                        precio_efectivo: unit.variantes.precio_efectivo,
-                        precio_lista: unit.variantes.precio_lista,
-                        count: 0,
-                        ventas_30_dias: salesLast30[key] || 0,
-                        pedido_pendiente: unit.variantes.pedido_pendiente,
-                        talles: {},
-                        ubicaciones: new Set()
-                    }
-                }
-                acc[key].count++;
-                const talle = unit.talle_especifico || 'U';
-                acc[key].talles[talle] = (acc[key].talles[talle] || 0) + 1;
-                if (unit.ubicacion) acc[key].ubicaciones.add(unit.ubicacion);
-                return acc;
-            }, {});
-
-            // Intelligent Step: Add sold-out items (0 units) that have velocity
-            Object.keys(salesLast30).forEach(vId => {
-                if (!grouped[vId] && soldOutMetas[vId]) {
-                    const vMeta = soldOutMetas[vId];
-                    grouped[vId] = {
-                        id: vId,
-                        modelo: vMeta.modelos || { descripcion: "Sin nombre", marca: "S/M" },
-                        color: vMeta.color || 'S/D',
-                        imagen_url: vMeta.imagen_url,
-                        precio_efectivo: vMeta.precio_efectivo,
-                        precio_lista: vMeta.precio_lista,
-                        count: 0,
-                        ventas_30_dias: salesLast30[vId] || 0,
-                        pedido_pendiente: vMeta.pedido_pendiente,
-                        talles: {},
-                        ubicaciones: new Set()
-                    }
-                }
-            })
-
-            setStock(Object.values(grouped).map(item => ({
-                ...item,
-                ubicaciones: Array.from(item.ubicaciones || []).sort()
-            })))
         } catch (err) {
             console.error("Error fetching stock:", err);
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleSyncAll = async () => {
+        const uniqueModelIds = [...new Set(filteredAndSortedStock.map(item => item.modelo?.id))].filter(Boolean);
+        if (!confirm(`Se actualizarán ${uniqueModelIds.length} modelos en Tiendanube. Esto procesará todos los talles (35-40). ¿Continuar?`)) return;
+        
+        setIsSyncingAll(true);
+        let count = 0;
+        try {
+            for (const mId of uniqueModelIds) {
+                await syncProductToTiendanube(mId);
+                count++;
+                // Sync delay
+                await new Promise(r => setTimeout(r, 250));
+            }
+            alert(`✅ Finalizado: ${count} productos sincronizados.`);
+        } catch (e) {
+            alert(`⚠️ Error en sincronización masiva: ${e.message}`);
+        } finally {
+            setIsSyncingAll(false);
         }
     }
 
@@ -228,6 +255,7 @@ export default function InventarioPage() {
 
             // Button Filter
             if (filter === 'UNSYNCED') return !item.isSynced || !item.hasPhotoInNube;
+            if (filter === 'TIENDANUBE') return true;
             if (filter === 'NO_LOCATION') return item.hasNoLocation;
             if (filter === 'LOW_STOCK') return item.isLowStock && !item.isOrdered;
             if (filter === 'PEDIDOS') return item.isOrdered;
@@ -246,6 +274,16 @@ export default function InventarioPage() {
             <header className="text-center">
                 <h1>Inventario</h1>
                 <p style={{ opacity: 0.7 }}>Gestión inteligente de productos</p>
+                {filter === 'TIENDANUBE' && (
+                    <button 
+                        className="btn-primary mt-md" 
+                        onClick={handleSyncAll}
+                        disabled={isSyncingAll}
+                        style={{ background: '#a855f7', borderColor: '#a855f7' }}
+                    >
+                        {isSyncingAll ? '⏳ Sincronizando Todo...' : '🔄 Sincronizar Todo con Nube'}
+                    </button>
+                )}
             </header>
 
             <div className="card mt-md" style={{ padding: 'var(--spacing-md)', overflow: 'hidden' }}>
@@ -274,16 +312,23 @@ export default function InventarioPage() {
                     <button
                         className={`btn-secondary ${filter === 'ALL' ? 'active-filter' : ''}`}
                         style={{ padding: '8px 15px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'ALL' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', borderColor: filter === 'ALL' ? 'var(--accent)' : 'rgba(255,255,255,0.1)', color: filter === 'ALL' ? 'white' : 'inherit' }}
-                        onClick={() => setFilter('ALL')}
+                        onClick={() => { setFilter('ALL'); fetchStock(false); }}
                     >
                         Ver Todos
                     </button>
                     <button
                         className={`btn-secondary ${filter === 'UNSYNCED' ? 'active-filter' : ''}`}
                         style={{ padding: '8px 15px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'UNSYNCED' ? '#3b82f6' : 'rgba(255,255,255,0.05)', borderColor: filter === 'UNSYNCED' ? '#3b82f6' : 'rgba(255,255,255,0.1)', color: filter === 'UNSYNCED' ? 'white' : 'inherit' }}
-                        onClick={() => setFilter('UNSYNCED')}
+                        onClick={() => { setFilter('UNSYNCED'); fetchStock(false); }}
                     >
-                        ☁️ Sincronizar Nube
+                        Por Sincronizar
+                    </button>
+                    <button
+                        className={`btn-secondary ${filter === 'TIENDANUBE' ? 'active-filter' : ''}`}
+                        style={{ padding: '8px 15px', fontSize: '0.75rem', whiteSpace: 'nowrap', background: filter === 'TIENDANUBE' ? '#a855f7' : 'rgba(255,255,255,0.05)', borderColor: filter === 'TIENDANUBE' ? '#a855f7' : 'rgba(255,255,255,0.1)', color: filter === 'TIENDANUBE' ? 'white' : 'inherit' }}
+                        onClick={() => { setFilter('TIENDANUBE'); fetchStock(true); }}
+                    >
+                        🛰️ Toda la Web
                     </button>
                     <button
                         className={`btn-secondary ${filter === 'LOW_STOCK' ? 'active-filter' : ''}`}
@@ -402,8 +447,8 @@ export default function InventarioPage() {
                                     </div>
                                 </div>
 
-                                {/* Acciones de Nube SOLO en filtro de Nube */}
-                                {isAdmin && filter === 'UNSYNCED' && (
+                                {/* Acciones de Nube SOLO en filtro de Nube y Toda la Web */}
+                                {isAdmin && (filter === 'UNSYNCED' || filter === 'TIENDANUBE') && (
                                     <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px', display: 'flex', gap: '10px' }}>
                                         {!item.isSynced ? (
                                             <button
