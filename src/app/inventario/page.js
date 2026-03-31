@@ -212,6 +212,27 @@ export default function InventarioPage() {
         }
     }
 
+    const [newLocation, setNewLocation] = useState('')
+    const [assigningLocation, setAssigningLocation] = useState(null)
+    const handleAssignLocationToVariant = async (variantId) => {
+        if (!newLocation) return;
+        setAssigningLocation(variantId);
+        try {
+            const res = await assignLocationToVariant(variantId, newLocation);
+            if (res.success) {
+                alert(`✅ ${res.details}`);
+                setNewLocation('');
+                fetchStock(filter === 'TIENDANUBE');
+            } else {
+                alert(`❌ ${res.message}`);
+            }
+        } catch (e) {
+            alert(`❌ Error: ${e.message}`);
+        } finally {
+            setAssigningLocation(null);
+        }
+    }
+
     const handleSyncImage = async (modeloId, imageUrl, variantId) => {
         setSyncingImage(variantId)
         try {
@@ -446,6 +467,32 @@ export default function InventarioPage() {
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Asignar ubicación rápida SOLO en filtro Sin Ubicación */}
+                                {filter === 'NO_LOCATION' && (
+                                    <div style={{ marginTop: '15px', display: 'flex', gap: '8px', background: 'rgba(239, 68, 68, 0.05)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Zona/Estante..." 
+                                            className="input-field" 
+                                            style={{ marginBottom: 0, fontSize: '0.8rem', flex: 1, padding: '8px 12px' }}
+                                            onChange={(e) => setNewLocation(e.target.value.toUpperCase())}
+                                        />
+                                        <button 
+                                           className="btn-primary" 
+                                           style={{ padding: '8px 15px', fontSize: '0.75rem', background: '#eab308', borderColor: '#eab308', color: 'black' }}
+                                           onClick={(e) => {
+                                             const val = e.target.previousSibling.value;
+                                             if (!val) return alert("Pone una zona");
+                                             setNewLocation(val);
+                                             handleAssignLocationToVariant(item.id);
+                                           }}
+                                           disabled={assigningLocation === item.id}
+                                        >
+                                           {assigningLocation === item.id ? '...' : 'Asignar'}
+                                        </button>
+                                    </div>
+                                )}
 
                                 {/* Acciones de Nube SOLO en filtro de Nube y Toda la Web */}
                                 {isAdmin && (filter === 'UNSYNCED' || filter === 'TIENDANUBE') && (

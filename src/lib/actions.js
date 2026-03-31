@@ -2316,6 +2316,47 @@ export async function assignLocation(qrCode, location) {
 }
 
 /**
+ * Assigns a location to ALL available units of a specific variant that don't have one yet.
+ */
+export async function assignLocationToVariant(variantId, location) {
+    const supabase = createClient();
+    try {
+        const cleanedLocation = location.toUpperCase().trim();
+        const { data, error } = await supabase
+            .from('unidades')
+            .update({ ubicacion: cleanedLocation })
+            .eq('variante_id', variantId)
+            .is('ubicacion', null)
+            .eq('estado', 'DISPONIBLE')
+            .select('id');
+
+        if (error) throw error;
+        return { success: true, count: data?.length || 0, details: `${data?.length} unidades asignadas a ${cleanedLocation}` };
+    } catch (e) {
+        return { success: false, message: e.message };
+    }
+}
+
+/**
+ * Fetches all available units that are missing a warehouse location.
+ */
+export async function getUnitsMissingLocation() {
+    const supabase = createClient();
+    const { data, error } = await supabase
+        .from('unidades')
+        .select('*, variantes(*, modelos(*))')
+        .is('ubicacion', null)
+        .eq('estado', 'DISPONIBLE')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error("[getUnitsMissingLocation] Error:", error);
+        return [];
+    }
+    return data || [];
+}
+
+/**
  * Fetches unit details for a previously sold item to process an exchange.
  */
 export async function getUnitForExchange(qrCode) {
