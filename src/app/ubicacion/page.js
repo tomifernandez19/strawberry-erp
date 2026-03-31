@@ -80,14 +80,14 @@ export default function UbicacionPage() {
     }
 
     return (
-        <div className="grid mt-lg" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 320px)', gap: '40px', alignItems: 'start' }}>
-            <div>
+        <div className="responsive-container mt-lg">
+            <div className="main-content">
                 <header className="text-center">
                     <Link href="/" className="btn-secondary" style={{ display: 'inline-flex', marginBottom: '15px', padding: '8px 15px' }}>
                         ← Volver
                     </Link>
-                    <h1>Organizar Depósito</h1>
-                    <p style={{ opacity: 0.7 }}>Asignar zona de guardado a cada par</p>
+                    <h1>Depósito</h1>
+                    <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>Organizar stock</p>
                 </header>
 
                 <div className="card" style={{ marginBottom: '20px' }}>
@@ -101,7 +101,7 @@ export default function UbicacionPage() {
                             type="text"
                             value={scannedQR}
                             onChange={(e) => setScannedQR(e.target.value.toUpperCase())}
-                            placeholder="Escaneá o escribí (ej: ST-000123)"
+                            placeholder="ST-000000"
                             className="input-field"
                             style={{ marginBottom: 0, textTransform: 'uppercase' }}
                             required
@@ -116,31 +116,30 @@ export default function UbicacionPage() {
                             border: '1px solid rgba(255,255,255,0.05)',
                             animation: 'fadeIn 0.3s ease-out'
                         }}>
-                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>PRODUCTO DETECTADO:</p>
-                            <h4 style={{ margin: '5px 0', color: 'var(--accent)' }}>
+                            <h4 style={{ margin: '0', color: 'var(--accent)' }}>
                                 {unitInfo.variantes.modelos.descripcion} ({unitInfo.variantes.color}) T{unitInfo.talle_especifico}
                             </h4>
 
                             {unitInfo.ubicacion ? (
                                 <p style={{ fontSize: '0.85rem', color: '#fbbf24', fontWeight: 'bold', marginTop: '10px' }}>
-                                    ⚠️ Ubicación actual: <span style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '2px 8px', borderRadius: '4px' }}>{unitInfo.ubicacion}</span>
+                                    ⚠️ Actual: {unitInfo.ubicacion}
                                 </p>
                             ) : (
-                                <p style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '10px' }}>✨ Sin ubicación asignada aún.</p>
+                                <p style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '10px' }}>✨ Sin ubicación</p>
                             )}
                         </div>
                     )}
 
                     <div>
                         <label style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '5px', display: 'block' }}>
-                            {unitInfo?.ubicacion ? 'Nueva Ubicación (Sobrescribir):' : 'Asignar Zona / Estante:'}
+                            Zona / Estante:
                         </label>
                         <input
                             id="zona-input"
                             type="text"
                             value={zona}
                             onChange={(e) => setZona(e.target.value)}
-                            placeholder="Ej: Zona 1, Estante A..."
+                            placeholder="Ej: A-01, Estante 1..."
                             className="input-field"
                             style={{ marginBottom: 0 }}
                             required
@@ -151,9 +150,9 @@ export default function UbicacionPage() {
                         type="submit"
                         className="btn-primary"
                         disabled={loading || !scannedQR || !zona}
-                        style={{ width: '100%', height: '60px' }}
+                        style={{ width: '100%', height: '55px' }}
                     >
-                        {loading ? 'Guardando...' : (unitInfo?.ubicacion ? 'Actualizar Ubicación 🔄' : 'Confirmar Ubicación ✅')}
+                        {loading ? '...' : (unitInfo?.ubicacion ? 'Actualizar ✅' : 'Confirmar ✅')}
                     </button>
                 </form>
 
@@ -164,7 +163,7 @@ export default function UbicacionPage() {
                         marginTop: '15px',
                         animation: 'fadeIn 0.3s ease-out'
                     }}>
-                        <p style={{ fontWeight: 'bold', color: status.success ? 'var(--accent)' : '#ef4444' }}>
+                        <p style={{ fontWeight: 'bold', color: status.success ? 'var(--accent)' : '#ef4444', margin: 0 }}>
                             {status.message}
                         </p>
                         {status.details && <p style={{ fontSize: '0.85rem', marginTop: '5px', opacity: 0.8 }}>{status.details}</p>}
@@ -173,36 +172,29 @@ export default function UbicacionPage() {
             </div>
 
             {/* Panel lateral con Pendientes */}
-            <aside>
+            <aside className="pending-sidebar">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                     <h3 style={{ fontSize: '1.1rem', margin: 0 }}>Pendientes</h3>
-                    <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '10px' }}>{pendingItems.length}</span>
+                    <span style={{ fontSize: '0.75rem', background: 'var(--accent)', color: 'black', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>{pendingItems.length}</span>
                 </div>
                 
-                <div className="card" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '10px' }}>
+                <div className="pending-list-container">
                     {pendingLoading ? (
-                        <p style={{ fontSize: '0.85rem', opacity: 0.5, textAlign: 'center' }}>Cargando lista...</p>
+                        <p style={{ fontSize: '0.85rem', opacity: 0.5, textAlign: 'center', padding: '20px' }}>Cargando...</p>
                     ) : pendingItems.length === 0 ? (
-                        <p style={{ fontSize: '0.85rem', opacity: 0.5, textAlign: 'center' }}>✨ Todo organizado</p>
+                        <p style={{ fontSize: '0.85rem', opacity: 0.5, textAlign: 'center', padding: '20px' }}>✨ Todo organizado</p>
                     ) : (
                         <div className="grid" style={{ gap: '10px' }}>
                             {pendingItems.map(item => (
                                 <div 
                                     key={item.id} 
                                     onClick={() => setScannedQR(item.codigo_qr)}
-                                    style={{ 
-                                        padding: '12px', 
-                                        background: 'rgba(255,255,255,0.03)', 
-                                        borderRadius: '10px', 
-                                        cursor: 'pointer',
-                                        border: scannedQR === item.codigo_qr ? '1px solid var(--accent)' : '1px solid transparent',
-                                        transition: 'all 0.2s'
-                                    }}
+                                    className={`pending-item-card ${scannedQR === item.codigo_qr ? 'active' : ''}`}
                                 >
-                                    <div style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{item.variantes?.modelos?.descripcion}</div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
-                                        <span style={{ fontSize: '0.7rem', opacity: 0.5 }}>{item.variantes?.color} T{item.talle_especifico}</span>
-                                        <span style={{ fontSize: '0.7rem', color: 'var(--accent)' }}>{item.codigo_qr}</span>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{item.variantes?.modelos?.descripcion}</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{item.variantes?.color} T{item.talle_especifico}</span>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 'bold' }}>{item.codigo_qr}</span>
                                     </div>
                                 </div>
                             ))}
@@ -212,13 +204,50 @@ export default function UbicacionPage() {
                 <button 
                     onClick={fetchPending} 
                     className="btn-secondary" 
-                    style={{ width: '100%', marginTop: '10px', fontSize: '0.75rem', padding: '10px' }}
+                    style={{ width: '100%', marginTop: '10px', fontSize: '0.75rem', padding: '12px' }}
                 >
                     🔄 Refrescar Lista
                 </button>
             </aside>
 
             <style jsx>{`
+                .responsive-container {
+                    display: grid;
+                    grid-template-columns: 1fr;
+                    gap: 30px;
+                    align-items: start;
+                }
+                .pending-list-container {
+                    max-height: 400px;
+                    overflow-y: auto;
+                    padding-right: 5px;
+                }
+                .pending-item-card {
+                    padding: 12px;
+                    background: rgba(255,255,255,0.03);
+                    border-radius: 12px;
+                    cursor: pointer;
+                    border: 1px solid transparent;
+                    transition: all 0.2s;
+                }
+                .pending-item-card:hover {
+                    background: rgba(255,255,255,0.06);
+                }
+                .pending-item-card.active {
+                    border-color: var(--accent);
+                    background: rgba(16, 185, 129, 0.05);
+                }
+                
+                @media (min-width: 900px) {
+                    .responsive-container {
+                        grid-template-columns: 1fr 340px;
+                        gap: 50px;
+                    }
+                    .pending-list-container {
+                        max-height: 75vh;
+                    }
+                }
+
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translateY(5px); }
                     to { opacity: 1; transform: translateY(0); }
