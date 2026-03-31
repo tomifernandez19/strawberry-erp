@@ -1763,7 +1763,6 @@ export async function syncProductToTiendanube(modeloId) {
         if (mErr || !modelo) return { success: false, message: "Modelo no encontrado en el ERP" };
 
         const tnVariants = [];
-        const mandatorySizes = ['35', '36', '37', '38', '39', '40'];
 
         modelo.variantes?.forEach(variante => {
             const stockPorTalle = (variante.unidades || []).reduce((acc, u) => {
@@ -1773,8 +1772,19 @@ export async function syncProductToTiendanube(modeloId) {
                 return acc;
             }, {});
 
-            // Aseguramos que siempre estén los talles 35-40, más cualquier otro que tenga stock
-            const allSizes = [...new Set([...mandatorySizes, ...Object.keys(stockPorTalle)])];
+            // Determinar si es un producto de "Talle Único" (TU, U, Único, etc.)
+            const allRecordedSizes = [...new Set((variante.unidades || []).map(u => String(u.talle_especifico).toUpperCase()))];
+            const isTalleUnico = allRecordedSizes.some(s => ['TU', 'U', 'ÚNICO', 'UNICO', 'TALLE ÚNICO', 'TALLE UNICO'].includes(s));
+
+            // Si es talle único, NO agregamos el rango 35-40
+            let allSizes;
+            if (isTalleUnico) {
+                allSizes = Object.keys(stockPorTalle);
+                if (allSizes.length === 0) allSizes = ['TU']; // Mínimo talle único para que se vea la opción
+            } else {
+                const mandatorySizes = ['35', '36', '37', '38', '39', '40'];
+                allSizes = [...new Set([...mandatorySizes, ...Object.keys(stockPorTalle)])];
+            }
 
             allSizes.forEach(talle => {
                 const stock = stockPorTalle[talle] || 0;
