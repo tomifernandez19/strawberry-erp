@@ -1763,6 +1763,8 @@ export async function syncProductToTiendanube(modeloId) {
         if (mErr || !modelo) return { success: false, message: "Modelo no encontrado en el ERP" };
 
         const tnVariants = [];
+        const mandatorySizes = ['35', '36', '37', '38', '39', '40'];
+
         modelo.variantes?.forEach(variante => {
             const stockPorTalle = (variante.unidades || []).reduce((acc, u) => {
                 if (u.estado === 'DISPONIBLE') {
@@ -1771,7 +1773,11 @@ export async function syncProductToTiendanube(modeloId) {
                 return acc;
             }, {});
 
-            Object.entries(stockPorTalle).forEach(([talle, stock]) => {
+            // Aseguramos que siempre estén los talles 35-40, más cualquier otro que tenga stock
+            const allSizes = [...new Set([...mandatorySizes, ...Object.keys(stockPorTalle)])];
+
+            allSizes.forEach(talle => {
+                const stock = stockPorTalle[talle] || 0;
                 tnVariants.push({
                     price: String(variante.precio_lista),
                     stock: stock,
@@ -1782,7 +1788,7 @@ export async function syncProductToTiendanube(modeloId) {
         });
 
         if (tnVariants.length === 0) {
-            return { success: false, message: "No hay stock disponible para sincronizar" };
+            return { success: false, message: "No hay colores o talles disponibles para sincronizar" };
         }
 
         // 1. Verificar si el producto ya existe en Tiendanube
