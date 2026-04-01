@@ -312,6 +312,10 @@ export default function ReportesPage() {
                                         <span>Total en Cuentas + Tarjetas x Cobrar</span>
                                         <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)).toLocaleString()}</span>
                                     </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem', color: '#ef4444' }}>
+                                        <span>Deuda Total Proveedores + Carolina</span>
+                                        <span style={{ fontWeight: 'bold' }}>- $ {(Math.abs(Number(accounts.PROVEEDOR)) + Math.abs(Number(accounts.CAROLINA))).toLocaleString()}</span>
+                                    </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '0.9rem', color: '#ef4444' }}>
                                         <span>Gastos Fijos Pendientes (Alquiler, etc.)</span>
                                         <span style={{ fontWeight: 'bold' }}>- $ {(Number(dividendTotals.pendingProvisions) || 0).toLocaleString()}</span>
@@ -320,10 +324,10 @@ export default function ReportesPage() {
                                     <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.2)', paddingTop: '15px', textAlign: 'center' }}>
                                         <p style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '5px', textTransform: 'uppercase', color: '#3b82f6' }}>Sueldo Líquido Máximo Sugerido</p>
                                         <h2 style={{ margin: 0, color: '#3b82f6' }}>
-                                            $ {Math.max(0, Math.floor(((Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)) - (Number(dividendTotals.pendingProvisions) || 0)) / 3)).toLocaleString()}
+                                            $ {Math.max(0, Math.floor(((Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)) - (Math.abs(Number(accounts.PROVEEDOR)) + Math.abs(Number(accounts.CAROLINA))) - (Number(dividendTotals.pendingProvisions) || 0)) / 3)).toLocaleString()}
                                         </h2>
                                         <p style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '10px', lineHeight: '1.4' }}>
-                                            💡 <b>Consejo:</b> Si este número es menor al de Ganancia Teórica, significa que parte de la ganancia está "atrapada" en mercadería o deudas viejas. No la retiren para no descapitalizar el negocio.
+                                            💡 <b>Consejo:</b> Este cálculo ya descuenta todas las deudas acumuladas del negocio. Si retiran más de este monto, estarán usando plata que el local le debe a alguien más.
                                         </p>
                                     </div>
                                 </div>
