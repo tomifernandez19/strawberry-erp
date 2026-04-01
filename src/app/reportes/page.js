@@ -20,6 +20,7 @@ export default function ReportesPage() {
 
     // Modal Closing Month
     const [showCloseModal, setShowCloseModal] = useState(false)
+    const [selectedDate, setSelectedDate] = useState(new Date()) // NEW
     const [closingData, setClosingData] = useState([
         { name: 'SOFI', amount: 0, cuenta: 'SOFI_MP' },
         { name: 'TOMI', amount: 0, cuenta: 'TOMI' },
@@ -27,14 +28,14 @@ export default function ReportesPage() {
     ])
 
     useEffect(() => {
-        loadData()
-    }, [])
+        loadData(selectedDate)
+    }, [selectedDate])
 
-    async function loadData() {
+    async function loadData(dateObj = new Date()) {
         setLoading(true)
         try {
             const [fSummary, vStats, cReport] = await Promise.all([
-                getFinanceSummary(),
+                getFinanceSummary(dateObj.toISOString()),
                 getExtendedStats(),
                 getCapitalContributionsReport()
             ])
@@ -93,6 +94,11 @@ export default function ReportesPage() {
 
     const { accounts = {}, billingByPerson = {}, dividendTotals = {} } = data || {};
 
+    const selectedMonthName = selectedDate.toLocaleString('es-AR', { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' }).toUpperCase();
+    const nextMonthObj = new Date(selectedDate);
+    nextMonthObj.setMonth(nextMonthObj.getMonth() + 1);
+    const nextMonthName = nextMonthObj.toLocaleString('es-AR', { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' }).toUpperCase();
+
     // View de Detalle de Ventas
     if (viewDetail) {
         const periodLabel = viewDetail.period === 'today' ? 'Hoy' : viewDetail.period === 'week' ? 'Semana' : viewDetail.period === 'month' ? 'Mes' : 'Personalizado';
@@ -139,6 +145,34 @@ export default function ReportesPage() {
             <header className="text-center">
                 <h1>Reportes Financieros</h1>
                 <p style={{ opacity: 0.7 }}>Resumen de caja y análisis de utilidades</p>
+                
+                {/* Selector de Mes */}
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '15px' }}>
+                    <button 
+                        onClick={() => {
+                            const prev = new Date(selectedDate);
+                            prev.setMonth(prev.getMonth() - 1);
+                            setSelectedDate(prev);
+                        }}
+                        className="btn-secondary" style={{ padding: '5px 10px', fontSize: '0.7rem' }}
+                    >
+                        ◀ mes anterior
+                    </button>
+                    <span style={{ fontWeight: 'bold', minWidth: '120px', borderBottom: '2px solid var(--accent)', paddingBottom: '2px' }}>
+                         {selectedMonthName}
+                    </span>
+                    <button 
+                        onClick={() => {
+                            const nxt = new Date(selectedDate);
+                            nxt.setMonth(nxt.getMonth() + 1);
+                            setSelectedDate(nxt);
+                        }}
+                        className="btn-secondary" style={{ padding: '5px 10px', fontSize: '0.7rem' }}
+                        disabled={new Date(selectedDate).getMonth() === new Date().getMonth() && new Date(selectedDate).getFullYear() === new Date().getFullYear()}
+                    >
+                        mes siguiente ▶
+                    </button>
+                </div>
             </header>
 
             {/* Selector de Solapas (Tabs) */}
@@ -188,15 +222,15 @@ export default function ReportesPage() {
                                     <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.SOFI_MP) || 0).toLocaleString()}</span>
                                 </div>
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px', marginTop: '5px', display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
-                                    <span style={{ fontSize: '0.8rem' }}>Sofi • MARZO (Por Cobrar)</span>
+                                    <span style={{ fontSize: '0.8rem' }}>Sofi • {selectedMonthName} (Por Cobrar)</span>
                                     <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {(Number(accounts.SOFI_PENDING) || 0).toLocaleString()}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.5 }}>
-                                    <span style={{ fontSize: '0.8rem' }}>Sofi • ABRIL+ (Pendiente)</span>
+                                    <span style={{ fontSize: '0.8rem' }}>Sofi • {nextMonthName}+ (Pendiente)</span>
                                     <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {(accounts.SOFI_NEXT_MONTH || 0).toLocaleString()}</span>
                                 </div>
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '5px', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ fontWeight: 'bold' }}>TOTAL LIQUIDEZ MARZO</span>
+                                    <span style={{ fontWeight: 'bold' }}>TOTAL LIQUIDEZ {selectedMonthName}</span>
                                     <span style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}>
                                         $ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)).toLocaleString()}
                                     </span>

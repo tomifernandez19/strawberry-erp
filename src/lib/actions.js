@@ -986,11 +986,11 @@ export async function getRecentUnifiedCaja(accountId = null) {
 /**
  * Calculates current balances for all accounts (State of Accounts).
  */
-export async function getFinanceSummary() {
+export async function getFinanceSummary(specificDate = null) {
     const supabase = createClient();
     
-    // Boundary check for current month in Argentina
-    const now = new Date();
+    // Boundary check for month in Argentina
+    const now = specificDate ? new Date(specificDate) : new Date();
     const argParts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Argentina/Buenos_Aires',
         year: 'numeric', month: '2-digit', day: '2-digit'
@@ -1011,7 +1011,7 @@ export async function getFinanceSummary() {
         nextMonthYear++;
     }
     const nextMonth = `${nextMonthYear}-${String(nextMonthVal).padStart(2, '0')}-01T00:00:00-03:00`;
-    const nowStr = getArgentinaIso(now);
+    const nowStr = getArgentinaIso(new Date()); // real now for checking accreditation
 
     // Optimize by fetching in parallel and selecting only needed fields
     const [salesRes, movementsRes, purchasesRes, configRes, soldUnitsRes] = await Promise.all([
