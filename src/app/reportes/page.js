@@ -381,7 +381,7 @@ export default function ReportesPage() {
                                 <div className="mt-md pt-md" style={{ borderTop: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
                                         <p style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--accent)' }}>$ {customStats.neto.toLocaleString()} (Neto)</p>
-                                        <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>{customStats.count} pares vendidos</p>
+                                        <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>{customStats.count} pares vendidos • $ {Math.round(customStats.neto / Math.max(1, customStats.count)).toLocaleString()} promedio</p>
                                     </div>
                                     <button className="btn-secondary" onClick={() => setViewDetail({ period: 'custom' })} style={{ fontSize: '0.75rem' }}>Ver Detalle 📋</button>
                                 </div>
@@ -391,15 +391,18 @@ export default function ReportesPage() {
                         <div className="grid mt-lg" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                             <div className="card text-center" style={{ borderLeft: '4px solid var(--accent)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'today' })}>
                                 <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Hoy</p>
-                                <h2 style={{ color: 'var(--accent)' }}>$ {stats.today.neto.toLocaleString()}</h2>
+                                <h2 style={{ color: 'var(--accent)', margin: '5px 0' }}>$ {stats.today.neto.toLocaleString()}</h2>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>{stats.today.count} pares • $ {Math.round(stats.today.neto / Math.max(1, stats.today.count)).toLocaleString()} prom.</p>
                             </div>
                             <div className="card text-center" style={{ borderLeft: '4px solid var(--primary)', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'week' })}>
                                 <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Últimos 7 días</p>
-                                <h2 style={{ color: 'var(--primary)' }}>$ {stats.week.neto.toLocaleString()}</h2>
+                                <h2 style={{ color: 'var(--primary)', margin: '5px 0' }}>$ {stats.week.neto.toLocaleString()}</h2>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>{stats.week.count} pares • $ {Math.round(stats.week.neto / Math.max(1, stats.week.count)).toLocaleString()} prom.</p>
                             </div>
                             <div className="card text-center" style={{ borderLeft: '4px solid #8b5cf6', cursor: 'pointer' }} onClick={() => setViewDetail({ period: 'month' })}>
                                 <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>Últimos 30 días</p>
-                                <h2 style={{ color: '#8b5cf6' }}>$ {stats.month.neto.toLocaleString()}</h2>
+                                <h2 style={{ color: '#8b5cf6', margin: '5px 0' }}>$ {stats.month.neto.toLocaleString()}</h2>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>{stats.month.count} pares • $ {Math.round(stats.month.neto / Math.max(1, stats.month.count)).toLocaleString()} prom.</p>
                             </div>
                         </div>
                     </section>
