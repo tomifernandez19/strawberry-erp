@@ -24,6 +24,33 @@ export default function VenderPage() {
     const [montoNeto, setMontoNeto] = useState('')
     const [diasAcreditacion, setDiasAcreditacion] = useState(18)
 
+    const totals = () => {
+        let totalLista = 0
+        let totalEfectivo = 0
+
+        items.forEach(it => {
+            totalLista += it.variantes.precio_lista || 0
+            totalEfectivo += it.variantes.precio_efectivo || 0
+        })
+
+        const totalMayorista = Math.round(totalEfectivo * 0.9)
+
+        let baseTotal = totalLista
+        const esEfeOTra = ['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago)
+
+        // When splitting, base total is the sum of both parts (initialized to totalLista)
+        if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || totalLista
+        else if (esEfeOTra) baseTotal = totalEfectivo
+        else if (medioPago === 'MAYORISTA_EFECTIVO') baseTotal = totalMayorista
+
+        let finalTotal = baseTotal - montoDescuento
+        const currentPct = baseTotal > 0 ? Math.round((montoDescuento / baseTotal) * 100) : 0
+
+        return { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal, currentPct }
+    }
+
+    const { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal, currentPct } = totals()
+
     // Auto-defaults for accreditation days and net amount
     useEffect(() => {
         const isDivided = medioPago === 'DIVIDIR_PAGOS'
@@ -154,32 +181,6 @@ export default function VenderPage() {
         setMontoSena('')
     }
 
-    const totals = () => {
-        let totalLista = 0
-        let totalEfectivo = 0
-
-        items.forEach(it => {
-            totalLista += it.variantes.precio_lista || 0
-            totalEfectivo += it.variantes.precio_efectivo || 0
-        })
-
-        const totalMayorista = Math.round(totalEfectivo * 0.9)
-
-        let baseTotal = totalLista
-        const esEfeOTra = ['EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(medioPago)
-
-        // When splitting, base total is the sum of both parts (initialized to totalLista)
-        if (medioPago === 'DIVIDIR_PAGOS') baseTotal = (Number(montoEfectivo) + Number(montoOtro)) || totalLista
-        else if (esEfeOTra) baseTotal = totalEfectivo
-        else if (medioPago === 'MAYORISTA_EFECTIVO') baseTotal = totalMayorista
-
-        let finalTotal = baseTotal - montoDescuento
-        const currentPct = baseTotal > 0 ? Math.round((montoDescuento / baseTotal) * 100) : 0
-
-        return { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal, currentPct }
-    }
-
-    const { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal, currentPct } = totals()
 
     if (saleResult) {
         return (
