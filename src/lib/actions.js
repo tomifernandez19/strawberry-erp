@@ -250,6 +250,13 @@ export async function assignQRToUnit(unitId, qrCode) {
             .eq('estado', 'PENDIENTE_QR')
 
         if (error) throw new Error(error.message)
+
+        // 3. AUTO-SYNC: Update Tiendanube now that we have one more item available
+        const { data: unit } = await supabase.from('unidades').select('variantes(modelo_id)').eq('id', unitId).single();
+        if (unit?.variantes?.modelo_id) {
+            await syncProductToTiendanube(unit.variantes.modelo_id);
+        }
+
         return { success: true }
     } catch (err) {
         return { success: false, message: err.message }
@@ -426,11 +433,17 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     // 5. AUTO-SYNC with Tiendanube
     try {
         const modelIds = [...new Set(units.map(u => u.variantes?.modelo_id))].filter(Boolean);
+        console.log(`[recordSale] Initiating sync for ${modelIds.length} models...`);
         for (const mId of modelIds) {
-            syncProductToTiendanube(mId).catch(e => console.error(`[AutoSync] Error:`, e));
+            const syncRes = await syncProductToTiendanube(mId);
+            if (!syncRes.success) {
+                console.error(`[recordSale] Sync failed for model ${mId}:`, syncRes.message);
+            } else {
+                console.log(`[recordSale] Sync successful for model ${mId}`);
+            }
         }
     } catch (e) {
-        console.error("[AutoSync] Failed to initiate:", e);
+        console.error("[recordSale] AutoSync execution failed:", e);
     }
 
     return { venta, units }
@@ -1356,10 +1369,10 @@ export async function deleteSale(saleId) {
         try {
             const modelIds = [...new Set(unitsToSync?.map(u => u.variantes?.modelo_id))].filter(Boolean);
             for (const mId of modelIds) {
-                syncProductToTiendanube(mId).catch(e => console.error(`[AutoSync] Error:`, e));
+                await syncProductToTiendanube(mId);
             }
         } catch (e) {
-            console.error("[AutoSync] Failed:", e);
+            console.error("[deleteSale] AutoSync failed:", e);
         }
 
         return { success: true };
@@ -1444,7 +1457,7 @@ export async function deleteUnit(unitId) {
 
         // Sync
         if (unit?.variantes?.modelo_id) {
-            syncProductToTiendanube(unit.variantes.modelo_id).catch(e => console.error(`[AutoSync] Error:`, e));
+            await syncProductToTiendanube(unit.variantes.modelo_id);
         }
 
         return { success: true };
@@ -1474,7 +1487,7 @@ export async function updateVariant(variantId, updates) {
         if (error) throw error;
 
         if (variant?.modelo_id) {
-            syncProductToTiendanube(variant.modelo_id).catch(e => console.error(`[AutoSync] Error:`, e));
+            await syncProductToTiendanube(variant.modelo_id);
         }
 
         return { success: true };
@@ -1754,46 +1767,83 @@ export async function syncProductToTiendanube(modeloId) {
     };
 
     try {
-        const { data: modelo, error: mErr } = await supabase
+        // 0. Find the reference model to get its description
+        const { data: refModelo, error: refErr } = await supabase
             .from('modelos')
-            .select('*, variantes(*, unidades(*))')
+            .select('descripcion')
             .eq('id', modeloId)
             .single();
+        
+        if (refErr || !refModelo) return { success: false, message: "Modelo de referencia no encontrado" };
 
-        if (mErr || !modelo) return { success: false, message: "Modelo no encontrado en el ERP" };
+        // 1. Fetch ALL models with the same description to consolidate stock
+        const { data: siblingModels, error: mErr } = await supabase
+            .from('modelos')
+            .select('*, variantes(*, unidades(*))')
+            .ilike('descripcion', refModelo.descripcion);
 
+        if (mErr || !siblingModels || siblingModels.length === 0) return { success: false, message: "No se encontraron modelos para sincronizar" };
+
+        // Pick basic metadata from ANY model (first one usually has the TN ID if already synced)
+        const modelo = siblingModels.find(m => m.tiendanube_id) || siblingModels[0];
+
+        // 2. Consolidate stock across all sibling models
         const tnVariants = [];
+        const consolidatedStock = {}; // Key: "COLOR|TALLE", Value: { price, stock, color, talle, sku }
 
-        modelo.variantes?.forEach(variante => {
-            const stockPorTalle = (variante.unidades || []).reduce((acc, u) => {
-                if (u.estado === 'DISPONIBLE') {
-                    acc[u.talle_especifico] = (acc[u.talle_especifico] || 0) + 1;
+        siblingModels.forEach(m => {
+            m.variantes?.forEach(variante => {
+                const stockPorTalle = (variante.unidades || []).reduce((acc, u) => {
+                    if (u.estado === 'DISPONIBLE') {
+                        acc[u.talle_especifico] = (acc[u.talle_especifico] || 0) + 1;
+                    }
+                    return acc;
+                }, {});
+
+                // Determine if it's "Talle Único"
+                const allRecordedSizes = [...new Set((variante.unidades || []).map(u => String(u.talle_especifico).toUpperCase()))];
+                const isTalleUnico = allRecordedSizes.some(s => ['TU', 'U', 'ÚNICO', 'UNICO', 'TALLE ÚNICO', 'TALLE UNICO'].includes(s));
+
+                let allSizes;
+                if (isTalleUnico) {
+                    allSizes = Object.keys(stockPorTalle);
+                    if (allSizes.length === 0) allSizes = ['TU'];
+                } else {
+                    const mandatorySizes = ['35', '36', '37', '38', '39', '40'];
+                    allSizes = [...new Set([...mandatorySizes, ...Object.keys(stockPorTalle)])];
                 }
-                return acc;
-            }, {});
 
-            // Determinar si es un producto de "Talle Único" (TU, U, Único, etc.)
-            const allRecordedSizes = [...new Set((variante.unidades || []).map(u => String(u.talle_especifico).toUpperCase()))];
-            const isTalleUnico = allRecordedSizes.some(s => ['TU', 'U', 'ÚNICO', 'UNICO', 'TALLE ÚNICO', 'TALLE UNICO'].includes(s));
+                allSizes.forEach(talle => {
+                    const stock = stockPorTalle[talle] || 0;
+                    const color = variante.color.toUpperCase().trim();
+                    const key = `${color}|${talle}`;
 
-            // Si es talle único, NO agregamos el rango 35-40
-            let allSizes;
-            if (isTalleUnico) {
-                allSizes = Object.keys(stockPorTalle);
-                if (allSizes.length === 0) allSizes = ['TU']; // Mínimo talle único para que se vea la opción
-            } else {
-                const mandatorySizes = ['35', '36', '37', '38', '39', '40'];
-                allSizes = [...new Set([...mandatorySizes, ...Object.keys(stockPorTalle)])];
-            }
-
-            allSizes.forEach(talle => {
-                const stock = stockPorTalle[talle] || 0;
-                tnVariants.push({
-                    price: String(variante.precio_lista),
-                    stock: stock,
-                    values: [{ es: variante.color }, { es: String(talle) }],
-                    sku: `${modelo.codigo_proveedor}-${variante.color.substring(0, 3)}-${talle}`.toUpperCase()
+                    if (!consolidatedStock[key]) {
+                        consolidatedStock[key] = {
+                            price: variante.precio_lista,
+                            stock: 0,
+                            color: color,
+                            talle: talle,
+                            sku: `${m.codigo_proveedor}-${color.substring(0, 3)}-${talle}`.toUpperCase()
+                        };
+                    }
+                    // Sum stock
+                    consolidatedStock[key].stock += stock;
+                    // Keep the highest price found among variants (conservative approach)
+                    if (variante.precio_lista > consolidatedStock[key].price) {
+                        consolidatedStock[key].price = variante.precio_lista;
+                    }
                 });
+            });
+        });
+
+        // Convert consolidated dict to TN array format
+        Object.values(consolidatedStock).forEach(v => {
+            tnVariants.push({
+                price: String(v.price),
+                stock: v.stock,
+                values: [{ es: v.color }, { es: String(v.talle) }],
+                sku: v.sku
             });
         });
 
@@ -1865,10 +1915,15 @@ export async function syncProductToTiendanube(modeloId) {
 
             // 2. Sincronizar variantes una por una
             for (const localV of tnVariants) {
-                const tnV = existingProduct.variants.find(v =>
-                    v.sku === localV.sku ||
-                    (v.values[0]?.es === localV.values[0].es && v.values[1]?.es === localV.values[1].es)
-                );
+                const tnV = existingProduct.variants.find(v => {
+                    if (v.sku && localV.sku && v.sku === localV.sku) return true;
+                    if (!v.values || !localV.values) return false;
+                    
+                    // Match by attribute values, regardless of order
+                    const localVals = localV.values.map(val => val.es.trim().toUpperCase()).sort().join('|');
+                    const tnVals = v.values.map(val => val.es.trim().toUpperCase()).sort().join('|');
+                    return localVals === tnVals;
+                });
 
                 if (tnV) {
                     // Actualizar variante existente

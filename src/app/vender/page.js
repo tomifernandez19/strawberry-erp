@@ -24,18 +24,27 @@ export default function VenderPage() {
     const [montoNeto, setMontoNeto] = useState('')
     const [diasAcreditacion, setDiasAcreditacion] = useState(18)
 
-    // Auto-defaults for accreditation days
+    // Auto-defaults for accreditation days and net amount
     useEffect(() => {
         const isDivided = medioPago === 'DIVIDIR_PAGOS'
         const activeMethod = isDivided ? otroMedioPago : medioPago
+        const baseAmount = isDivided ? (parseFloat(montoOtro) || 0) : finalTotal
 
-        if (activeMethod === 'TARJETA_DEBITO') setDiasAcreditacion(1)
-        else if (activeMethod === 'TARJETA_CREDITO') setDiasAcreditacion(18)
-        else if (activeMethod === 'QR_LISTA') setDiasAcreditacion(0) // Usually MP/QR is instant
-
-        // Reset neto when method changes to trigger focus/manual entry
-        setMontoNeto('')
-    }, [medioPago, otroMedioPago])
+        if (activeMethod === 'TARJETA_DEBITO') {
+            setDiasAcreditacion(2)
+            const calculated = (baseAmount * 0.962008).toFixed(2)
+            setMontoNeto(calculated)
+        } else if (activeMethod === 'TARJETA_CREDITO') {
+            setDiasAcreditacion(10)
+            const calculated = (baseAmount * 0.7907716).toFixed(2)
+            setMontoNeto(calculated)
+        } else if (activeMethod === 'QR_LISTA') {
+            setDiasAcreditacion(0)
+            setMontoNeto('')
+        } else {
+            setMontoNeto('')
+        }
+    }, [medioPago, otroMedioPago, finalTotal, montoOtro])
 
     const addItem = async (qrCode) => {
         // Robust QR extraction: handles full URLs or extra spaces/lowercase
@@ -404,7 +413,9 @@ export default function VenderPage() {
                                             value={montoNeto}
                                             onChange={(e) => setMontoNeto(e.target.value)}
                                         />
-                                        <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>Estimado: ${(finalTotal * 0.942).toFixed(0)}</p>
+                                        <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>
+                                            Estimado: ${(finalTotal * (medioPago === 'TARJETA_CREDITO' ? 0.7907716 : (medioPago === 'TARJETA_DEBITO' ? 0.962008 : 0.942))).toFixed(2)}
+                                        </p>
                                     </div>
                                     <div>
                                         <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Días p/ Cobrar:</label>

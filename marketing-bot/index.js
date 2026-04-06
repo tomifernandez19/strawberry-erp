@@ -2,8 +2,6 @@ require('dotenv').config();
 const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const { Resend } = require('resend');
-const fs = require('fs');
-const path = require('path');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
@@ -17,7 +15,6 @@ const tnStoreId = "1335447";
 const googleApiKey = process.env.GOOGLE_API_KEY;
 const googleGcpProjectId = process.env.GOOGLE_GCP_PROJECT_ID; // Opcional si usa Vertex AI
 
-const logPath = path.join(__dirname, 'sent_log.json');
 
 if (!supabaseUrl || !supabaseAnonKey || !resendApiKey) {
     console.warn("⚠️  [Marketing Bot] Pausado: Faltan llaves de acceso en el archivo .env aislado.");
@@ -187,12 +184,12 @@ function buildDailyEmailHtml(opportunities) {
     <div style="background: #ffffff; padding: 50px 20px; font-family: 'Courier New', Courier, monospace; color: #000;">
         <div style="max-width: 650px; margin: 0 auto;">
             <div style="text-align: center; border-bottom: 4px solid #000; padding-bottom: 30px; margin-bottom: 50px;">
-                <h1 style="font-size: 2.5rem; margin: 0; letter-spacing: 5px; font-weight: 900;">DIRECTOR'S BRIEF</h1>
-                <p style="margin: 10px 0 0 0; font-size: 0.9rem; letter-spacing: 2px;">STRAWBERRY • CREATIVE DEPT • ${new Date().toLocaleDateString('es-AR')}</p>
+                <h1 style="font-size: 2.5rem; margin: 0; letter-spacing: 5px; font-weight: 900;">CREATIVE BRIEF</h1>
+                <p style="margin: 10px 0 0 0; font-size: 0.9rem; letter-spacing: 2px;">STRAWBERRY • DEPT. CREATIVO • ${new Date().toLocaleDateString('es-AR')}</p>
             </div>
             ${cards}
             <div style="text-align: center; font-size: 0.7rem; opacity: 0.4;">
-                Este brief es confidencial y para uso exclusivo del Director de Marketing.
+                Este brief es confidencial y para uso exclusivo del Departamento de Marketing.
             </div>
         </div>
     </div>`;
@@ -200,7 +197,7 @@ function buildDailyEmailHtml(opportunities) {
 
 async function triggerDailyMarketing() {
     try {
-        console.log("🎬 [DIRECTOR'S BRIEF] Preparando material de alta gama...");
+        console.log("🎬 [CREATIVE BRIEF] Preparando material estratégico...");
         const insights = await fetchSmartLowStock();
 
         if (insights.length === 0) {
@@ -220,53 +217,22 @@ async function triggerDailyMarketing() {
         if (error) {
             console.error("❌ Error en despacho creativa:", error);
         } else {
-            console.log("✅ Brief Directoral enviado. Producción en curso. Id:", data.id);
-            // Guardar log de éxito para evitar duplicados hoy
-            const today = new Date().toISOString().split('T')[0];
-            fs.writeFileSync(logPath, JSON.stringify({ last_sent_date: today }));
+            console.log("✅ Creative Brief enviado. Id:", data.id);
         }
     } catch (e) {
         console.error("💥 Error fatal del robot:", e);
     }
 }
 
-async function checkAndTriggerProduccion() {
-    console.log("🔍 [Check] Verificando si el brief de hoy ya fue enviado...");
-    try {
-        const today = new Date().toISOString().split('T')[0];
-        let lastSent = "";
-        
-        if (fs.existsSync(logPath)) {
-            const data = JSON.parse(fs.readFileSync(logPath, 'utf8'));
-            lastSent = data.last_sent_date;
-        }
-
-        if (lastSent === today) {
-            console.log("✅ El brief de hoy ya se envió. Descansando hasta mañana.");
-            return;
-        }
-
-        // Si no se envió hoy, verificamos si es hora de mandar (Post 10:00 AM)
-        const now = new Date();
-        const hour = now.getHours();
-        
-        if (hour >= 10) {
-            console.log("🚀 No se envió el brief hoy y ya pasaron las 10:00 AM. Mandando ahora...");
-            await triggerDailyMarketing();
-        } else {
-            console.log("⏳ Todavía no son las 10:00 AM. Esperando al cron...");
-        }
-    } catch (e) {
-        console.error("Error en el check persistente:", e);
-    }
-}
-
-// Escuchar cada 30 minutos (por si se olvidó o prendió la PC tarde)
-cron.schedule('*/30 * * * *', () => { 
-    checkAndTriggerProduccion(); 
+// Escuchamos EXACTAMENTE a las 10:00 AM (Si la PC está apagada, no sale)
+cron.schedule('0 10 * * *', () => { 
+    triggerDailyMarketing(); 
 }, { timezone: "America/Argentina/Buenos_Aires" });
 
-// Ejecutar check inmediato al prender la PC
-checkAndTriggerProduccion();
+console.log("🚀 [Marketing Bot] Motor listo. Programado para las 10:00 AM.");
 
-console.log("🚀 [Marketing Bot] Motor inteligente activo. Revisión cada 30 min.");
+module.exports = {
+    triggerDailyMarketing,
+    fetchSmartLowStock,
+    buildDailyEmailHtml
+};
