@@ -139,7 +139,9 @@ export default function VenderPage() {
                     email: customerEmail
                 },
                 monto_descuento_fijo: Number(montoDescuento),
-                monto_neto: parseFloat(montoNeto) || null,
+                monto_neto: medioPago === 'DIVIDIR_PAGOS' 
+                    ? (parseFloat(montoEfectivo) || 0) + (parseFloat(montoNeto) || parseFloat(montoOtro) || 0)
+                    : (parseFloat(montoNeto) || null),
                 dias_acreditacion: parseInt(diasAcreditacion) || 0,
                 isSena
             }

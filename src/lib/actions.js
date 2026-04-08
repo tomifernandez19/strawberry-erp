@@ -545,7 +545,7 @@ export async function getExtendedStats() {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
-            ventas (id, total, medio_pago, monto_neto, user_id, profiles (nombre)),
+            ventas (id, total, medio_pago, monto_neto, monto_efectivo, monto_otro, user_id, profiles (nombre)),
             variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
@@ -584,7 +584,19 @@ export async function getExtendedStats() {
         const saleDate = new Date(unit.fecha_venta);
         const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
-        const neto = parseFloat(unit.ventas?.monto_neto) || total;
+        const rawNeto = unit.ventas?.monto_neto;
+        let neto = rawNeto !== null ? parseFloat(rawNeto) : total;
+
+        // Heuristic: If it's DIVIDIR_PAGOS and neto is less than or eq to the card portion, it's likely just the card net.
+        // We restore the total net by adding the cash portion.
+        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto !== null) {
+            const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
+            const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
+            const currentNeto = parseFloat(rawNeto);
+            if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
+                neto += efe;
+            }
+        }
 
         let perUnitTotal = 0;
         let perUnitNeto = 0;
@@ -646,7 +658,7 @@ export async function getCustomRangeStats(startDate, endDate) {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
-            ventas (id, total, medio_pago, monto_neto, user_id, profiles (nombre)),
+            ventas (id, total, medio_pago, monto_neto, monto_efectivo, monto_otro, user_id, profiles (nombre)),
             variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
@@ -686,7 +698,17 @@ export async function getCustomRangeStats(startDate, endDate) {
     unitsSold.forEach(unit => {
         const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
-        const neto = parseFloat(unit.ventas?.monto_neto) || total;
+        const rawNeto = unit.ventas?.monto_neto;
+        let neto = rawNeto !== null ? parseFloat(rawNeto) : total;
+
+        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto !== null) {
+            const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
+            const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
+            const currentNeto = parseFloat(rawNeto);
+            if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
+                neto += efe;
+            }
+        }
 
         let perUnitTotal = 0;
         let perUnitNeto = 0;
@@ -1080,13 +1102,17 @@ export async function getFinanceSummary(specificDate = null) {
     // 4. Process Sales
     sales?.forEach(s => {
         const total = parseFloat(s.total) || 0;
-        let efe = parseFloat(s.monto_efectivo) || 0;
+        const efe = parseFloat(s.monto_efectivo) || 0;
+        const rawNeto = s.monto_neto;
+        let netoTotal = rawNeto !== null ? parseFloat(rawNeto) : total;
 
-        if (['TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(s.medio_pago)) {
-            efe = 0;
+        if (s.medio_pago === 'DIVIDIR_PAGOS' && rawNeto !== null) {
+            const cardGross = parseFloat(s.monto_otro) || 0;
+            const currentNeto = parseFloat(rawNeto);
+            if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
+                netoTotal += efe;
+            }
         }
-
-        const netoTotal = s.monto_neto !== null ? parseFloat(s.monto_neto) : total;
 
         // 1. Cash portion always goes to CAJA_LOCAL
         if (efe > 0) accounts.CAJA_LOCAL += efe;
@@ -1135,14 +1161,21 @@ export async function getFinanceSummary(specificDate = null) {
 
         if (s.medio_pago === 'DIVIDIR_PAGOS') {
             // Split handling
+            const efeAmount = parseFloat(s.monto_efectivo) || 0;
+            const netoVal = parseFloat(s.monto_neto) || total;
+            const cardGross = parseFloat(s.monto_otro) || 0;
+
             if (isThisMonthSale) {
-                dividendTotals.sales += (parseFloat(s.monto_efectivo) || 0);
+                dividendTotals.sales += efeAmount;
             }
-            const other = parseFloat(s.monto_neto) - parseFloat(s.monto_efectivo);
-            if (other > 0) {
+            
+            // Heuristic to check if netoVal is just the card part or the total net
+            const cardNet = (netoVal <= cardGross * 1.05 || netoVal < efeAmount) ? netoVal : (netoVal - efeAmount);
+
+            if (cardNet > 0) {
                 const isOtherCard = cardMethods.includes(s.otro_medio_pago);
                 if ((isOtherCard && isThisMonthAccreditation) || (!isOtherCard && isThisMonthSale)) {
-                    dividendTotals.sales += other;
+                    dividendTotals.sales += cardNet;
                 }
             }
         } else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') {
