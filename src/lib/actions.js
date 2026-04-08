@@ -855,7 +855,7 @@ export async function getDailySummary(onlyUserId = null) {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico, codigo_qr,
-            ventas (id, total, medio_pago, user_id, monto_efectivo, monto_neto, profiles (nombre)),
+            ventas (id, total, medio_pago, user_id, monto_efectivo, monto_neto, monto_otro, profiles (nombre)),
             variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
@@ -909,7 +909,17 @@ export async function getDailySummary(onlyUserId = null) {
     const allItems = unitsSold.map(unit => {
         const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
-        const neto = parseFloat(unit.ventas?.monto_neto) || total;
+        const rawNeto = unit.ventas?.monto_neto;
+        let neto = rawNeto !== null ? parseFloat(rawNeto) : total;
+
+        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto !== null) {
+            const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
+            const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
+            const currentNeto = parseFloat(rawNeto);
+            if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
+                neto += efe;
+            }
+        }
 
         let perUnitTotal = 0;
         let perUnitNeto = 0;
