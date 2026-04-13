@@ -370,6 +370,11 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             }
             calculatedTotal += itemPrice;
         }
+
+        // Apply wholesale discount (10%) if applicable
+        if (medio_pago === 'MAYORISTA_EFECTIVO') {
+            calculatedTotal = Math.round(calculatedTotal * 0.9);
+        }
     }
 
     // Apply Discount or Surcharge
@@ -403,7 +408,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             monto_efectivo: (isSena || medio_pago === 'DIVIDIR_PAGOS') ? monto_efectivo : (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medio_pago) ? calculatedTotal : 0),
             monto_otro: (isSena || medio_pago === 'DIVIDIR_PAGOS') ? monto_otro : 0,
             otro_medio_pago: medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : null,
-            facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
+            facturado: ['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medio_pago) || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
             nombre_cliente: customerData.nombre?.toUpperCase() || null,
             telefono_cliente: customerData.telefono || null,
             email_cliente: customerData.email?.toUpperCase() || null,
@@ -2089,9 +2094,10 @@ export async function recordOnlineOrder(orderData) {
 
             console.log(`[Webhook] Searching unit for: ${prod.name} | ${colorRaw} | ${talleRaw} | SKU: ${prod.sku}`);
 
-            const qrCode = await findUnitBySpecs(prod.name, colorRaw, talleRaw, prod.sku);
+            const result = await findUnitBySpecs(prod.name, colorRaw, talleRaw, prod.sku);
 
-            if (qrCode) {
+            if (result.success && result.qr_code) {
+                const qrCode = result.qr_code;
                 // Find unit ID
                 const { data: unit } = await supabase
                     .from('unidades')
@@ -2187,7 +2193,10 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
                 tipo: 'VENTA_ONLINE',
                 nombre_cliente: order.cliente_nombre || null,
                 email_cliente: order.cliente_email || null,
-                telefono_cliente: order.cliente_telefono || null
+                telefono_cliente: order.cliente_telefono || null,
+                // Financiamiento para Tiendanube
+                cuenta_destino: 'TOMI',
+                fecha_acreditacion: getArgentinaIso()
             }])
             .select()
             .single();
