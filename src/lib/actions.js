@@ -1036,7 +1036,7 @@ export async function getRecentUnifiedCaja(accountId = null) {
 /**
  * Calculates current balances for all accounts (State of Accounts).
  */
-export async function getFinanceSummary(specificDate = null) {
+export async function getFinanceSummary(specificDate = null, isAnnual = false) {
     const supabase = createClient();
     
     // Boundary check for month in Argentina
@@ -1048,20 +1048,36 @@ export async function getFinanceSummary(specificDate = null) {
     
     const year = Number(argParts[0]);
     const month = Number(argParts[1]); // 1-12
-    const currentMonth = month - 1; // 0-11 for Date.getMonth() comparison
+    const currentMonth = month - 1; 
     const currentYear = year;
     
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01T00:00:00-03:00`;
     
-    // Calc next month for LTE/GT boundaries
+    // Next month boundary
     let nextMonthYear = year;
     let nextMonthVal = month + 1;
     if (nextMonthVal > 12) {
         nextMonthVal = 1;
         nextMonthYear++;
     }
-    const nextMonth = `${nextMonthYear}-${String(nextMonthVal).padStart(2, '0')}-01T00:00:00-03:00`;
-    const nowStr = getArgentinaIso(new Date()); // real now for checking accreditation
+    const nextMonthIso = `${nextMonthYear}-${String(nextMonthVal).padStart(2, '0')}-01T00:00:00-03:00`;
+
+    // Annual boundaries
+    const yearStart = `${year}-01-01T00:00:00-03:00`;
+    const yearEnd = `${year + 1}-01-01T00:00:00-03:00`;
+
+    const startBoundary = isAnnual ? yearStart : monthStart;
+    const endBoundary = isAnnual ? yearEnd : nextMonthIso;
+
+    const nowStr = getArgentinaIso(new Date()); 
+
+    // Helper to check if a date falls within the selected period
+    const isInPeriod = (dateStr) => {
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        if (isAnnual) return d.getFullYear() === year;
+        return d.getMonth() === currentMonth && d.getFullYear() === year;
+    };
 
     // Optimize by fetching in parallel and selecting only needed fields
     const [salesRes, movementsRes, purchasesRes, configRes, soldUnitsRes] = await Promise.all([
@@ -1069,8 +1085,8 @@ export async function getFinanceSummary(specificDate = null) {
         supabase.from('movimientos_caja').select('monto, cuenta, categoria, tipo, persona, created_at'),
         supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)'),
         supabase.from('gastos_fijos_config').select('*').eq('activo', true),
-        // Fetch units sold this month to calculate real replacement cost
-        supabase.from('unidades').select('variantes(costo_promedio)').gte('fecha_venta', monthStart).lt('fecha_venta', nextMonth)
+        // Fetch units sold in boundary to calculate real replacement cost
+        supabase.from('unidades').select('variantes(costo_promedio)').gte('fecha_venta', startBoundary).lt('fecha_venta', endBoundary)
     ]);
 
     const sales = salesRes.data;
@@ -1088,7 +1104,7 @@ export async function getFinanceSummary(specificDate = null) {
         TOMI: 0,
         LUCAS: 0,
         SOFI_NEXT_MONTH: 0,
-        CAROLINA: -13000000, // Initial debt
+        CAROLINA: -13000000, 
         PROVEEDOR: 0
     };
 
@@ -1100,21 +1116,20 @@ export async function getFinanceSummary(specificDate = null) {
         contributions: 0,
         pendingProvisions: 0,
         provisionsDetails: [],
-        supplierReserve: 0, // CMV reserve - (Paid + Sales Direct)
+        supplierReserve: 0, 
     };
 
     const fixedConfigs = configRes.data || [];
-    // currentMonth and currentYear are already defined at the top of the function
 
-    // Calculate Costs from Supplier Purchases
+    // 1. Calculate Costs from Supplier Purchases (ALWAYS PERPETUAL for Accounts)
     purchases?.forEach(p => {
         if (p.compras?.propietario === 'Proveedor') {
             const cost = (parseFloat(p.costo_unitario) || 0) * (p.cantidad || 0);
-            accounts.PROVEEDOR -= cost; // New stock increases debt (negative)
+            accounts.PROVEEDOR -= cost; 
         }
     });
 
-    // 4. Process Sales
+    // 2. Process Sales
     sales?.forEach(s => {
         const total = parseFloat(s.total) || 0;
         const efe = parseFloat(s.monto_efectivo) || 0;
@@ -1129,92 +1144,71 @@ export async function getFinanceSummary(specificDate = null) {
             }
         }
 
-        // 1. Cash portion always goes to CAJA_LOCAL
+        // --- ACCOUNT BALANCES (ALWAYS PERPETUAL) ---
         if (efe > 0) accounts.CAJA_LOCAL += efe;
-
         const other = netoTotal - efe;
-        if (other <= 0 && efe <= 0) return;
-
-        // 2. The rest goes to its target account
-        let target = s.cuenta_destino;
-        if (!target) {
-            // Legacy fallbacks
-            if (s.medio_pago === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
-            else if (s.medio_pago === 'TRANSFERENCIA_TOMI') target = 'TOMI';
-            else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
-            else if (s.medio_pago?.includes('SOFI')) target = 'SOFI_MP';
-            else target = 'SOFI_MP'; // Assume digital for anything else legacy
-        }
-
-        if (target === 'SOFI_MP') {
-            const isReconciled = s.monto_neto !== null;
-            if (isReconciled && s.fecha_acreditacion <= nowStr) {
-                accounts.SOFI_MP += other;
-            } else {
-                // Check if it clears within THIS MONTH
-                const accDate = new Date(s.fecha_acreditacion);
-                if (accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear) {
-                    accounts.SOFI_PENDING += other;
-                } else {
-                    accounts.SOFI_NEXT_MONTH += other;
-                }
+        if (other > 0 || efe > 0) {
+            let target = s.cuenta_destino;
+            if (!target) {
+                if (s.medio_pago === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
+                else if (s.medio_pago === 'TRANSFERENCIA_TOMI') target = 'TOMI';
+                else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
+                else target = 'SOFI_MP'; 
             }
-        } else if (target === 'PROVEEDOR') {
-            accounts.PROVEEDOR += other;
-        } else if (accounts[target] !== undefined && target !== 'CAJA_LOCAL') {
-            accounts[target] += other;
+
+            if (target === 'SOFI_MP') {
+                const isReconciled = s.monto_neto !== null;
+                if (isReconciled && s.fecha_acreditacion <= nowStr) {
+                    accounts.SOFI_MP += other;
+                } else {
+                    const accDate = new Date(s.fecha_acreditacion);
+                    if (accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear) {
+                        accounts.SOFI_PENDING += other;
+                    } else {
+                        accounts.SOFI_NEXT_MONTH += other;
+                    }
+                }
+            } else if (target === 'PROVEEDOR') {
+                accounts.PROVEEDOR += other;
+            } else if (accounts[target] !== undefined && target !== 'CAJA_LOCAL') {
+                accounts[target] += other;
+            }
         }
 
-        // --- NEW: Accumulate for Dividend / Sueldos formula (VENTAS) ---
-        const sDate = new Date(s.created_at);
-        const aDate = new Date(s.fecha_acreditacion);
-        const isThisMonthSale = sDate.getMonth() === currentMonth && sDate.getFullYear() === currentYear;
-        const isThisMonthAccreditation = aDate.getMonth() === currentMonth && aDate.getFullYear() === currentYear;
+        // --- DIVIDEND TOTALS (PERIOD-AWARE) ---
+        const isThisPeriodSale = isInPeriod(s.created_at);
+        const isThisPeriodAccreditation = isInPeriod(s.fecha_acreditacion);
 
         const cashMethods = ['EFECTIVO', 'MAYORISTA_EFECTIVO'];
         const cardMethods = ['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'];
 
         if (s.medio_pago === 'DIVIDIR_PAGOS') {
-            // Split handling
             const efeAmount = parseFloat(s.monto_efectivo) || 0;
             const netoVal = parseFloat(s.monto_neto) || total;
             const cardGross = parseFloat(s.monto_otro) || 0;
 
-            if (isThisMonthSale) {
-                dividendTotals.sales += efeAmount;
-            }
+            if (isThisPeriodSale) dividendTotals.sales += efeAmount;
             
-            // Heuristic to check if netoVal is just the card part or the total net
             const cardNet = (netoVal <= cardGross * 1.05 || netoVal < efeAmount) ? netoVal : (netoVal - efeAmount);
-
             if (cardNet > 0) {
                 const isOtherCard = cardMethods.includes(s.otro_medio_pago);
-                if ((isOtherCard && isThisMonthAccreditation) || (!isOtherCard && isThisMonthSale)) {
+                if ((isOtherCard && isThisPeriodAccreditation) || (!isOtherCard && isThisPeriodSale)) {
                     dividendTotals.sales += cardNet;
                 }
             }
         } else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') {
-            // Transfer to provider helps CMV but is NOT revenue
-            if (isThisMonthSale) {
-                dividendTotals.supplierReserve -= netoTotal; // Subtract from CMV because it’s already paid
-            }
+            if (isThisPeriodSale) dividendTotals.supplierReserve -= netoTotal; 
         } else if (cashMethods.includes(s.medio_pago) || s.medio_pago.startsWith('TRANSFERENCIA')) {
-            // Immediate revenue
-            if (isThisMonthSale) {
-                dividendTotals.sales += netoTotal;
-            }
+            if (isThisPeriodSale) dividendTotals.sales += netoTotal;
         } else if (cardMethods.includes(s.medio_pago)) {
-            // Delayed revenue
-            if (isThisMonthAccreditation) {
-                dividendTotals.sales += netoTotal;
-            }
+            if (isThisPeriodAccreditation) dividendTotals.sales += netoTotal;
         }
 
-        // --- NEW: Accumulate for Invoiced by Person (Matching Arka logic) ---
-        // Only count if it was ALREADY sent to the planilla (facturado = true)
+        // Billing by person (Perpetual matching Arka)
         const skipMethods = ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_PROVEEDOR'];
         if (s.facturado && !skipMethods.includes(s.medio_pago)) {
             let ownerName = 'DESCONOCIDO';
+            let target = s.cuenta_destino || 'SOFI_MP';
             if (target === 'SOFI_MP') ownerName = 'SOFI';
             else if (target === 'LUCAS') ownerName = 'LUCAS';
             else if (target === 'TOMI') ownerName = 'TOMI';
@@ -1224,85 +1218,61 @@ export async function getFinanceSummary(specificDate = null) {
                 else if (mp === 'TRANSFERENCIA' || mp === 'TRANSFERENCIA_LUCAS') ownerName = 'LUCAS';
                 else ownerName = 'TOMI';
             }
-
-            // Calculation logic: For split payments, only count the non-cash portion (monto_otro)
             const billingAmount = s.medio_pago === 'DIVIDIR_PAGOS' ? (parseFloat(s.monto_otro) || 0) : total;
             billingByPerson[ownerName] = (billingByPerson[ownerName] || 0) + billingAmount;
         }
     });
 
-    // 5. Process Manual Movements
+    // 3. Process Manual Movements
     movements?.forEach(m => {
         const monto = parseFloat(m.monto) || 0;
 
-        // Always affect the account first
-        if (accounts[m.cuenta] !== undefined) {
-            accounts[m.cuenta] += monto;
-        }
+        // ACCOUNT BALANCES (ALWAYS PERPETUAL)
+        if (accounts[m.cuenta] !== undefined) accounts[m.cuenta] += monto;
+        if (m.categoria === 'PAGO_CAROLINA') accounts.CAROLINA += Math.abs(monto);
+        else if (m.categoria === 'PAGO_PROVEEDOR') accounts.PROVEEDOR += Math.abs(monto);
 
-        // Then affect debts if special category
-        if (m.categoria === 'PAGO_CAROLINA') {
-            accounts.CAROLINA += Math.abs(monto);
-        } else if (m.categoria === 'PAGO_PROVEEDOR') {
-            accounts.PROVEEDOR += Math.abs(monto);
-        } else if (m.categoria === 'INTERESES') {
-            // Intereses are already added/subtracted to the account balance in the step above
-        }
-
-        // --- NEW: Accumulate for Dividend / Sueldos formula (GASTOS / APORTES / PAGOS) ---
-        // ONLY count if created this month
-        const mDate = new Date(m.created_at);
-        if (mDate.getMonth() === currentMonth && mDate.getFullYear() === currentYear) {
+        // DIVIDEND TOTALS (PERIOD-AWARE)
+        if (isInPeriod(m.created_at)) {
             if (m.tipo === 'EGRESO') {
-                if (m.categoria === 'PAGO_PROVEEDOR') {
-                    dividendTotals.paidPurchases += Math.abs(monto);
-                } else {
-                    dividendTotals.expenses += Math.abs(monto);
-                }
+                if (m.categoria === 'PAGO_PROVEEDOR') dividendTotals.paidPurchases += Math.abs(monto);
+                else dividendTotals.expenses += Math.abs(monto);
             } else if (m.tipo === 'INGRESO' && ['APORTE_CAPITAL', 'VUELTO_CAMBIO'].includes(m.categoria)) {
                 dividendTotals.contributions += monto;
             }
         }
     });
 
-    // --- NEW: Calculate Provisions (Monthly Budgeting) ---
+    // 4. Calculate Provisions (Budgeting)
     fixedConfigs.forEach(conf => {
-        // Skip if expired (for Carolina Sept/2026 case)
-        if (conf.caduca_en) {
-            const caduca = new Date(conf.caduca_en);
-            if (new Date() > caduca) return;
-        }
+        if (conf.caduca_en && new Date() > new Date(conf.caduca_en)) return;
 
-        // Sum what was ALREADY paid this month for this category
-        const paidThisMonth = (movements || [])
-            .filter(m => {
-                const date = new Date(m.created_at);
-                return m.categoria === conf.categoria_movimiento &&
-                    m.tipo === 'EGRESO' &&
-                    date.getMonth() === currentMonth &&
-                    date.getFullYear() === currentYear;
-            })
+        // Sum what was ALREADY paid in this period
+        const paidInPeriod = (movements || [])
+            .filter(m => m.categoria === conf.categoria_movimiento && m.tipo === 'EGRESO' && isInPeriod(m.created_at))
             .reduce((sum, m) => sum + Math.abs(parseFloat(m.monto) || 0), 0);
 
-        const pending = Math.max(0, (parseFloat(conf.monto) || 0) - paidThisMonth);
+        // For annual view, we expect 12 payments (or months elapsed)
+        const multiplier = isAnnual ? 12 : 1;
+        const totalBudget = (parseFloat(conf.monto) || 0) * multiplier;
+        const pending = Math.max(0, totalBudget - paidInPeriod);
 
         dividendTotals.pendingProvisions += pending;
         dividendTotals.provisionsDetails.push({
             id: conf.id,
-            nombre: conf.descripcion,
-            presupuesto: parseFloat(conf.monto),
-            pagado: paidThisMonth,
+            nombre: conf.descripcion + (isAnnual ? ' (Anual)' : ''),
+            presupuesto: totalBudget,
+            pagado: paidInPeriod,
             pendiente: pending
         });
     });
-    // --- NEW: Calculate Net Supplier Reserve (Pending to pay) ---
+
+    // 5. Calculate Net Supplier Reserve (Replacement cost)
     const soldUnits = soldUnitsRes.data || [];
-    const cmvThisMonth = soldUnits.reduce((sum, u) => {
-        return sum + (parseFloat(u.variantes?.costo_promedio) || 0);
-    }, 0);
+    const cmvInPeriod = soldUnits.reduce((sum, u) => sum + (parseFloat(u.variantes?.costo_promedio) || 0), 0);
 
     // Final reserved amount = CMV Real - Paid Purchases - Transfers Already Sent
-    dividendTotals.supplierReserve += cmvThisMonth - dividendTotals.paidPurchases;
+    dividendTotals.supplierReserve += cmvInPeriod - dividendTotals.paidPurchases;
 
     return { accounts, billingByPerson, dividendTotals };
 }

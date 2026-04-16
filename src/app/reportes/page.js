@@ -27,15 +27,17 @@ export default function ReportesPage() {
         { name: 'LUCAS', amount: 0, cuenta: 'LUCAS' }
     ])
 
-    useEffect(() => {
-        loadData(selectedDate)
-    }, [selectedDate])
+    const [isAnnual, setIsAnnual] = useState(false)
 
-    async function loadData(dateObj = new Date()) {
+    useEffect(() => {
+        loadData(selectedDate, isAnnual)
+    }, [selectedDate, isAnnual])
+
+    async function loadData(dateObj = new Date(), annual = isAnnual) {
         setLoading(true)
         try {
             const [fSummary, vStats, cReport] = await Promise.all([
-                getFinanceSummary(dateObj.toISOString()),
+                getFinanceSummary(dateObj.toISOString(), annual),
                 getExtendedStats(),
                 getCapitalContributionsReport()
             ])
@@ -256,38 +258,56 @@ export default function ReportesPage() {
                     <div className="card mt-xl" style={{ border: '2px solid #444' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <div>
-                                <h3 style={{ margin: 0 }}>🧬 Análisis del Mes / ROI</h3>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '4px' }}>Basado en fechas de acreditación y costos de reposición</p>
+                                <h3 style={{ margin: 0 }}>🧬 Resultados del {isAnnual ? `Año ${selectedDate.getFullYear()}` : 'Mes'} (Balance Económico)</h3>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '4px' }}>
+                                    {isAnnual ? 'Resumen anual acumulado de rentabilidad.' : '¿Qué tan rentable fue el negocio este mes? (Independiente del efectivo en caja)'}
+                                </p>
                             </div>
-                            <button onClick={() => setShowCloseModal(true)} className="btn-primary" style={{ padding: '8px 15px', fontSize: '0.8rem', background: '#3b82f6', borderColor: '#3b82f6' }}>
-                                📁 Cerrar Mes / Sueldos
-                            </button>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '4px' }}>
+                                    <button 
+                                        onClick={() => setIsAnnual(false)}
+                                        style={{ padding: '6px 12px', borderRadius: '10px', border: 'none', background: !isAnnual ? 'var(--accent)' : 'transparent', color: !isAnnual ? '#000' : '#888', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                    >
+                                        MES
+                                    </button>
+                                    <button 
+                                        onClick={() => setIsAnnual(true)}
+                                        style={{ padding: '6px 12px', borderRadius: '10px', border: 'none', background: isAnnual ? 'var(--accent)' : 'transparent', color: isAnnual ? '#000' : '#888', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                    >
+                                        AÑO
+                                    </button>
+                                </div>
+                                <button onClick={() => setShowCloseModal(true)} className="btn-primary" style={{ padding: '8px 15px', fontSize: '0.8rem', background: '#3b82f6', borderColor: '#3b82f6' }}>
+                                    📁 Cerrar Mes / Sueldos
+                                </button>
+                            </div>
                         </div>
 
                         <div className="grid" style={{ gap: '15px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }} title="Efectivo/Transferencias del mes y tarjetas acreditadas este mes">(+) Ventas Realizadas (Ticket Neto)</span>
+                                <span style={{ opacity: 0.8 }} title="Ventas realizadas cuya fecha de acreditación cae en este periodo.">(+) Facturación Neta Acreditada</span>
                                 <span style={{ color: 'var(--accent)' }}>$ {(Number(dividendTotals.sales) || 0).toLocaleString()}</span>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }} title="Costo de stock vendido + Pagos ya realizados a proveedores">🏦 (-) Reposición Stock (CMV Real + Pagos)</span>
-                                <span style={{ color: '#fbbf24' }}>- $ {(Number(dividendTotals.supplierReserve) || 0).toLocaleString()}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
+                                <span style={{ opacity: 0.8 }} title="Costo de reposición de los pares vendidos.">(-) Costo Mercadería Vendida (CMV)</span>
+                                <span style={{ color: '#fbbf24' }}>- $ {(Number(dividendTotals.supplierReserve + dividendTotals.paidPurchases) || 0).toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }} title="Gastos fijos presupuestados y egresos varios (no proveedores)">(-) Gastos Op. (Egresos/Fijos)</span>
+                                <span style={{ opacity: 0.8 }} title="Gastos pagados y por pagar en este periodo.">(-) Gastos Operativos Totales</span>
                                 <span style={{ color: '#ef4444' }}>- $ {(Number(dividendTotals.expenses || 0) + Number(dividendTotals.pendingProvisions || 0)).toLocaleString()}</span>
                             </div>
                             {(Number(dividendTotals.contributions) || 0) > 0 && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                    <span style={{ opacity: 0.8 }} title="Ingresos externos como aportes de capital o vueltos">(+) Aportes de Capital / Vueltos</span>
+                                    <span style={{ opacity: 0.8 }} title="Dinero que entró por fuera de las ventas.">(+) Otros Ingresos / Aportes</span>
                                     <span style={{ color: 'var(--accent)' }}>+ $ {(Number(dividendTotals.contributions) || 0).toLocaleString()}</span>
                                 </div>
                             )}
 
                             <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
-                                    <h4 style={{ margin: 0 }}>GANANCIA LIBRE</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Utilidad tras asegurar stock y gastos</p>
+                                    <h4 style={{ margin: 0 }}>UTILIDAD NETA {isAnnual ? 'ANUAL' : ''}</h4>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Rendimiento puro del negocio {isAnnual ? 'en el año' : 'este mes'}</p>
                                 </div>
                                 <h3 style={{ margin: 0, color: 'var(--accent)' }}>
                                     $ {(Number(dividendTotals.sales || 0) - Number(dividendTotals.supplierReserve || 0) - Number(dividendTotals.expenses || 0) - Number(dividendTotals.pendingProvisions || 0) + Number(dividendTotals.contributions || 0)).toLocaleString()}
@@ -295,39 +315,43 @@ export default function ReportesPage() {
                             </div>
 
                             <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '5px', letterSpacing: '1px' }}>SUELDO POR SOCIO (GANANCIA TEÓRICA)</p>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '5px', letterSpacing: '1px' }}>SUELDO TEÓRICO x SOCIO {isAnnual ? '(PROMEDIO MENSUAL)' : ''}</p>
                                 <h2 style={{ margin: 0, color: '#ffbf00' }}>
-                                    $ {(Math.floor((Number(dividendTotals.sales || 0) - Number(dividendTotals.supplierReserve || 0) - Number(dividendTotals.expenses || 0) - Number(dividendTotals.pendingProvisions || 0) + Number(dividendTotals.contributions || 0)) / 3)).toLocaleString()}
+                                    $ {(Math.floor((Number(dividendTotals.sales || 0) - Number(dividendTotals.supplierReserve || 0) - Number(dividendTotals.expenses || 0) - Number(dividendTotals.pendingProvisions || 0) + Number(dividendTotals.contributions || 0)) / (3 * (isAnnual ? 12 : 1)))).toLocaleString()}
                                 </h2>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '8px' }}>* Basado en márgenes sobre lo vendido. No considera cuánto efectivo hay en el banco.</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '10px', lineHeight: '1.4' }}>
+                                    <b>Nota:</b> Esta visual responde a <i>"¿Cuánta plata ganamos?"</i>. <br/>
+                                    {isAnnual ? 'Muestra el acumulado del año y el sueldo promedio mensual que el negocio generó.' : 'Si este número es positivo, el negocio está creciendo. No significa que esa plata esté disponible hoy en billetes.'}
+                                </p>
                             </div>
 
                             {/* NUEVA SECCIÓN DE LIQUIDEZ CONSERVADORA */}
                             <div className="mt-xl" style={{ borderTop: '2px dashed #333', paddingTop: '30px' }}>
-                                <h4 style={{ margin: 0, letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.8rem', color: '#3b82f6' }}>🛡️ Análisis de Liquidez (Efectivo Real)</h4>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '5px' }}>¿Cuánta plata real queda si pagamos todo lo pendiente hoy?</p>
+                                <h4 style={{ margin: 0, letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.8rem', color: '#10b981' }}>💵 Análisis de Caja (Disponibilidad Real {isAnnual ? 'Anual' : ''})</h4>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '5px' }}>¿Cuánta plata podemos retirar {isAnnual ? 'en el año' : 'hoy'} sin descapitalizar el negocio?</p>
                                 
-                                <div className="mt-md" style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                <div className="mt-md" style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem' }}>
-                                        <span>Total en Cuentas + Tarjetas x Cobrar</span>
+                                        <span>Total Efectivo + Bancos + Por Cobrar</span>
                                         <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)).toLocaleString()}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem', color: '#ef4444' }}>
-                                        <span>Deuda Total Proveedores + Carolina</span>
-                                        <span style={{ fontWeight: 'bold' }}>- $ {(Math.abs(Number(accounts.PROVEEDOR)) + Math.abs(Number(accounts.CAROLINA))).toLocaleString()}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '0.9rem', color: '#ef4444' }}>
-                                        <span>Gastos Fijos Pendientes (Alquiler, etc.)</span>
+                                        <span title="Incluye alquiler, sueldos fijos y el gasto mensual de Carolina configurado.">(-) Gastos Fijos Pendientes {isAnnual ? 'del Año' : 'del Mes'}</span>
                                         <span style={{ fontWeight: 'bold' }}>- $ {(Number(dividendTotals.pendingProvisions) || 0).toLocaleString()}</span>
                                     </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '0.9rem', color: '#fbbf24' }}>
+                                        <span title="Es la plata que deberíamos pagar a proveedores para reponer los pares que vendimos en este periodo.">(-) Reserva Sugerida para Proveedores (CMV)</span>
+                                        <span style={{ fontWeight: 'bold' }}>- $ {(Math.max(0, Number(dividendTotals.supplierReserve))).toLocaleString()}</span>
+                                    </div>
                                     
-                                    <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.2)', paddingTop: '15px', textAlign: 'center' }}>
-                                        <p style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '5px', textTransform: 'uppercase', color: '#3b82f6' }}>Sueldo Líquido Máximo Sugerido</p>
-                                        <h2 style={{ margin: 0, color: '#3b82f6' }}>
-                                            $ {Math.max(0, Math.floor(((Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)) - (Math.abs(Number(accounts.PROVEEDOR)) + Math.abs(Number(accounts.CAROLINA))) - (Number(dividendTotals.pendingProvisions) || 0)) / 3)).toLocaleString()}
+                                    <div style={{ borderTop: '1px solid rgba(16, 185, 129, 0.2)', paddingTop: '15px', textAlign: 'center' }}>
+                                        <p style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '5px', textTransform: 'uppercase', color: '#10b981', fontWeight: 'bold' }}>Sueldo Líquido Sugerido ({isAnnual ? 'Acumulado Año' : 'Hoy'})</p>
+                                        <h2 style={{ margin: 0, color: '#10b981' }}>
+                                            $ {Math.max(0, Math.floor(((Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0)) - (Number(dividendTotals.pendingProvisions) || 0) - (Math.max(0, Number(dividendTotals.supplierReserve)))) / 3)).toLocaleString()}
                                         </h2>
                                         <p style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '10px', lineHeight: '1.4' }}>
-                                            💡 <b>Consejo:</b> Este cálculo ya descuenta todas las deudas acumuladas del negocio. Si retiran más de este monto, estarán usando plata que el local le debe a alguien más.
+                                            💡 <b>Recomendación de Pago:</b> Para mantener el stock sano, {isAnnual ? 'en el año' : 'este mes'} deberías pagarles a los proveedores <b>$ {(Math.max(0, Number(dividendTotals.supplierReserve))).toLocaleString()}</b>. <br/>
+                                            {isAnnual ? 'El cálculo anual ayuda a compensar meses donde pagaste de más y el CMV quedó "negativo".' : `El resto de la deuda total (${((Math.abs(Number(accounts.PROVEEDOR)) + Math.abs(Number(accounts.CAROLINA)))).toLocaleString()}) se puede ir saldando a medida que haya excedentes.`}
                                         </p>
                                     </div>
                                 </div>
@@ -336,7 +360,7 @@ export default function ReportesPage() {
                             {/* Detalle de Gastos Fijos Pendientes */}
                             {dividendTotals.provisionsDetails?.filter(p => p.pendiente > 0).length > 0 && (
                                 <div style={{ marginTop: '20px', background: 'rgba(239, 68, 68, 0.03)', border: '1px solid rgba(239, 68, 68, 0.1)', padding: '15px', borderRadius: '12px' }}>
-                                    <p style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#ef4444', marginBottom: '10px', textTransform: 'uppercase' }}>📉 Gastos Fijos Pendientes de Pagar:</p>
+                                    <p style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#ef4444', marginBottom: '10px', textTransform: 'uppercase' }}>📉 Gastos Fijos Pendientes {isAnnual ? 'del Año' : 'de Pagar'}:</p>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                         {dividendTotals.provisionsDetails.filter(p => p.pendiente > 0).map(p => (
                                             <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', opacity: 0.9 }}>
@@ -351,10 +375,10 @@ export default function ReportesPage() {
                             <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '8px', fontSize: '0.75rem', color: '#888', border: '1px solid rgba(255,255,255,0.05)' }}>
                                 <p style={{ fontWeight: 'bold', color: '#aaa', marginBottom: '8px' }}>📌 ¿Cómo se calculan estos números?</p>
                                 <ul style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <li><strong>Ventas (Neto):</strong> Incluye efectivo y transferencias realizadas este mes, más ventas con tarjeta ya acreditadas. Excluye transferencias directas a proveedores.</li>
-                                    <li><strong>CMV Real + Pagos:</strong> Suma del costo de reposición del stock vendido más todos los pagos ya realizados a proveedores (incluyendo transferencias directas).</li>
-                                    <li><strong>Gastos Op.:</strong> Gastos fijos (local, luz, sueldos empleados) y otros egresos varios que no son de mercadería.</li>
-                                    <li><strong>Ganancia Libre:</strong> El dinero real disponible tras asegurar la reposición de mercadería y cubrir los gastos operativos.</li>
+                                    <li><strong>Facturación Neta Acreditada:</strong> Ventas cuya fecha de acreditación cae en el {isAnnual ? 'año seleccionado' : 'mes seleccionado'}.</li>
+                                    <li><strong>Costo Mercadería Vendida (CMV):</strong> Costo de reposición de los productos vendidos en el {isAnnual ? 'año' : 'mes'}.</li>
+                                    <li><strong>Reserva Sugerida Proveedores:</strong> CMV {isAnnual ? 'anual' : 'mensual'} menos pagos realizados. Ayuda a compensar si un mes pagaste de más.</li>
+                                    <li><strong>Gastos Operativos:</strong> Gastos fijos y variables del {isAnnual ? 'año' : 'mes'}.</li>
                                 </ul>
                             </div>
                         </div>
