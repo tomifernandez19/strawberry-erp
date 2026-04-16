@@ -1241,26 +1241,41 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
 
     // 4. Calculate Provisions (Budgeting)
     fixedConfigs.forEach(conf => {
+        const configCreated = conf.created_at ? new Date(conf.created_at) : null;
         const configCaduca = conf.caduca_en ? new Date(conf.caduca_en) : null;
         
-        // Skip if it was already expired BEFORE this period started
+        // Boundaries for current selection
         const periodStart = new Date(startBoundary);
+        const periodEnd = new Date(endBoundary);
+
+        // A. Skip if it was already expired BEFORE this period started
         if (configCaduca && configCaduca < periodStart) return;
+
+        // B. Skip if it wasn't created yet AT THE END of this period
+        if (configCreated && configCreated > periodEnd) return;
 
         // Sum what was ALREADY paid in this period
         const paidInPeriod = (movements || [])
             .filter(m => m.categoria === conf.categoria_movimiento && m.tipo === 'EGRESO' && isInPeriod(m.created_at))
             .reduce((sum, m) => sum + Math.abs(parseFloat(m.monto) || 0), 0);
 
-        // Calculate Multiplier (how many months to budget)
-        let multiplier = 1;
+        // Calculate Multiplier (how many months to budget in this view)
+        let multiplier = 0;
         if (isAnnual) {
-            if (configCaduca && configCaduca.getFullYear() === year) {
-                multiplier = configCaduca.getMonth() + 1; // Active only until expiration month
-            } else {
-                multiplier = 12; // Active all year
+            // Count active months in the year up to the selected month
+            for (let m = 0; m <= currentMonth; m++) {
+                const mStart = new Date(year, m, 1);
+                const mEnd = new Date(year, m + 1, 0, 23, 59, 59);
+                const isCreated = !configCreated || configCreated <= mEnd;
+                const isNotExpired = !configCaduca || configCaduca >= mStart;
+                if (isCreated && isNotExpired) multiplier++;
             }
+        } else {
+            // Monthly view: active if created before end and not expired
+            multiplier = 1;
         }
+
+        if (multiplier === 0) return; // Should have been caught by A/B, but safety first
 
         const totalBudget = (parseFloat(conf.monto) || 0) * multiplier;
         const pending = Math.max(0, totalBudget - paidInPeriod);
