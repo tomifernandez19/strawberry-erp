@@ -1176,8 +1176,9 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         }
 
         // --- DIVIDEND TOTALS (PERIOD-AWARE) ---
+        // We use Sale Date (isInPeriod(s.created_at)) for ROI to reflect Accrued Revenue (Economic Result)
+        // This is the "estimativo" the user asked for: what we sold this month regardless of accreditation.
         const isThisPeriodSale = isInPeriod(s.created_at);
-        const isThisPeriodAccreditation = isInPeriod(s.fecha_acreditacion);
 
         const cashMethods = ['EFECTIVO', 'MAYORISTA_EFECTIVO'];
         const cardMethods = ['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'];
@@ -1187,21 +1188,16 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
             const netoVal = parseFloat(s.monto_neto) || total;
             const cardGross = parseFloat(s.monto_otro) || 0;
 
-            if (isThisPeriodSale) dividendTotals.sales += efeAmount;
-            
-            const cardNet = (netoVal <= cardGross * 1.05 || netoVal < efeAmount) ? netoVal : (netoVal - efeAmount);
-            if (cardNet > 0) {
-                const isOtherCard = cardMethods.includes(s.otro_medio_pago);
-                if ((isOtherCard && isThisPeriodAccreditation) || (!isOtherCard && isThisPeriodSale)) {
-                    dividendTotals.sales += cardNet;
-                }
+            if (isThisPeriodSale) {
+                dividendTotals.sales += efeAmount;
+                const cardNet = (netoVal <= cardGross * 1.05 || netoVal < efeAmount) ? netoVal : (netoVal - efeAmount);
+                if (cardNet > 0) dividendTotals.sales += cardNet;
             }
         } else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') {
             if (isThisPeriodSale) dividendTotals.supplierReserve -= netoTotal; 
-        } else if (cashMethods.includes(s.medio_pago) || s.medio_pago.startsWith('TRANSFERENCIA')) {
-            if (isThisPeriodSale) dividendTotals.sales += netoTotal;
-        } else if (cardMethods.includes(s.medio_pago)) {
-            if (isThisPeriodAccreditation) dividendTotals.sales += netoTotal;
+        } else if (isThisPeriodSale) {
+            // All other methods (Cash, Transfer, Cards) count towards ROI based on Sale Date
+            dividendTotals.sales += netoTotal;
         }
 
         // Billing by person (Perpetual matching Arka)
@@ -1245,22 +1241,34 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
 
     // 4. Calculate Provisions (Budgeting)
     fixedConfigs.forEach(conf => {
-        if (conf.caduca_en && new Date() > new Date(conf.caduca_en)) return;
+        const configCaduca = conf.caduca_en ? new Date(conf.caduca_en) : null;
+        
+        // Skip if it was already expired BEFORE this period started
+        const periodStart = new Date(startBoundary);
+        if (configCaduca && configCaduca < periodStart) return;
 
         // Sum what was ALREADY paid in this period
         const paidInPeriod = (movements || [])
             .filter(m => m.categoria === conf.categoria_movimiento && m.tipo === 'EGRESO' && isInPeriod(m.created_at))
             .reduce((sum, m) => sum + Math.abs(parseFloat(m.monto) || 0), 0);
 
-        // For annual view, we expect 12 payments (or months elapsed)
-        const multiplier = isAnnual ? 12 : 1;
+        // Calculate Multiplier (how many months to budget)
+        let multiplier = 1;
+        if (isAnnual) {
+            if (configCaduca && configCaduca.getFullYear() === year) {
+                multiplier = configCaduca.getMonth() + 1; // Active only until expiration month
+            } else {
+                multiplier = 12; // Active all year
+            }
+        }
+
         const totalBudget = (parseFloat(conf.monto) || 0) * multiplier;
         const pending = Math.max(0, totalBudget - paidInPeriod);
 
         dividendTotals.pendingProvisions += pending;
         dividendTotals.provisionsDetails.push({
             id: conf.id,
-            nombre: conf.descripcion + (isAnnual ? ' (Anual)' : ''),
+            nombre: conf.descripcion + (isAnnual ? ` (x${multiplier} meses)` : ''),
             presupuesto: totalBudget,
             pagado: paidInPeriod,
             pendiente: pending
