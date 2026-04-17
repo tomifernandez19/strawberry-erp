@@ -1101,9 +1101,11 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         CAJA_LOCAL: 0,
         SOFI_MP: 0,
         SOFI_PENDING: 0,
+        ONLINE_PENDING: 0,
         TOMI: 0,
         LUCAS: 0,
         SOFI_NEXT_MONTH: 0,
+        ONLINE_NEXT_MONTH: 0,
         CAROLINA: -13000000, 
         PROVEEDOR: 0
     };
@@ -1162,10 +1164,14 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                     accounts.SOFI_MP += other;
                 } else {
                     const accDate = new Date(s.fecha_acreditacion);
-                    if (accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear) {
-                        accounts.SOFI_PENDING += other;
+                    const isCurrentMonth = accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear;
+
+                    if (s.tipo === 'VENTA_ONLINE') {
+                        if (isCurrentMonth) accounts.ONLINE_PENDING += other;
+                        else accounts.ONLINE_NEXT_MONTH += other;
                     } else {
-                        accounts.SOFI_NEXT_MONTH += other;
+                        if (isCurrentMonth) accounts.SOFI_PENDING += other;
+                        else accounts.SOFI_NEXT_MONTH += other;
                     }
                 }
             } else if (target === 'PROVEEDOR') {
@@ -2176,6 +2182,41 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
         const montoVenta = customPrice !== null ? parseFloat(customPrice) : (unidad.variantes?.precio_lista || 0);
         const medioPagoFinal = order.medio_pago || 'TIENDANUBE';
 
+        let targetAccount = 'TOMI'; 
+        let accreditationDays = 0;
+        let netoRatio = 1;
+
+        const mpLower = medioPagoFinal.toLowerCase();
+        
+        // Logical mapping based on common Tiendanube gateways/methods
+        if (mpLower.includes('credit') || mpLower.includes('credito')) {
+            targetAccount = 'SOFI_MP';
+            accreditationDays = 10;
+            netoRatio = 0.7907716;
+        } else if (mpLower.includes('debit') || mpLower.includes('debito')) {
+            targetAccount = 'SOFI_MP';
+            accreditationDays = 2;
+            netoRatio = 0.962008;
+        } else if (mpLower.includes('mercadopago') || mpLower.includes('mp') || mpLower.includes('qr') || mpLower.includes('mobbex') || mpLower.includes('payway') || mpLower.includes('getnet') || mpLower.includes('uala')) {
+            targetAccount = 'SOFI_MP';
+            accreditationDays = 10;
+            netoRatio = 0.85; 
+        } else if (mpLower.includes('transferencia')) {
+            targetAccount = 'TOMI';
+            accreditationDays = 0;
+            netoRatio = 1;
+        } else if (mpLower === 'tiendanube') {
+            targetAccount = 'SOFI_MP';
+            accreditationDays = 10;
+            netoRatio = 0.85;
+        }
+
+        const montoNetoCalculated = montoVenta * netoRatio;
+        const fechaAcc = new Date();
+        if (accreditationDays > 0) {
+            fechaAcc.setDate(fechaAcc.getDate() + accreditationDays);
+        }
+
         const { data: venta, error: vErr } = await supabase
             .from('ventas')
             .insert([{
@@ -2188,8 +2229,9 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
                 email_cliente: order.cliente_email || null,
                 telefono_cliente: order.cliente_telefono || null,
                 // Financiamiento para Tiendanube
-                cuenta_destino: 'TOMI',
-                fecha_acreditacion: getArgentinaIso()
+                cuenta_destino: targetAccount,
+                monto_neto: montoNetoCalculated,
+                fecha_acreditacion: getArgentinaIso(fechaAcc)
             }])
             .select()
             .single();
