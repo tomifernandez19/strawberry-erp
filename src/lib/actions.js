@@ -1158,26 +1158,28 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 else target = 'SOFI_MP'; 
             }
 
-            if (target === 'SOFI_MP') {
-                const isReconciled = s.monto_neto !== null;
-                if (isReconciled && s.fecha_acreditacion <= nowStr) {
-                    accounts.SOFI_MP += other;
-                } else {
-                    const accDate = new Date(s.fecha_acreditacion);
-                    const isCurrentMonth = accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear;
+            const isAcredited = !s.fecha_acreditacion || s.fecha_acreditacion <= nowStr;
 
-                    if (s.tipo === 'VENTA_ONLINE') {
-                        if (isCurrentMonth) accounts.ONLINE_PENDING += other;
-                        else accounts.ONLINE_NEXT_MONTH += other;
-                    } else {
-                        if (isCurrentMonth) accounts.SOFI_PENDING += other;
-                        else accounts.SOFI_NEXT_MONTH += other;
-                    }
+            if (isAcredited) {
+                if (target === 'SOFI_MP') {
+                    accounts.SOFI_MP += other;
+                } else if (target === 'PROVEEDOR') {
+                    accounts.PROVEEDOR += other;
+                } else if (accounts[target] !== undefined && target !== 'CAJA_LOCAL') {
+                    accounts[target] += other;
                 }
-            } else if (target === 'PROVEEDOR') {
-                accounts.PROVEEDOR += other;
-            } else if (accounts[target] !== undefined && target !== 'CAJA_LOCAL') {
-                accounts[target] += other;
+            } else {
+                // PENDING LOGIC
+                const accDate = new Date(s.fecha_acreditacion);
+                const isCurrentMonth = accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear;
+
+                if (s.tipo === 'VENTA_ONLINE') {
+                    if (isCurrentMonth) accounts.ONLINE_PENDING += other;
+                    else accounts.ONLINE_NEXT_MONTH += other;
+                } else {
+                    if (isCurrentMonth) accounts.SOFI_PENDING += other;
+                    else accounts.SOFI_NEXT_MONTH += other;
+                }
             }
         }
 
