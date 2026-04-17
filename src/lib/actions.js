@@ -1160,9 +1160,10 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
 
             // Accreditation rules:
             // 1. Sofi account ALWAYS respects accreditation date.
-            // 2. Tomi account respects accreditation ONLY for Online sales.
+            // 2. Tomi account respects accreditation ONLY for Online (Tiendanube) sales.
             // 3. Lucas and regular Tomi sales are always considered instant.
-            const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && s.tipo === 'VENTA_ONLINE');
+            const isOnline = s.tipo === 'VENTA_ONLINE' || (s.medio_pago && s.medio_pago.toUpperCase().includes('TIENDANUBE'));
+            const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && isOnline);
             const isAcredited = !needsAccreditationCheck || !s.fecha_acreditacion || s.fecha_acreditacion <= nowStr;
 
             if (isAcredited) {
@@ -1178,7 +1179,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 const accDate = new Date(s.fecha_acreditacion);
                 const isCurrentMonth = accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear;
 
-                if (s.tipo === 'VENTA_ONLINE') {
+                if (isOnline) {
                     if (isCurrentMonth) accounts.ONLINE_PENDING += other;
                     else accounts.ONLINE_NEXT_MONTH += other;
                 } else {
