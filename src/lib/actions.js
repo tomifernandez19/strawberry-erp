@@ -1158,7 +1158,12 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 else target = 'SOFI_MP'; 
             }
 
-            const isAcredited = !s.fecha_acreditacion || s.fecha_acreditacion <= nowStr;
+            // Accreditation rules:
+            // 1. Sofi account ALWAYS respects accreditation date.
+            // 2. Tomi account respects accreditation ONLY for Online sales.
+            // 3. Lucas and regular Tomi sales are always considered instant.
+            const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && s.tipo === 'VENTA_ONLINE');
+            const isAcredited = !needsAccreditationCheck || !s.fecha_acreditacion || s.fecha_acreditacion <= nowStr;
 
             if (isAcredited) {
                 if (target === 'SOFI_MP') {
