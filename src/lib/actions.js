@@ -645,6 +645,46 @@ export async function getExtendedStats() {
         if (saleDate >= startOfMonth) update(stats.month);
     });
 
+    // 2. Add orphaned sales in period
+    const { data: allSales, error: salesErr } = await supabase
+        .from('ventas')
+        .select('*, profiles(nombre)')
+        .gte('created_at', startOfMonthIso);
+
+    if (!salesErr && allSales) {
+        const linkedVentaIds = new Set(unitsSold.map(u => u.ventas?.id).filter(Boolean));
+        const orphaned = allSales.filter(s => !linkedVentaIds.has(s.id));
+
+        orphaned.forEach(sale => {
+            const saleDate = new Date(sale.created_at);
+            const total = parseFloat(sale.total) || 0;
+            const neto = sale.monto_neto !== null ? parseFloat(sale.monto_neto) : total;
+
+            const detailedItem = {
+                id: 'sale-' + sale.id,
+                fecha: sale.created_at,
+                codigo: 'ADJ',
+                modelo: sale.tipo === 'DIFERENCIA_CAMBIO' ? 'Diferencia por Cambio' : 'Ajuste / Venta Directa',
+                color: sale.medio_pago,
+                talle: '-',
+                precio: total,
+                neto: neto,
+                medio_pago: sale.medio_pago,
+                vendedor: sale.profiles?.nombre || sale.user_id
+            };
+
+            const updateStats = (obj) => {
+                obj.total += total;
+                obj.neto += neto;
+                obj.items.push(detailedItem);
+            };
+
+            if (saleDate >= startOfDay) updateStats(stats.today);
+            if (saleDate >= startOfWeek) updateStats(stats.week);
+            if (saleDate >= startOfMonth) updateStats(stats.month);
+        });
+    }
+
     return stats;
 }
 
@@ -873,8 +913,15 @@ export async function getDailySummary(onlyUserId = null) {
         .select('monto')
         .gte('created_at', todayIso);
 
-    if (uError || mError) {
-        console.error("Error fetching summary:", uError || mError);
+    // Fetch orphaned sales today (sales not linked to any unit sold today)
+    // This includes 'DIFERENCIA_CAMBIO' and other manual adjustments
+    const { data: salesToday, error: sError } = await supabase
+        .from('ventas')
+        .select('*, profiles(nombre)')
+        .gte('created_at', todayIso);
+
+    if (uError || mError || sError) {
+        console.error("Error fetching summary:", uError || mError || sError);
         return { count: 0, total: 0, neto: 0, cash: 0, items: [] };
     }
 
@@ -958,6 +1005,29 @@ export async function getDailySummary(onlyUserId = null) {
             vendedor: unit.ventas?.user_id,
             vendedor_nombre: unit.ventas?.profiles?.nombre || 'S/D'
         };
+    });
+
+    // 4. Add orphaned sales (sales from today that are NOT the ones linked to units sold today)
+    const linkedVentaIds = new Set(unitsSold.map(u => u.ventas?.id).filter(Boolean));
+    const orphanedSales = (salesToday || []).filter(s => !linkedVentaIds.has(s.id));
+
+    orphanedSales.forEach(sale => {
+        const total = parseFloat(sale.total) || 0;
+        const neto = sale.monto_neto !== null ? parseFloat(sale.monto_neto) : total;
+
+        allItems.push({
+            id: 'sale-' + sale.id,
+            fecha: sale.created_at,
+            codigo: 'ADJ',
+            modelo: sale.tipo === 'DIFERENCIA_CAMBIO' ? 'Diferencia por Cambio' : 'Ajuste de Venta',
+            color: sale.medio_pago,
+            talle: '-',
+            precio: total,
+            neto: neto,
+            medio_pago: sale.medio_pago,
+            vendedor: sale.user_id,
+            vendedor_nombre: sale.profiles?.nombre || 'S/D'
+        });
     });
 
     // Totals and items list can be PERSONALIZED
@@ -2585,10 +2655,13 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
             ventaId = venta.id;
         }
 
-        // 3. Update new unit status to SOLD
+        // 3. Update new unit status to SOLD and inherit old sale_id
+        const { data: oldUnitData } = await supabase.from('unidades').select('venta_id').eq('id', oldUnitId).single();
+        const finalVentaId = oldUnitData?.venta_id;
+
         const { error: newErr } = await supabase.from('unidades').update({
             estado: 'VENDIDO',
-            venta_id: ventaId,
+            venta_id: finalVentaId,
             fecha_venta: new Date().toISOString()
         }).eq('id', newUnit.id);
         if (newErr) throw newErr;
