@@ -1222,10 +1222,12 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         if (other > 0 || efe > 0) {
             let target = s.cuenta_destino;
             if (!target) {
+                // Legacy fallback only if explicit methods are used
                 if (s.medio_pago === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
                 else if (s.medio_pago === 'TRANSFERENCIA_TOMI') target = 'TOMI';
                 else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
-                else target = 'SOFI_MP'; 
+                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(s.medio_pago)) target = 'SOFI_MP';
+                else target = 'DESCONOCIDO'; 
             }
 
             // Accreditation rules:
@@ -1249,12 +1251,21 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 const accDate = new Date(s.fecha_acreditacion);
                 const isCurrentMonth = accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear;
 
-                if (isOnline) {
-                    if (isCurrentMonth) accounts.ONLINE_PENDING += other;
-                    else accounts.ONLINE_NEXT_MONTH += other;
-                } else {
+                // If it targets a specific partner account, group it there even if Online
+                if (target === 'SOFI_MP') {
                     if (isCurrentMonth) accounts.SOFI_PENDING += other;
                     else accounts.SOFI_NEXT_MONTH += other;
+                } else if (target === 'TOMI' && isOnline) {
+                    if (isCurrentMonth) accounts.ONLINE_PENDING += other;
+                    else accounts.ONLINE_NEXT_MONTH += other;
+                } else if (isOnline) {
+                    // Fallback for other online sales
+                    if (isCurrentMonth) accounts.ONLINE_PENDING += other;
+                    else accounts.ONLINE_NEXT_MONTH += other;
+                } else if (target === 'LUCAS' || target === 'TOMI') {
+                    // These are usually instant, but if they have a future date...
+                    // We don't have specific buckets for them yet, so we count them as accredited or just ignore for now
+                    // but following the request, we want Sofi to be accurate.
                 }
             }
         }
@@ -2267,24 +2278,20 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
         const mpLower = medioPagoFinal.toLowerCase();
         
         // Logical mapping based on common Tiendanube gateways/methods
+        // All Online sales now go to TOMI as per user request
         if (mpLower.includes('credit') || mpLower.includes('credito')) {
-            targetAccount = 'SOFI_MP';
             accreditationDays = 10;
             netoRatio = 0.7907716;
         } else if (mpLower.includes('debit') || mpLower.includes('debito')) {
-            targetAccount = 'SOFI_MP';
             accreditationDays = 2;
             netoRatio = 0.962008;
         } else if (mpLower.includes('mercadopago') || mpLower.includes('mp') || mpLower.includes('qr') || mpLower.includes('mobbex') || mpLower.includes('payway') || mpLower.includes('getnet') || mpLower.includes('uala')) {
-            targetAccount = 'SOFI_MP';
             accreditationDays = 10;
             netoRatio = 0.85; 
         } else if (mpLower.includes('transferencia')) {
-            targetAccount = 'TOMI';
             accreditationDays = 0;
             netoRatio = 1;
         } else if (mpLower === 'tiendanube') {
-            targetAccount = 'SOFI_MP';
             accreditationDays = 10;
             netoRatio = 0.85;
         }
