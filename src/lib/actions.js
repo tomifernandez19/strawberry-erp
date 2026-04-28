@@ -1255,16 +1255,11 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 const mp = s.medio_pago === 'DIVIDIR_PAGOS' ? s.otro_medio_pago : s.medio_pago;
                 
                 // Legacy fallback only if explicit methods are used
-                if (mp === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
+                if (mp === 'TRANSFERENCIA_LUCAS' || mp === 'TRANSFERENCIA') target = 'LUCAS';
                 else if (mp === 'TRANSFERENCIA_TOMI') target = 'TOMI';
                 else if (mp === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
-                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) {
-                    // We only add to Sofi if it was guessed AS CARD before we became strict
-                    // However, to match the SQL query exactly, we should probably only use explicit cuenta_destino
-                    // but for older records that have NULL we might need it.
-                    // The user said the SQL query "daba bien", and that query doesn't have fallback.
-                    // So we STAY STRICT.
-                    target = 'DESCONOCIDO';
+                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR', 'QR_LISTA'].includes(mp)) {
+                    target = 'SOFI_MP'; // Assume Sofi for these if unknown
                 }
                 else target = 'DESCONOCIDO'; 
             }
