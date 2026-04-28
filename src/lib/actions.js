@@ -1226,7 +1226,6 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 if (s.medio_pago === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
                 else if (s.medio_pago === 'TRANSFERENCIA_TOMI') target = 'TOMI';
                 else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
-                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(s.medio_pago)) target = 'SOFI_MP';
                 else target = 'DESCONOCIDO'; 
             }
 
@@ -1236,7 +1235,10 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
             // 3. Lucas and regular Tomi sales are always considered instant.
             const isOnline = s.tipo === 'VENTA_ONLINE' || (s.medio_pago && s.medio_pago.toUpperCase().includes('TIENDANUBE'));
             const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && isOnline);
-            const isAcredited = !needsAccreditationCheck || !s.fecha_acreditacion || s.fecha_acreditacion <= nowStr;
+            
+            // Match SQL Query: If date is missing, it's not counted in balances at all (COALESCE/Filter mismatch fix)
+            const hasAccDate = !!s.fecha_acreditacion;
+            const isAcredited = hasAccDate && (!needsAccreditationCheck || s.fecha_acreditacion <= nowStr);
 
             if (isAcredited) {
                 if (target === 'SOFI_MP') {
@@ -1246,8 +1248,8 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 } else if (accounts[target] !== undefined && target !== 'CAJA_LOCAL') {
                     accounts[target] += other;
                 }
-            } else {
-                // PENDING LOGIC
+            } else if (hasAccDate) {
+                // PENDING LOGIC (Only if it has a date, to match SQL query)
                 const accDate = new Date(s.fecha_acreditacion);
                 const isCurrentMonth = accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear;
 
