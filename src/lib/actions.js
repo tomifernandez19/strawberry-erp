@@ -389,10 +389,15 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
 
     // Calculate targeted account and metadata
     let targetAccount = 'SOFI_MP'; // Default for cards/QR
-    if (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(medio_pago)) targetAccount = 'CAJA_LOCAL';
-    if (medio_pago === 'TRANSFERENCIA_LUCAS') targetAccount = 'LUCAS';
-    if (medio_pago === 'TRANSFERENCIA_TOMI') targetAccount = 'TOMI';
-    if (medio_pago === 'TRANSFERENCIA_PROVEEDOR') targetAccount = 'PROVEEDOR';
+    
+    // For Split Payments, the 'other' part goes to the specific account
+    const effectiveMP = medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : medio_pago;
+
+    if (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(effectiveMP)) targetAccount = 'CAJA_LOCAL';
+    if (effectiveMP === 'TRANSFERENCIA_LUCAS') targetAccount = 'LUCAS';
+    if (effectiveMP === 'TRANSFERENCIA_TOMI') targetAccount = 'TOMI';
+    if (effectiveMP === 'TRANSFERENCIA_PROVEEDOR') targetAccount = 'PROVEEDOR';
+    // If it's something like 'TARJETA' or 'QR', it remains 'SOFI_MP'
 
     let fechaAcreditacion = new Date();
     if (dias_acreditacion > 0) {
@@ -1222,10 +1227,14 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         if (other > 0 || efe > 0) {
             let target = s.cuenta_destino;
             if (!target) {
+                // Determine the 'other' payment method for split payments
+                const mp = s.medio_pago === 'DIVIDIR_PAGOS' ? s.otro_medio_pago : s.medio_pago;
+                
                 // Legacy fallback only if explicit methods are used
-                if (s.medio_pago === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
-                else if (s.medio_pago === 'TRANSFERENCIA_TOMI') target = 'TOMI';
-                else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
+                if (mp === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
+                else if (mp === 'TRANSFERENCIA_TOMI') target = 'TOMI';
+                else if (mp === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
+                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) target = 'SOFI_MP';
                 else target = 'DESCONOCIDO'; 
             }
 
