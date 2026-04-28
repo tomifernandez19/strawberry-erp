@@ -2210,20 +2210,62 @@ export async function recordOnlineOrder(orderData) {
         throw pError;
     }
 
-    // 2. Try to reserve units
+    // 2. Try to reserve units and create the Sale record
+    let accreditationDays = 10;
+    let netoRatio = 0.85; // Default for Tiendanube
+    const mpLower = gateway.toLowerCase();
+
+    if (mpLower.includes('credit') || mpLower.includes('credito')) {
+        accreditationDays = 10;
+        netoRatio = 0.7907716;
+    } else if (mpLower.includes('debit') || mpLower.includes('debito')) {
+        accreditationDays = 2;
+        netoRatio = 0.962008;
+    } else if (mpLower.includes('transferencia')) {
+        accreditationDays = 0;
+        netoRatio = 1;
+    }
+
+    const totalVenta = parseFloat(orderData.total) || 0;
+    const montoNetoCalculated = totalVenta * netoRatio;
+    const fechaAcc = new Date();
+    if (accreditationDays > 0) {
+        fechaAcc.setDate(fechaAcc.getDate() + accreditationDays);
+    }
+
+    const { data: venta, error: vErr } = await supabase
+        .from('ventas')
+        .insert([{
+            total: totalVenta,
+            medio_pago: gateway,
+            facturado: false,
+            tipo: 'VENTA_ONLINE',
+            nombre_cliente: clienteNombre,
+            email_cliente: clienteEmail,
+            telefono_cliente: clienteTelefono,
+            cuenta_destino: 'TOMI',
+            monto_neto: montoNetoCalculated,
+            fecha_acreditacion: getArgentinaIso(fechaAcc)
+        }])
+        .select()
+        .single();
+
+    if (vErr) {
+        console.error(`[Webhook] Error creating sale for order #${number}:`, vErr.message);
+    } else {
+        // Link sale to order
+        await supabase.from('pedidos_online').update({ venta_id: venta.id }).eq('id', pedido.id);
+    }
+
     for (const prod of products) {
         try {
-            // Tiendanube sends variant values in order. We assume [Color, Talle]
             const colorRaw = (prod.variant_values?.[0] || '').trim();
             const talleRaw = (prod.variant_values?.[1] || '').trim();
-
-            console.log(`[Webhook] Searching unit for: ${prod.name} | ${colorRaw} | ${talleRaw} | SKU: ${prod.sku}`);
 
             const result = await findUnitBySpecs(prod.name, colorRaw, talleRaw, prod.sku);
 
             if (result.success && result.qr_code) {
                 const qrCode = result.qr_code;
-                // Find unit ID
                 const { data: unit } = await supabase
                     .from('unidades')
                     .select('id')
@@ -2231,24 +2273,21 @@ export async function recordOnlineOrder(orderData) {
                     .single();
 
                 if (unit) {
-                    // Update unit to RESERVADO_ONLINE
-                    const { error: uErr } = await supabase
+                    await supabase
                         .from('unidades')
                         .update({
-                            estado: 'RESERVADO_ONLINE',
-                            fecha_venta: new Date().toISOString() // Reserve date
+                            estado: 'VENDIDO_ONLINE',
+                            venta_id: venta?.id || null,
+                            fecha_venta: new Date().toISOString()
                         })
                         .eq('id', unit.id);
 
-                    if (!uErr) {
-                        // Link unit to order
-                        await supabase
-                            .from('pedidos_online')
-                            .update({ unidad_reservada_id: unit.id })
-                            .eq('id', pedido.id);
+                    await supabase
+                        .from('pedidos_online')
+                        .update({ unidad_reservada_id: unit.id })
+                        .eq('id', pedido.id);
 
-                        console.log(`[Webhook] SUCCESS: Unit ${qrCode} reserved for order #${number}`);
-                    }
+                    console.log(`[Webhook] SUCCESS: Unit ${qrCode} sold/discounted for order #${number}`);
                 }
             }
         } catch (e) {
@@ -2302,71 +2341,70 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
             throw new Error("No se pudo encontrar el pedido en la base de datos.");
         }
 
-        // 3. Record the sale
-        const { data: { user } } = await supabase.auth.getUser();
+        // 3. Handle Sale record
+        // In the new flow, the sale is already created by recordOnlineOrder
+        let ventaId = order.venta_id;
 
-        const montoVenta = customPrice !== null ? parseFloat(customPrice) : (unidad.variantes?.precio_lista || 0);
-        const medioPagoFinal = order.medio_pago || 'TIENDANUBE';
+        if (!ventaId) {
+            console.log("[Dispatch] Sale not found, creating one now...");
+            const { data: { user } } = await supabase.auth.getUser();
+            const montoVenta = customPrice !== null ? parseFloat(customPrice) : (unidad.variantes?.precio_lista || 0);
+            const medioPagoFinal = order.medio_pago || 'TIENDANUBE';
 
-        let targetAccount = 'TOMI'; 
-        let accreditationDays = 0;
-        let netoRatio = 1;
+            let targetAccount = 'TOMI'; 
+            let accreditationDays = 0;
+            let netoRatio = 1;
+            const mpLower = medioPagoFinal.toLowerCase();
+            
+            if (mpLower.includes('credit') || mpLower.includes('credito')) {
+                accreditationDays = 10;
+                netoRatio = 0.7907716;
+            } else if (mpLower.includes('debit') || mpLower.includes('debito')) {
+                accreditationDays = 2;
+                netoRatio = 0.962008;
+            } else if (mpLower.includes('mercadopago') || mpLower.includes('mp') || mpLower.includes('qr') || mpLower.includes('mobbex') || mpLower.includes('payway') || mpLower.includes('getnet') || mpLower.includes('uala')) {
+                accreditationDays = 10;
+                netoRatio = 0.85; 
+            } else if (mpLower.includes('transferencia')) {
+                accreditationDays = 0;
+                netoRatio = 1;
+            } else if (mpLower === 'tiendanube') {
+                accreditationDays = 10;
+                netoRatio = 0.85;
+            }
 
-        const mpLower = medioPagoFinal.toLowerCase();
-        
-        // Logical mapping based on common Tiendanube gateways/methods
-        // All Online sales now go to TOMI as per user request
-        if (mpLower.includes('credit') || mpLower.includes('credito')) {
-            accreditationDays = 10;
-            netoRatio = 0.7907716;
-        } else if (mpLower.includes('debit') || mpLower.includes('debito')) {
-            accreditationDays = 2;
-            netoRatio = 0.962008;
-        } else if (mpLower.includes('mercadopago') || mpLower.includes('mp') || mpLower.includes('qr') || mpLower.includes('mobbex') || mpLower.includes('payway') || mpLower.includes('getnet') || mpLower.includes('uala')) {
-            accreditationDays = 10;
-            netoRatio = 0.85; 
-        } else if (mpLower.includes('transferencia')) {
-            accreditationDays = 0;
-            netoRatio = 1;
-        } else if (mpLower === 'tiendanube') {
-            accreditationDays = 10;
-            netoRatio = 0.85;
-        }
+            const montoNetoCalculated = montoVenta * netoRatio;
+            const fechaAcc = new Date();
+            if (accreditationDays > 0) {
+                fechaAcc.setDate(fechaAcc.getDate() + accreditationDays);
+            }
 
-        const montoNetoCalculated = montoVenta * netoRatio;
-        const fechaAcc = new Date();
-        if (accreditationDays > 0) {
-            fechaAcc.setDate(fechaAcc.getDate() + accreditationDays);
-        }
+            const { data: newVenta, error: vErr } = await supabase
+                .from('ventas')
+                .insert([{
+                    total: montoVenta,
+                    medio_pago: medioPagoFinal,
+                    user_id: user?.id || null,
+                    facturado: false,
+                    tipo: 'VENTA_ONLINE',
+                    nombre_cliente: order.cliente_nombre || null,
+                    email_cliente: order.cliente_email || null,
+                    telefono_cliente: order.cliente_telefono || null,
+                    cuenta_destino: targetAccount,
+                    monto_neto: montoNetoCalculated,
+                    fecha_acreditacion: getArgentinaIso(fechaAcc)
+                }])
+                .select()
+                .single();
 
-        const { data: venta, error: vErr } = await supabase
-            .from('ventas')
-            .insert([{
-                total: montoVenta,
-                medio_pago: medioPagoFinal,
-                user_id: user?.id || null,
-                facturado: false,
-                tipo: 'VENTA_ONLINE',
-                nombre_cliente: order.cliente_nombre || null,
-                email_cliente: order.cliente_email || null,
-                telefono_cliente: order.cliente_telefono || null,
-                // Financiamiento para Tiendanube
-                cuenta_destino: targetAccount,
-                monto_neto: montoNetoCalculated,
-                fecha_acreditacion: getArgentinaIso(fechaAcc)
-            }])
-            .select()
-            .single();
-
-        if (vErr) {
-            console.error("[Dispatch] Error inserting sale:", vErr);
-            throw new Error(`Error al registrar la venta: ${vErr.message}`);
+            if (vErr) throw new Error(`Error al registrar la venta: ${vErr.message}`);
+            ventaId = newVenta.id;
         }
 
         // 4. Update unit to VENDIDO_ONLINE and link to sale
         const { error: uErr } = await supabase.from('unidades').update({
             estado: 'VENDIDO_ONLINE',
-            venta_id: venta.id,
+            venta_id: ventaId,
             fecha_venta: new Date().toISOString()
         }).eq('id', unidad.id);
 
