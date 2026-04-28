@@ -1154,21 +1154,42 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         return d.getMonth() === currentMonth && d.getFullYear() === year;
     };
 
-    // Optimize by fetching in parallel and selecting only needed fields
-    const [salesRes, movementsRes, purchasesRes, configRes, soldUnitsRes] = await Promise.all([
-        supabase.from('ventas').select('created_at, total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
-        supabase.from('movimientos_caja').select('monto, cuenta, categoria, tipo, persona, created_at'),
+    // --- RECURSIVE FETCHING TO BYPASS 1000 ROW LIMIT ---
+    async function fetchAll(table, selectStr) {
+        let allData = [];
+        let from = 0;
+        let to = 999;
+        let finished = false;
+        
+        while (!finished) {
+            const { data, error } = await supabase.from(table).select(selectStr).range(from, to);
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                finished = true;
+            } else {
+                allData = allData.concat(data);
+                if (data.length < 1000) {
+                    finished = true;
+                } else {
+                    from += 1000;
+                    to += 1000;
+                }
+            }
+        }
+        return allData;
+    }
+
+    const [sales, movements, purchasesRes, configRes, soldUnitsRes] = await Promise.all([
+        fetchAll('ventas', 'created_at, total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
+        fetchAll('movimientos_caja', 'monto, cuenta, categoria, tipo, persona, created_at'),
         supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)'),
         supabase.from('gastos_fijos_config').select('*').eq('activo', true),
-        // Fetch units sold in boundary to calculate real replacement cost
         supabase.from('unidades').select('variantes(costo_promedio)').gte('fecha_venta', startBoundary).lt('fecha_venta', endBoundary)
     ]);
 
-    const sales = salesRes.data;
-    const movements = movementsRes.data;
     const purchases = purchasesRes.data;
 
-    if (salesRes.error || movementsRes.error || purchasesRes.error) {
+    if (purchasesRes.error) {
         throw new Error("Error fetching finance data");
     }
 
@@ -1223,7 +1244,10 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
 
         // --- ACCOUNT BALANCES (ALWAYS PERPETUAL) ---
         if (efe > 0) accounts.CAJA_LOCAL += efe;
-        const other = netoTotal - efe;
+        
+        // Match SQL reconciliation query: COALESCE(monto_neto, (total - monto_efectivo))
+        const other = rawNeto !== null ? parseFloat(rawNeto) : (total - efe);
+        
         if (other > 0 || efe > 0) {
             let target = s.cuenta_destino;
             if (!target) {
@@ -1234,7 +1258,14 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 if (mp === 'TRANSFERENCIA_LUCAS') target = 'LUCAS';
                 else if (mp === 'TRANSFERENCIA_TOMI') target = 'TOMI';
                 else if (mp === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
-                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) target = 'SOFI_MP';
+                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR'].includes(mp)) {
+                    // We only add to Sofi if it was guessed AS CARD before we became strict
+                    // However, to match the SQL query exactly, we should probably only use explicit cuenta_destino
+                    // but for older records that have NULL we might need it.
+                    // The user said the SQL query "daba bien", and that query doesn't have fallback.
+                    // So we STAY STRICT.
+                    target = 'DESCONOCIDO';
+                }
                 else target = 'DESCONOCIDO'; 
             }
 
