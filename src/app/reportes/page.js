@@ -266,9 +266,9 @@ export default function ReportesPage() {
                     <div className="card mt-xl" style={{ border: '2px solid #444' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                             <div>
-                                <h3 style={{ margin: 0 }}>🧬 Resultados del {isAnnual ? `Año ${selectedDate.getFullYear()}` : 'Mes'} (Balance Económico)</h3>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '4px' }}>
-                                    {isAnnual ? 'Resumen anual acumulado de rentabilidad.' : '¿Qué tan rentable fue el negocio este mes? (Independiente del efectivo en caja)'}
+                                <h3 style={{ margin: 0, letterSpacing: '1px', textTransform: 'uppercase', color: '#10b981' }}>💵 Análisis de Caja (Disponibilidad Real {isAnnual ? 'Anual' : ''})</h3>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '5px' }}>
+                                    ¿Cuánta plata podemos retirar {isAnnual ? 'en el año' : 'hoy'} sin descapitalizar el negocio?
                                 </p>
                             </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
@@ -293,51 +293,6 @@ export default function ReportesPage() {
                         </div>
 
                         <div className="grid" style={{ gap: '15px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }} title="Ventas realizadas cuya fecha de acreditación cae en este periodo.">(+) Facturación Neta Acreditada</span>
-                                <span style={{ color: 'var(--accent)' }}>$ {(Number(dividendTotals.sales) || 0).toLocaleString()}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
-                                <span style={{ opacity: 0.8 }} title="Costo de reposición de los pares vendidos.">(-) Costo Mercadería Vendida (CMV)</span>
-                                <span style={{ color: '#fbbf24' }}>- $ {(Number(dividendTotals.supplierReserve + dividendTotals.paidPurchases) || 0).toLocaleString()}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                <span style={{ opacity: 0.8 }} title="Gastos pagados y por pagar en este periodo.">(-) Gastos Operativos Totales</span>
-                                <span style={{ color: '#ef4444' }}>- $ {(Number(dividendTotals.expenses || 0) + Number(dividendTotals.pendingProvisions || 0)).toLocaleString()}</span>
-                            </div>
-                            {(Number(dividendTotals.contributions) || 0) > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                                    <span style={{ opacity: 0.8 }} title="Dinero que entró por fuera de las ventas.">(+) Otros Ingresos / Aportes</span>
-                                    <span style={{ color: 'var(--accent)' }}>+ $ {(Number(dividendTotals.contributions) || 0).toLocaleString()}</span>
-                                </div>
-                            )}
-
-                            <div style={{ borderTop: '2px solid rgba(255,255,255,0.1)', paddingTop: '15px', marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <h4 style={{ margin: 0 }}>UTILIDAD NETA {isAnnual ? 'ANUAL' : ''}</h4>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Rendimiento puro del negocio {isAnnual ? 'en el año' : 'este mes'}</p>
-                                </div>
-                                <h3 style={{ margin: 0, color: 'var(--accent)' }}>
-                                    $ {(Number(dividendTotals.sales || 0) - Number(dividendTotals.supplierReserve || 0) - Number(dividendTotals.expenses || 0) - Number(dividendTotals.pendingProvisions || 0) + Number(dividendTotals.contributions || 0)).toLocaleString()}
-                                </h3>
-                            </div>
-
-                            <div style={{ background: 'rgba(255,191,0,0.05)', border: '1px dashed rgba(255,191,0,0.2)', padding: '20px', borderRadius: '12px', marginTop: '20px', textAlign: 'center' }}>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '5px', letterSpacing: '1px' }}>SUELDO TEÓRICO x SOCIO {isAnnual ? '(PROMEDIO MENSUAL)' : ''}</p>
-                                <h2 style={{ margin: 0, color: '#ffbf00' }}>
-                                    $ {(Math.floor((Number(dividendTotals.sales || 0) - Number(dividendTotals.supplierReserve || 0) - Number(dividendTotals.expenses || 0) - Number(dividendTotals.pendingProvisions || 0) + Number(dividendTotals.contributions || 0)) / (3 * (isAnnual ? 12 : 1)))).toLocaleString()}
-                                </h2>
-                                <p style={{ fontSize: '0.65rem', opacity: 0.4, marginTop: '10px', lineHeight: '1.4' }}>
-                                    <b>Nota:</b> Esta visual responde a <i>"¿Cuánta plata ganamos?"</i>. <br/>
-                                    {isAnnual ? 'Muestra el acumulado del año y el sueldo promedio mensual que el negocio generó.' : 'Si este número es positivo, el negocio está creciendo. No significa que esa plata esté disponible hoy en billetes.'}
-                                </p>
-                            </div>
-
-                            {/* NUEVA SECCIÓN DE LIQUIDEZ CONSERVADORA */}
-                            <div className="mt-xl" style={{ borderTop: '2px dashed #333', paddingTop: '30px' }}>
-                                <h4 style={{ margin: 0, letterSpacing: '1px', textTransform: 'uppercase', fontSize: '0.8rem', color: '#10b981' }}>💵 Análisis de Caja (Disponibilidad Real {isAnnual ? 'Anual' : ''})</h4>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '5px' }}>¿Cuánta plata podemos retirar {isAnnual ? 'en el año' : 'hoy'} sin descapitalizar el negocio?</p>
-                                
                                 <div className="mt-md" style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem' }}>
                                         <span>Total Efectivo + Bancos + Por Cobrar</span>
@@ -383,10 +338,9 @@ export default function ReportesPage() {
                             <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '8px', fontSize: '0.75rem', color: '#888', border: '1px solid rgba(255,255,255,0.05)' }}>
                                 <p style={{ fontWeight: 'bold', color: '#aaa', marginBottom: '8px' }}>📌 ¿Cómo se calculan estos números?</p>
                                 <ul style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <li><strong>Facturación Neta Acreditada:</strong> Ventas cuya fecha de acreditación cae en el {isAnnual ? 'año seleccionado' : 'mes seleccionado'}.</li>
-                                    <li><strong>Costo Mercadería Vendida (CMV):</strong> Costo de reposición de los productos vendidos en el {isAnnual ? 'año' : 'mes'}.</li>
+                                    <li><strong>Total Efectivo + Bancos + Por Cobrar:</strong> Todo el dinero disponible y por ingresar en este periodo.</li>
+                                    <li><strong>Gastos Fijos Pendientes:</strong> Gastos fijos que aún no se han pagado en el {isAnnual ? 'año' : 'mes'} seleccionado.</li>
                                     <li><strong>Reserva Sugerida Proveedores:</strong> CMV {isAnnual ? 'anual' : 'mensual'} menos pagos realizados. Ayuda a compensar si un mes pagaste de más.</li>
-                                    <li><strong>Gastos Operativos:</strong> Gastos fijos y variables del {isAnnual ? 'año' : 'mes'}.</li>
                                 </ul>
                             </div>
                         </div>

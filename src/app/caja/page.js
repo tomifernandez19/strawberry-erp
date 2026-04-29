@@ -234,15 +234,17 @@ export default function CajaPage() {
                             <div className="mt-md">
                                 <label style={labelStyle}>Categoría de Gasto:</label>
                                 <select value={formData.categoria} onChange={e => setFormData({ ...formData, categoria: e.target.value })} style={inputStyle}>
-                                    <option value="GASTOS_GENERALES">Gastos Generales / Insumos</option>
-                                    <option value="ALQUILER">Alquiler 🏠</option>
-                                    <option value="SERVICIOS">Servicios (Luz/Impresiones) 💡</option>
-                                    <option value="FLETES">Fletes / Viáticos 🚚</option>
-                                    <option value="IMPUESTOS">Impuestos 📄</option>
-                                    <option value="EXPENSAS">Expensas 🏢</option>
-                                    <option value="PAGO_CAROLINA">Pago a Carolina 👵</option>
-                                    <option value="PAGO_PROVEEDOR">Pago a Proveedor 📦</option>
-                                    <option value="RETIRO_PERSONAL">Retiro Personal / Sueldo 👤</option>
+                                    <option value="GASTOS_GENERALES">Gastos Generales</option>
+                                    <option value="ALQUILER">Alquiler</option>
+                                    <option value="SERVICIOS">Servicios (luz, agua, rentas)</option>
+                                    <option value="EXPENSAS">Expensas</option>
+                                    <option value="MONOTRIBUTO">Monotributo</option>
+                                    <option value="PAGO_CAROLINA">Pago a Carolina</option>
+                                    <option value="PAGO_PROVEEDOR">Pago a proveedor</option>
+                                    <option value="RETIRO_PERSONAL">retiro personal/sueldo</option>
+                                    <option value="PUBLICIDAD">Publicidad</option>
+                                    <option value="TIENDANUBE">tiendanube</option>
+                                    <option value="OTRO_GASTO">Otro gasto</option>
                                 </select>
                             </div>
                         </>
