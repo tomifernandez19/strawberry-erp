@@ -595,11 +595,11 @@ export async function getExtendedStats() {
         const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
         const rawNeto = unit.ventas?.monto_neto;
-        let neto = rawNeto !== null ? parseFloat(rawNeto) : total;
+        let neto = rawNeto != null ? parseFloat(rawNeto) : total;
 
         // Heuristic: If it's DIVIDIR_PAGOS and neto is less than or eq to the card portion, it's likely just the card net.
         // We restore the total net by adding the cash portion.
-        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto !== null) {
+        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
             const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
             const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
             const currentNeto = parseFloat(rawNeto);
@@ -663,7 +663,7 @@ export async function getExtendedStats() {
         orphaned.forEach(sale => {
             const saleDate = new Date(sale.created_at);
             const total = parseFloat(sale.total) || 0;
-            const neto = sale.monto_neto !== null ? parseFloat(sale.monto_neto) : total;
+            const neto = sale.monto_neto != null ? parseFloat(sale.monto_neto) : total;
 
             const detailedItem = {
                 id: 'sale-' + sale.id,
@@ -749,9 +749,9 @@ export async function getCustomRangeStats(startDate, endDate) {
         const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
         const rawNeto = unit.ventas?.monto_neto;
-        let neto = rawNeto !== null ? parseFloat(rawNeto) : total;
+        let neto = rawNeto != null ? parseFloat(rawNeto) : total;
 
-        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto !== null) {
+        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
             const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
             const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
             const currentNeto = parseFloat(rawNeto);
@@ -967,9 +967,9 @@ export async function getDailySummary(onlyUserId = null) {
         const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
         const rawNeto = unit.ventas?.monto_neto;
-        let neto = rawNeto !== null ? parseFloat(rawNeto) : total;
+        let neto = rawNeto != null ? parseFloat(rawNeto) : total;
 
-        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto !== null) {
+        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
             const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
             const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
             const currentNeto = parseFloat(rawNeto);
@@ -1018,7 +1018,7 @@ export async function getDailySummary(onlyUserId = null) {
 
     orphanedSales.forEach(sale => {
         const total = parseFloat(sale.total) || 0;
-        const neto = sale.monto_neto !== null ? parseFloat(sale.monto_neto) : total;
+        const neto = sale.monto_neto != null ? parseFloat(sale.monto_neto) : total;
 
         allItems.push({
             id: 'sale-' + sale.id,
@@ -1232,9 +1232,9 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const total = parseFloat(s.total) || 0;
         const efe = parseFloat(s.monto_efectivo) || 0;
         const rawNeto = s.monto_neto;
-        let netoTotal = rawNeto !== null ? parseFloat(rawNeto) : total;
+        let netoTotal = rawNeto != null ? parseFloat(rawNeto) : total;
 
-        if (s.medio_pago === 'DIVIDIR_PAGOS' && rawNeto !== null) {
+        if (s.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
             const cardGross = parseFloat(s.monto_otro) || 0;
             const currentNeto = parseFloat(rawNeto);
             if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
@@ -1246,7 +1246,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         if (efe > 0) accounts.CAJA_LOCAL += efe;
         
         // Match SQL reconciliation query: COALESCE(monto_neto, (total - monto_efectivo))
-        const other = rawNeto !== null ? parseFloat(rawNeto) : (total - efe);
+        const other = rawNeto != null ? parseFloat(rawNeto) : (total - efe);
         
         if (other > 0 || efe > 0) {
             let target = s.cuenta_destino;
@@ -2348,7 +2348,7 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
         if (!ventaId) {
             console.log("[Dispatch] Sale not found, creating one now...");
             const { data: { user } } = await supabase.auth.getUser();
-            const montoVenta = customPrice !== null ? parseFloat(customPrice) : (unidad.variantes?.precio_lista || 0);
+            const montoVenta = customPrice != null ? parseFloat(customPrice) : (unidad.variantes?.precio_lista || 0);
             const medioPagoFinal = order.medio_pago || 'TIENDANUBE';
 
             let targetAccount = 'TOMI'; 
