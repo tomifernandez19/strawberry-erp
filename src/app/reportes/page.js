@@ -318,7 +318,6 @@ export default function ReportesPage() {
                                         </p>
                                     </div>
                                 </div>
-                            </div>
 
                             {/* Detalle de Gastos Fijos Pendientes */}
                             {dividendTotals.provisionsDetails?.filter(p => p.pendiente > 0).length > 0 && (
