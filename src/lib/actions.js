@@ -1144,7 +1144,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
     const startBoundary = isAnnual ? yearStart : monthStart;
     const endBoundary = isAnnual ? yearEnd : nextMonthIso;
 
-    const nowStr = getArgentinaIso(new Date()); 
+    const now = new Date();
 
     // Helper to check if a date falls within the selected period
     const isInPeriod = (dateStr) => {
@@ -1253,12 +1253,14 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
             if (!target) {
                 // Determine the 'other' payment method for split payments
                 const mp = s.medio_pago === 'DIVIDIR_PAGOS' ? s.otro_medio_pago : s.medio_pago;
+                const mpUpper = (mp || '').toUpperCase();
                 
-                // Legacy fallback only if explicit methods are used
-                if (mp === 'TRANSFERENCIA_LUCAS' || mp === 'TRANSFERENCIA') target = 'LUCAS';
-                else if (mp === 'TRANSFERENCIA_TOMI') target = 'TOMI';
-                else if (mp === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
-                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR', 'QR_LISTA'].includes(mp)) {
+                // Tiendanube sales ALWAYS target TOMI
+                if (mpUpper.includes('TIENDANUBE')) target = 'TOMI';
+                else if (mpUpper === 'TRANSFERENCIA_LUCAS' || mpUpper === 'TRANSFERENCIA') target = 'LUCAS';
+                else if (mpUpper === 'TRANSFERENCIA_TOMI') target = 'TOMI';
+                else if (mpUpper === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
+                else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR', 'QR_LISTA'].includes(mpUpper)) {
                     target = 'SOFI_MP'; // Assume Sofi for these if unknown
                 }
                 else target = 'DESCONOCIDO'; 
@@ -1271,9 +1273,18 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
             const isOnline = s.tipo === 'VENTA_ONLINE' || (s.medio_pago && s.medio_pago.toUpperCase().includes('TIENDANUBE'));
             const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && isOnline);
             
-            // Match SQL Query: If date is missing, it's not counted in balances at all (COALESCE/Filter mismatch fix)
             const hasAccDate = !!s.fecha_acreditacion;
-            const isAcredited = hasAccDate && (!needsAccreditationCheck || s.fecha_acreditacion <= nowStr);
+            let isAcredited = false;
+            
+            if (hasAccDate) {
+                if (!needsAccreditationCheck) {
+                    isAcredited = true;
+                } else {
+                    // Robust date comparison: Use real Date objects to avoid string comparison issues
+                    const accDate = new Date(s.fecha_acreditacion);
+                    isAcredited = accDate <= now;
+                }
+            }
 
             if (isAcredited) {
                 if (target === 'SOFI_MP') {
