@@ -1115,11 +1115,11 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
     const supabase = createClient();
     
     // Boundary check for month in Argentina
-    const now = specificDate ? new Date(specificDate) : new Date();
+    const referenceDate = specificDate ? new Date(specificDate) : new Date();
     const argParts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Argentina/Buenos_Aires',
         year: 'numeric', month: '2-digit', day: '2-digit'
-    }).format(now).split('-');
+    }).format(referenceDate).split('-');
     
     const year = Number(argParts[0]);
     const month = Number(argParts[1]); // 1-12
