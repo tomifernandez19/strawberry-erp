@@ -43,10 +43,10 @@ export default function FacturacionPage() {
                 alert('¡Venta enviada a la planilla con éxito!')
                 setInvoices(prev => prev.filter(v => v.id !== venta.id))
             } else {
-                alert(`Error al enviar a la planilla: ${res.message}\n\nAsegurate de configurar las credenciales de Google en el Dashboard de Vercel.`)
+                alert(`Error: ${res.message}`)
             }
         } catch (err) {
-            alert(err.message)
+            alert(`Error inesperado: ${err.message}`)
         } finally {
             setSending(null)
         }

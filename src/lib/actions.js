@@ -3129,6 +3129,9 @@ export async function sendToInvoiceSheet(ventaId) {
             .single();
 
         if (vErr) throw vErr;
+        if (venta.facturado) {
+            throw new Error('Esta venta ya fue marcada como facturada.');
+        }
 
         const amount = venta.medio_pago === 'DIVIDIR_PAGOS' ? venta.monto_otro : venta.total;
 
@@ -3161,7 +3164,7 @@ export async function sendToInvoiceSheet(ventaId) {
         // Update database to mark that it was sent to sheet
         const { error: updErr } = await supabase
             .from('ventas')
-            .update({ facturado: true, cae: 'EN_PLANILLA' }) // Placeholder to know it's in progress
+            .update({ facturado: true })
             .eq('id', ventaId);
 
         if (updErr) throw updErr;
