@@ -1351,9 +1351,9 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const monto = parseFloat(m.monto) || 0;
 
         // ACCOUNT BALANCES (ALWAYS PERPETUAL)
-        if (accounts[m.cuenta] !== undefined) accounts[m.cuenta] += monto;
+        if (accounts[m.cuenta] !== undefined && m.cuenta !== 'PROVEEDOR') accounts[m.cuenta] += monto;
         if (m.categoria === 'PAGO_CAROLINA') accounts.CAROLINA += Math.abs(monto);
-        else if (m.categoria === 'PAGO_PROVEEDOR') accounts.PROVEEDOR += Math.abs(monto);
+        // accounts.PROVEEDOR is already handled by vista_saldo_proveedor
 
         // DIVIDEND TOTALS (PERIOD-AWARE)
         if (isInPeriod(m.created_at)) {
