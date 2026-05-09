@@ -1179,18 +1179,16 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         return allData;
     }
 
-    const [sales, movements, purchasesRes, configRes, soldUnitsRes] = await Promise.all([
+    const [sales, movements, configRes, soldUnitsRes, supplierSaldoRes] = await Promise.all([
         fetchAll('ventas', 'created_at, total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
         fetchAll('movimientos_caja', 'monto, cuenta, categoria, tipo, persona, created_at'),
-        supabase.from('detalle_compras').select('costo_unitario, cantidad, compras(propietario)'),
         supabase.from('gastos_fijos_config').select('*').eq('activo', true),
-        supabase.from('unidades').select('variantes(costo_promedio)').gte('fecha_venta', startBoundary).lt('fecha_venta', endBoundary)
+        supabase.from('unidades').select('variantes(costo_promedio)').gte('fecha_venta', startBoundary).lt('fecha_venta', endBoundary),
+        supabase.from('vista_saldo_proveedor').select('*').single()
     ]);
 
-    const purchases = purchasesRes.data;
-
-    if (purchasesRes.error) {
-        throw new Error("Error fetching finance data");
+    if (supplierSaldoRes.error) {
+        console.warn("Could not fetch supplier balance view, defaulting to 0");
     }
 
     const accounts = {
@@ -1203,7 +1201,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         SOFI_NEXT_MONTH: 0,
         ONLINE_NEXT_MONTH: 0,
         CAROLINA: -13000000, 
-        PROVEEDOR: 0
+        PROVEEDOR: supplierSaldoRes.data?.saldo_total || 0
     };
 
     const billingByPerson = {};
@@ -1219,13 +1217,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
 
     const fixedConfigs = configRes.data || [];
 
-    // 1. Calculate Costs from Supplier Purchases (ALWAYS PERPETUAL for Accounts)
-    purchases?.forEach(p => {
-        if (p.compras?.propietario === 'Proveedor') {
-            const cost = (parseFloat(p.costo_unitario) || 0) * (p.cantidad || 0);
-            accounts.PROVEEDOR -= cost; 
-        }
-    });
+    // 1. Calculate Costs (Now handled by perpetual accounts.PROVEEDOR from view)
 
     // 2. Process Sales
     sales?.forEach(s => {
@@ -1269,33 +1261,30 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
             // Accreditation rules:
             // 1. Sofi account ALWAYS respects accreditation date.
             // 2. Tomi account respects accreditation ONLY for Online (Tiendanube) sales.
-            // 3. Lucas and regular Tomi sales are always considered instant.
+            // 3. Lucas, Supplier and regular Tomi sales are always considered instant.
             const isOnline = s.tipo === 'VENTA_ONLINE' || (s.medio_pago && s.medio_pago.toUpperCase().includes('TIENDANUBE'));
             const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && isOnline);
             
             const hasAccDate = !!s.fecha_acreditacion;
             let isAcredited = false;
             
-            if (hasAccDate) {
-                if (!needsAccreditationCheck) {
-                    isAcredited = true;
-                } else {
-                    // Robust date comparison: Use real Date objects to avoid string comparison issues
-                    const accDate = new Date(s.fecha_acreditacion);
-                    isAcredited = accDate <= now;
-                }
+            if (!needsAccreditationCheck) {
+                isAcredited = true; // Instant accounts
+            } else if (hasAccDate) {
+                const accDate = new Date(s.fecha_acreditacion);
+                isAcredited = accDate <= now;
             }
 
             if (isAcredited) {
                 if (target === 'SOFI_MP') {
                     accounts.SOFI_MP += other;
                 } else if (target === 'PROVEEDOR') {
-                    accounts.PROVEEDOR += other;
+                    // Already handled by vista_saldo_proveedor
                 } else if (accounts[target] !== undefined && target !== 'CAJA_LOCAL') {
                     accounts[target] += other;
                 }
             } else if (hasAccDate) {
-                // PENDING LOGIC (Only if it has a date, to match SQL query)
+                // PENDING LOGIC
                 const accDate = new Date(s.fecha_acreditacion);
                 const isCurrentMonth = accDate.getMonth() === currentMonth && accDate.getFullYear() === currentYear;
 
@@ -1307,13 +1296,8 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                     if (isCurrentMonth) accounts.ONLINE_PENDING += other;
                     else accounts.ONLINE_NEXT_MONTH += other;
                 } else if (isOnline) {
-                    // Fallback for other online sales
                     if (isCurrentMonth) accounts.ONLINE_PENDING += other;
                     else accounts.ONLINE_NEXT_MONTH += other;
-                } else if (target === 'LUCAS' || target === 'TOMI') {
-                    // These are usually instant, but if they have a future date...
-                    // We don't have specific buckets for them yet, so we count them as accredited or just ignore for now
-                    // but following the request, we want Sofi to be accurate.
                 }
             }
         }
