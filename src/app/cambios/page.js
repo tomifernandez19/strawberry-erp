@@ -78,7 +78,10 @@ export default function CambiosPage() {
 
     useEffect(() => {
         if (oldUnit && newUnit) {
-            const diff = (newUnit.variantes.precio_lista || 0) - (oldUnit.ventas?.total || 0)
+            const returnValue = oldUnit.ventas?.monto_neto != null 
+                ? Math.floor(oldUnit.ventas.monto_neto / 1000) * 1000 
+                : (oldUnit.ventas?.total || 0)
+            const diff = (newUnit.variantes.precio_lista || 0) - returnValue
             setManualDifference(diff > 0 ? diff : 0)
         } else {
             setManualDifference('')
@@ -122,7 +125,10 @@ export default function CambiosPage() {
         }
     }
 
-    const difference = (newUnit?.variantes.precio_lista || 0) - (oldUnit?.ventas?.total || 0)
+    const returnValue = oldUnit?.ventas?.monto_neto != null 
+        ? Math.floor(oldUnit.ventas.monto_neto / 1000) * 1000 
+        : (oldUnit?.ventas?.total || 0)
+    const difference = (newUnit?.variantes.precio_lista || 0) - returnValue
     const currentDiff = parseFloat(manualDifference) || 0
     const precioEfectivoDiff = Math.ceil((currentDiff * (100 / 121)) / 1000) * 1000
 
@@ -188,7 +194,7 @@ export default function CambiosPage() {
                         <div>
                             <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>PRODUCTO DEVUELTO:</p>
                             <h4 style={{ margin: 0 }}>{oldUnit.variantes.modelos.descripcion}</h4>
-                            <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Talle {oldUnit.talle_especifico} • Vendido a: <strong>${(oldUnit.ventas?.total || 0).toLocaleString()}</strong></p>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Talle {oldUnit.talle_especifico} • Crédito Devolución: <strong>${returnValue.toLocaleString()}</strong></p>
                         </div>
                         <button className="btn-secondary" onClick={() => setOldUnit(null)} style={{ padding: '8px 12px', fontSize: '0.7rem' }}>🔄 Cambiar</button>
                     </div>
