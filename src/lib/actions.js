@@ -2711,6 +2711,13 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
                 totalDiferencia = Number(monto_efectivo) + Number(monto_otro);
             }
 
+            let targetAccount = 'SOFI_MP';
+            const effectiveMP = medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : medio_pago;
+            if (['EFECTIVO'].includes(effectiveMP)) targetAccount = 'CAJA_LOCAL';
+            if (effectiveMP === 'TRANSFERENCIA_LUCAS') targetAccount = 'LUCAS';
+            if (effectiveMP === 'TRANSFERENCIA_TOMI') targetAccount = 'TOMI';
+            if (effectiveMP === 'TRANSFERENCIA_PROVEEDOR') targetAccount = 'PROVEEDOR';
+
             const { data: venta, error: vErr } = await supabase
                 .from('ventas')
                 .insert([{
@@ -2724,7 +2731,8 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
                     facturado: medio_pago === 'EFECTIVO' || (medio_pago === 'DIVIDIR_PAGOS' && Number(monto_otro) === 0),
                     nombre_cliente: customerData.nombre || null,
                     telefono_cliente: customerData.telefono || null,
-                    email_cliente: customerData.email || null
+                    email_cliente: customerData.email || null,
+                    cuenta_destino: targetAccount
                 }])
                 .select()
                 .single();

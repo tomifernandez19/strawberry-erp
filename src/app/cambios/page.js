@@ -271,7 +271,9 @@ export default function CambiosPage() {
                             <label style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '5px', display: 'block' }}>Medio de pago para la diferencia:</label>
                             <select value={medioPago} onChange={(e) => setMedioPago(e.target.value)} className="input-field">
                                 <option value="EFECTIVO">Efectivo (Con Descuento) 💵</option>
-                                <option value="TRANSFERENCIA">Transferencia 📱</option>
+                                <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
+                                <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
+                                <option value="TRANSFERENCIA_PROVEEDOR">Transferencia Proveedor 📱</option>
                                 <option value="TARJETA_DEBITO">Tarjeta Débito 💳</option>
                                 <option value="TARJETA_CREDITO">Tarjeta Crédito 💳</option>
                                 <option value="DIVIDIR_PAGOS">Dividir Pago ⚖️</option>
@@ -313,6 +315,7 @@ export default function CambiosPage() {
                                                 <option value="TARJETA_DEBITO">Débito</option>
                                                 <option value="TARJETA_CREDITO">Crédito</option>
                                                 <option value="TRANSFERENCIA">Transf.</option>
+                                                <option value="TRANSFERENCIA_PROVEEDOR">Transf. Prov.</option>
                                                 <option value="QR">QR</option>
                                             </select>
                                             <input type="number" value={montoOtro} readOnly className="input-field" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', color: 'var(--accent)', fontWeight: 'bold' }} />
