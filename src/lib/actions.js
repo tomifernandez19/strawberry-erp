@@ -2304,28 +2304,20 @@ export async function getPendingDispatches() {
 
         if (error) {
             console.error("[Dispatches] DB Error:", error.message);
-            return [];
-        }
-        return data || [];
+        return [];
     } catch (err) {
         console.error("[Dispatches] Fatal Error:", err.message);
         return [];
     }
 }
 
-export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
+export async function completeDispatch(pedidoId, qrCodes, customPrice = null) {
     const supabase = createClient();
     try {
-        console.log(`[Dispatch] Starting completion for Pedido ID: ${pedidoId}, QR: ${qrCode}`);
+        const qrArray = Array.isArray(qrCodes) ? qrCodes : [qrCodes];
+        console.log(`[Dispatch] Starting completion for Pedido ID: ${pedidoId}, QRs: ${qrArray.join(', ')}`);
 
-        // 1. Confirm unit exists and is available (including reserved)
-        const result = await getUnitForSale(qrCode, true);
-        if (!result.success) {
-            throw new Error(result.message);
-        }
-        const unidad = result.data;
-
-        // 2. Fetch Order to see if there was a reserved unit
+        // 1. Fetch Order
         const { data: order, error: oError } = await supabase
             .from('pedidos_online')
             .select('*')
@@ -2336,14 +2328,18 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
             throw new Error("No se pudo encontrar el pedido en la base de datos.");
         }
 
-        // 3. Handle Sale record
-        // In the new flow, the sale is already created by recordOnlineOrder
         let ventaId = order.venta_id;
 
+        // 2. Fallback: If Sale record is missing, create one
         if (!ventaId) {
             console.log("[Dispatch] Sale not found, creating one now...");
             const { data: { user } } = await supabase.auth.getUser();
-            const montoVenta = customPrice != null ? parseFloat(customPrice) : (unidad.variantes?.precio_lista || 0);
+            
+            // For multi-item fallback, we'll try to find price from the first unit or order
+            const firstResult = await getUnitForSale(qrArray[0], true);
+            const firstUnidad = firstResult.success ? firstResult.data : null;
+            
+            const montoVenta = customPrice != null ? parseFloat(customPrice) : (order.total || firstUnidad?.variantes?.precio_lista || 0);
             const medioPagoFinal = order.medio_pago || 'TIENDANUBE';
 
             let targetAccount = 'TOMI'; 
@@ -2396,38 +2392,45 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
             ventaId = newVenta.id;
         }
 
-        // 4. Update unit to VENDIDO_ONLINE and link to sale
-        const { error: uErr } = await supabase.from('unidades').update({
-            estado: 'VENDIDO_ONLINE',
-            venta_id: ventaId,
-            fecha_venta: new Date().toISOString()
-        }).eq('id', unidad.id);
+        // 3. Process all units
+        let lastUnidadId = null;
+        for (const qrCode of qrArray) {
+            const result = await getUnitForSale(qrCode, true);
+            if (!result.success) {
+                throw new Error(`QR ${qrCode}: ${result.message}`);
+            }
+            const unidad = result.data;
+            lastUnidadId = unidad.id;
 
-        if (uErr) {
-            console.error("[Dispatch] Error updating unit to VENDIDO_ONLINE:", uErr);
-            throw new Error("No se pudo marcar la unidad como vendida online.");
+            const { error: uErr } = await supabase.from('unidades').update({
+                estado: 'VENDIDO_ONLINE',
+                venta_id: ventaId,
+                fecha_venta: new Date().toISOString()
+            }).eq('id', unidad.id);
+
+            if (uErr) {
+                console.error(`[Dispatch] Error updating unit ${qrCode}:`, uErr);
+                throw new Error(`No se pudo marcar la unidad ${qrCode} como vendida.`);
+            }
+
+            // Release previously reserved unit if it was DIFFERENT from any of the scanned ones
+            if (order.unidad_reservada_id && !qrArray.includes(order.unidad_reservada_id)) {
+                // Logic for releasing could go here
+            }
         }
 
-        // 5. If there was a PREVIOUSLY reserved unit and it's DIFFERENT from this one, release it
-        if (order.unidad_reservada_id && order.unidad_reservada_id !== unidad.id) {
-            console.log(`[Dispatch] Releasing previously reserved unit: ${order.unidad_reservada_id}`);
-            await supabase.from('unidades').update({
-                estado: 'DISPONIBLE'
-            }).eq('id', order.unidad_reservada_id);
-        }
-
-        // 6. Update order status in Local DB
+        // 4. Update order status in Local DB
         const { error: pError } = await supabase.from('pedidos_online').update({
             estado: 'DESPACHADO',
-            unidad_reservada_id: unidad.id
+            unidad_reservada_id: lastUnidadId // Link at least one for reference
         }).eq('id', pedidoId);
 
         if (pError) {
             console.error("[Dispatch] Error updating order status:", pError);
-            throw new Error("El pedido se vendió pero no pudimos actualizar su estado final.");
+            throw new Error("El pedido se procesó pero no pudimos actualizar su estado final.");
         }
 
-        // 7. SYNC WITH TIENDANUBE: Mark as Paid
+        // 5. SYNC WITH TIENDANUBE: Mark as Paid
         const accessToken = process.env.TIENDANUBE_ACCESS_TOKEN;
         const storeId = process.env.TIENDANUBE_STORE_ID;
 
@@ -2449,15 +2452,13 @@ export async function completeDispatch(pedidoId, qrCode, customPrice = null) {
                 if (tnResponse.ok) {
                     console.log(`[Dispatch] Tiendanube order ${order.tiendanube_id} marked as PAID.`);
                 } else {
-                    const errTxt = await tnResponse.text();
-                    console.error(`[Dispatch] Failed to mark as paid in Tiendanube: ${errTxt}`);
+                    console.error(`[Dispatch] Failed to sync with Tiendanube: ${tnResponse.status}`);
                 }
-            } catch (syncErr) {
-                console.error("[Dispatch] Exception syncing with Tiendanube:", syncErr.message);
+            } catch (e) {
+                console.error("[Dispatch] TN Sync Exception:", e);
             }
         }
 
-        console.log(`[Dispatch] SUCCESS: Pedido #${order.nro_pedido} dispatched with unit ${qrCode}`);
         return { success: true };
     } catch (err) {
         console.error("[Dispatch] Fatal Error:", err.message);

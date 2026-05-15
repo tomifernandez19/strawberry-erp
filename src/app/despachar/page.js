@@ -11,10 +11,16 @@ export default function DespacharPage() {
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [scanning, setScanning] = useState(false)
     const [error, setError] = useState('')
+    const [scannedUnits, setScannedUnits] = useState([])
 
     useEffect(() => {
         loadOrders()
     }, [])
+
+    useEffect(() => {
+        // Reset scanned units when selected order changes
+        setScannedUnits([])
+    }, [selectedOrder])
 
     async function loadOrders() {
         setLoading(true)
@@ -29,7 +35,14 @@ export default function DespacharPage() {
 
         setScanning(false)
         setError('')
+        
         try {
+            // Check if already scanned
+            if (scannedUnits.find(u => u.codigo_qr === cleanQr)) {
+                setError('Este par ya fue escaneado para este pedido.')
+                return
+            }
+
             // 1. Show preview of unit scanned (Include Reserved ones!)
             const result = await getUnitForSale(cleanQr, true)
 
@@ -42,39 +55,53 @@ export default function DespacharPage() {
             const modelName = unit.variantes?.modelos?.descripcion || 'Modelo desconocido'
             const color = unit.variantes?.color || 'Color desconocido'
             const size = unit.talle_especifico || '?'
-            const listPrice = unit.variantes?.precio_lista || 0
 
-            // 2. Confirm if user wants to use THIS unit for THIS order
-            const confirmMsg = `¿Desea despachar el pedido #${selectedOrder.nro_pedido} con el producto ${modelName} (${color} Talle ${size})?`
-
-            if (confirm(confirmMsg)) {
-                // 3. Optional: Ask for Price
-                let finalPrice = listPrice
-                const priceInput = prompt(`Confirmar precio de venta (Precio de lista: $${listPrice}):`, listPrice)
-
-                if (priceInput !== null) {
-                    finalPrice = parseFloat(priceInput) || listPrice
-                } else {
-                    return // Cancel dispatch if prompt cancelled
-                }
-
-                const completeResult = await completeDispatch(selectedOrder.id, qrCode, finalPrice)
-
-                if (completeResult.success) {
-                    alert('✅ Pedido despachado con éxito')
-                    setSelectedOrder(null)
-                    loadOrders()
-                } else {
-                    setError(completeResult.message || 'Error desconocido al procesar el despacho.')
-                }
-            }
+            // 2. Add to scanned list
+            setScannedUnits([...scannedUnits, unit])
         } catch (err) {
             console.error(err)
             setError(err.message || 'Error inesperado durante el despacho.')
         }
     }
 
-    if (loading) return <div className="text-center mt-xl">Cargando pedidos...</div>
+    const handleFinalizeDispatch = async () => {
+        if (!selectedOrder || scannedUnits.length === 0) return
+
+        if (scannedUnits.length < totalExpectedUnits) {
+            if (!confirm(`⚠️ Atención: Solo has escaneado ${scannedUnits.length} de ${totalExpectedUnits} productos. ¿Estás seguro de que quieres finalizar el despacho?`)) {
+                return
+            }
+        }
+
+        try {
+            setLoading(true)
+            const qrCodes = scannedUnits.map(u => u.codigo_qr)
+            const completeResult = await completeDispatch(selectedOrder.id, qrCodes)
+
+            if (completeResult.success) {
+                alert('✅ Pedido despachado con éxito')
+                setSelectedOrder(null)
+                setScannedUnits([])
+                loadOrders()
+            } else {
+                setError(completeResult.message || 'Error al procesar el despacho.')
+            }
+        } catch (err) {
+            setError(err.message || 'Error inesperado.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const removeScannedUnit = (index) => {
+        const newUnits = [...scannedUnits]
+        newUnits.splice(index, 1)
+        setScannedUnits(newUnits)
+    }
+
+    if (loading && !selectedOrder) return <div className="text-center mt-xl">Cargando pedidos...</div>
+
+    const totalExpectedUnits = selectedOrder?.items_raw?.reduce((acc, item) => acc + (item.quantity || 1), 0) || 0
 
     return (
         <div className="grid mt-lg">
@@ -83,7 +110,7 @@ export default function DespacharPage() {
                 <p style={{ opacity: 0.7 }}>Control de salidas Tiendanube</p>
             </header>
 
-            {error && <div className="card text-center" style={{ color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)' }}>{error}</div>}
+            {error && <div className="card text-center" style={{ color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', marginBottom: '20px' }}>{error}</div>}
 
             {selectedOrder ? (
                 <div className="grid">
@@ -95,21 +122,62 @@ export default function DespacharPage() {
                         <p style={{ opacity: 0.7, fontSize: '0.9rem', marginTop: '5px' }}>Cliente: {selectedOrder.cliente_nombre}</p>
 
                         <div className="mt-lg">
-                            <h4 style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '10px' }}>PRODUCTOS SOLICITADOS:</h4>
-                            {selectedOrder.items_raw.map((item, i) => (
-                                <div key={i} className="card mt-xs" style={{ padding: '10px', backgroundColor: 'var(--secondary)' }}>
-                                    <p style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</p>
-                                    <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.variant_values.join(' • ')}</p>
-                                </div>
-                            ))}
+                            <h4 style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '10px' }}>PRODUCTOS SOLICITADOS ({totalExpectedUnits}):</h4>
+                            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+                                {selectedOrder.items_raw.map((item, i) => (
+                                    <div key={i} className="card" style={{ padding: '10px', backgroundColor: 'var(--secondary)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <p style={{ fontWeight: 'bold', fontSize: '0.9rem', margin: 0 }}>{item.name.split('(')[0].trim()}</p>
+                                            {item.quantity > 1 && <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>x{item.quantity}</span>}
+                                        </div>
+                                        <p style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '4px' }}>{item.variant_values.join(' • ')}</p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
-                        <div className="mt-xl text-center">
-                            <p style={{ marginBottom: '15px', fontSize: '0.9rem' }}>Para completar el despacho, escanee el QR del par que va a enviar:</p>
-                            {!scanning ? (
-                                <button className="btn-primary btn-large" onClick={() => setScanning(true)}>📷 Escanear QR del Par</button>
+                        <div className="mt-xl">
+                            <h4 style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '10px' }}>PRODUCTOS ESCANEADOS ({scannedUnits.length}):</h4>
+                            {scannedUnits.length === 0 ? (
+                                <p style={{ fontSize: '0.9rem', opacity: 0.5, fontStyle: 'italic' }}>Ningún producto escaneado todavía.</p>
                             ) : (
-                                <div className="card">
+                                <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+                                    {scannedUnits.map((unit, i) => (
+                                        <div key={i} className="card" style={{ padding: '10px', border: '1px solid var(--accent)', position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <p style={{ fontWeight: 'bold', fontSize: '0.9rem', margin: 0 }}>{unit.variantes?.modelos?.descripcion}</p>
+                                                <p style={{ fontSize: '0.7rem', opacity: 0.7 }}>{unit.variantes?.color} • Talle {unit.talle_especifico}</p>
+                                                <p style={{ fontSize: '0.6rem', color: 'var(--accent)', marginTop: '2px' }}>{unit.codigo_qr}</p>
+                                            </div>
+                                            <button onClick={() => removeScannedUnit(i)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-xl text-center" style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
+                            {!scanning ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+                                    {scannedUnits.length < totalExpectedUnits ? (
+                                        <button className="btn-primary btn-large" onClick={() => setScanning(true)}>📷 Escanear Próximo Producto</button>
+                                    ) : (
+                                        <p style={{ color: '#4ade80', fontWeight: 'bold', marginBottom: '10px' }}>✅ Todos los productos escaneados</p>
+                                    )}
+                                    
+                                    {scannedUnits.length > 0 && (
+                                        <button 
+                                            className="btn-primary" 
+                                            style={{ backgroundColor: scannedUnits.length === totalExpectedUnits ? '#4ade80' : 'var(--accent)', padding: '15px 40px', fontSize: '1.1rem', marginTop: '10px' }}
+                                            onClick={handleFinalizeDispatch}
+                                            disabled={loading}
+                                        >
+                                            {loading ? 'Procesando...' : `Finalizar Despacho (${scannedUnits.length}/${totalExpectedUnits})`}
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="card" style={{ maxWidth: '400px', margin: '0 auto' }}>
                                     <QRScanner onScanSuccess={handleScanComplete} label="Escaneando para despacho..." />
                                     <button className="btn-secondary mt-md" onClick={() => setScanning(false)}>Cancelar Escaneo</button>
                                 </div>
@@ -117,6 +185,7 @@ export default function DespacharPage() {
                         </div>
                     </section>
                 </div>
+
             ) : (
                 <div className="grid mt-md">
                     {orders.length === 0 ? (
