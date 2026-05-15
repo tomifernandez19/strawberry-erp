@@ -2304,7 +2304,9 @@ export async function getPendingDispatches() {
 
         if (error) {
             console.error("[Dispatches] DB Error:", error.message);
-        return [];
+            return [];
+        }
+        return data || [];
     } catch (err) {
         console.error("[Dispatches] Fatal Error:", err.message);
         return [];
