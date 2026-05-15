@@ -2743,14 +2743,15 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
             ventaId = venta.id;
         }
 
-        // 3. Update new unit status to SOLD and inherit old sale_id
-        const { data: oldUnitData } = await supabase.from('unidades').select('venta_id').eq('id', oldUnitId).single();
+        // 3. Update new unit status to SOLD and inherit old sale_id and fecha_venta
+        const { data: oldUnitData } = await supabase.from('unidades').select('venta_id, fecha_venta').eq('id', oldUnitId).single();
         const finalVentaId = oldUnitData?.venta_id;
+        const originalFechaVenta = oldUnitData?.fecha_venta;
 
         const { error: newErr } = await supabase.from('unidades').update({
             estado: 'VENDIDO',
             venta_id: finalVentaId,
-            fecha_venta: new Date().toISOString()
+            fecha_venta: originalFechaVenta || new Date().toISOString()
         }).eq('id', newUnit.id);
         if (newErr) throw newErr;
 
