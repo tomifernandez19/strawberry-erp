@@ -555,10 +555,10 @@ export async function getExtendedStats() {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico,
-            ventas (id, total, medio_pago, monto_neto, monto_efectivo, monto_otro, user_id, profiles (nombre)),
+            ventas (id, total, tipo, medio_pago, monto_neto, monto_efectivo, monto_otro, user_id, profiles (nombre)),
             variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
-        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
+        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE', 'RESERVADO_ONLINE'])
         .gte('fecha_venta', startOfMonthIso)
         .order('fecha_venta', { ascending: false });
 
@@ -594,17 +594,28 @@ export async function getExtendedStats() {
         const saleDate = new Date(unit.fecha_venta);
         const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
+        const isSena = unit.ventas?.tipo === 'SENA';
         const rawNeto = unit.ventas?.monto_neto;
-        let neto = rawNeto != null ? parseFloat(rawNeto) : total;
 
-        // Heuristic: If it's DIVIDIR_PAGOS and neto is less than or eq to the card portion, it's likely just the card net.
-        // We restore the total net by adding the cash portion.
-        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
+        // For señas, only count what was actually received (seña amount), not the full total.
+        let effectiveTotal = total;
+        let neto;
+        if (isSena) {
             const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
-            const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
-            const currentNeto = parseFloat(rawNeto);
-            if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
-                neto += efe;
+            const otro = parseFloat(unit.ventas?.monto_otro) || 0;
+            effectiveTotal = efe + otro;
+            neto = effectiveTotal;
+        } else {
+            neto = rawNeto != null ? parseFloat(rawNeto) : total;
+            // Heuristic: If it's DIVIDIR_PAGOS and neto is less than or eq to the card portion, it's likely just the card net.
+            // We restore the total net by adding the cash portion.
+            if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
+                const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
+                const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
+                const currentNeto = parseFloat(rawNeto);
+                if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
+                    neto += efe;
+                }
             }
         }
 
@@ -617,11 +628,11 @@ export async function getExtendedStats() {
                 ? (unit.variantes?.precio_efectivo || 1)
                 : (unit.variantes?.precio_lista || 1);
             const weight = basePrice / saleBaseTotals[vId];
-            perUnitTotal = total * weight;
+            perUnitTotal = effectiveTotal * weight;
             perUnitNeto = neto * weight;
         } else {
             const siblingsCount = unitsSold.filter(u => u.ventas?.id === vId).length || 1;
-            perUnitTotal = total / siblingsCount;
+            perUnitTotal = effectiveTotal / siblingsCount;
             perUnitNeto = neto / siblingsCount;
         }
 
@@ -635,6 +646,7 @@ export async function getExtendedStats() {
             precio: perUnitTotal,
             neto: perUnitNeto,
             medio_pago: unit.ventas?.medio_pago,
+            tipo_venta: unit.ventas?.tipo,
             vendedor: unit.ventas?.profiles?.nombre || unit.ventas?.user_id
         };
 
@@ -661,6 +673,9 @@ export async function getExtendedStats() {
         const orphaned = allSales.filter(s => !linkedVentaIds.has(s.id));
 
         orphaned.forEach(sale => {
+            // Skip SENA orphaned sales - they are already handled via units (RESERVADO_ONLINE state)
+            if (sale.tipo === 'SENA') return;
+
             const saleDate = new Date(sale.created_at);
             const total = parseFloat(sale.total) || 0;
             const neto = sale.monto_neto != null ? parseFloat(sale.monto_neto) : total;
@@ -675,6 +690,7 @@ export async function getExtendedStats() {
                 precio: total,
                 neto: neto,
                 medio_pago: sale.medio_pago,
+                tipo_venta: sale.tipo,
                 vendedor: sale.profiles?.nombre || sale.user_id
             };
 
@@ -905,10 +921,10 @@ export async function getDailySummary(onlyUserId = null) {
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico, codigo_qr,
-            ventas (id, total, medio_pago, user_id, monto_efectivo, monto_neto, monto_otro, profiles (nombre)),
+            ventas (id, total, tipo, medio_pago, user_id, monto_efectivo, monto_neto, monto_otro, profiles (nombre)),
             variantes (color, precio_lista, precio_efectivo, modelos (descripcion, codigo_proveedor))
         `)
-        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
+        .in('estado', ['VENDIDO', 'VENDIDO_ONLINE', 'RESERVADO_ONLINE'])
         .gte('fecha_venta', todayIso)
         .order('fecha_venta', { ascending: false });
 
@@ -966,15 +982,27 @@ export async function getDailySummary(onlyUserId = null) {
     const allItems = unitsSold.map(unit => {
         const vId = unit.ventas?.id;
         const total = parseFloat(unit.ventas?.total) || 0;
+        const isSena = unit.ventas?.tipo === 'SENA';
         const rawNeto = unit.ventas?.monto_neto;
-        let neto = rawNeto != null ? parseFloat(rawNeto) : total;
 
-        if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
+        // For señas (deposits), only count what was actually received today:
+        // monto_efectivo + monto_otro. The remainder will be counted when the sale is completed.
+        let effectiveTotal = total;
+        let neto;
+        if (isSena) {
             const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
-            const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
-            const currentNeto = parseFloat(rawNeto);
-            if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
-                neto += efe;
+            const otro = parseFloat(unit.ventas?.monto_otro) || 0;
+            effectiveTotal = efe + otro;
+            neto = effectiveTotal;
+        } else {
+            neto = rawNeto != null ? parseFloat(rawNeto) : total;
+            if (unit.ventas?.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
+                const efe = parseFloat(unit.ventas?.monto_efectivo) || 0;
+                const cardGross = parseFloat(unit.ventas?.monto_otro) || 0;
+                const currentNeto = parseFloat(rawNeto);
+                if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
+                    neto += efe;
+                }
             }
         }
 
@@ -987,11 +1015,11 @@ export async function getDailySummary(onlyUserId = null) {
                 ? (unit.variantes?.precio_efectivo || 1)
                 : (unit.variantes?.precio_lista || 1);
             const weight = basePrice / saleBaseTotals[vId];
-            perUnitTotal = total * weight;
+            perUnitTotal = effectiveTotal * weight;
             perUnitNeto = neto * weight;
         } else {
             const siblingsCount = unitsSold.filter(u => u.ventas?.id === vId).length || 1;
-            perUnitTotal = total / siblingsCount;
+            perUnitTotal = effectiveTotal / siblingsCount;
             perUnitNeto = neto / siblingsCount;
         }
 
@@ -1006,6 +1034,7 @@ export async function getDailySummary(onlyUserId = null) {
             precio: perUnitTotal,
             neto: perUnitNeto,
             medio_pago: unit.ventas?.medio_pago,
+            tipo_venta: unit.ventas?.tipo,
             monto_efectivo: parseFloat(unit.ventas?.monto_efectivo) || 0,
             vendedor: unit.ventas?.user_id,
             vendedor_nombre: unit.ventas?.profiles?.nombre || 'S/D'
@@ -1017,6 +1046,9 @@ export async function getDailySummary(onlyUserId = null) {
     const orphanedSales = (salesToday || []).filter(s => !linkedVentaIds.has(s.id));
 
     orphanedSales.forEach(sale => {
+        // Skip SENA orphaned sales - they are already handled via units (RESERVADO_ONLINE state)
+        if (sale.tipo === 'SENA') return;
+
         const total = parseFloat(sale.total) || 0;
         const neto = sale.monto_neto != null ? parseFloat(sale.monto_neto) : total;
 
@@ -1030,6 +1062,7 @@ export async function getDailySummary(onlyUserId = null) {
             precio: total,
             neto: neto,
             medio_pago: sale.medio_pago,
+            tipo_venta: sale.tipo,
             vendedor: sale.user_id,
             vendedor_nombre: sale.profiles?.nombre || 'S/D'
         });
