@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { recordOnlineOrder } from '@/lib/actions';
+import { recordOnlineOrder, cancelOnlineOrder } from '@/lib/actions';
 
 export async function POST(req) {
     try {
@@ -10,6 +10,17 @@ export async function POST(req) {
         const event = body.event || headers['x-linkedstore-event'];
         console.log('Event:', event);
         console.log('Body:', JSON.stringify(body, null, 2));
+
+        // Handle order cancellation
+        if (event === 'order/cancelled') {
+            const orderId = body.id;
+            if (!orderId) {
+                console.warn('order/cancelled event missing order id');
+                return NextResponse.json({ status: 'ok' });
+            }
+            await cancelOnlineOrder(String(orderId));
+            return NextResponse.json({ status: 'ok' });
+        }
 
         // 1. Verify it's an order creation event
         if (event === 'order/created') {

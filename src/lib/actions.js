@@ -2326,6 +2326,128 @@ export async function recordOnlineOrder(orderData) {
     return pedido;
 }
 
+export async function cancelOnlineOrder(tiendanubeOrderId) {
+    const supabase = createClient();
+    const tnIdStr = String(tiendanubeOrderId);
+
+    console.log(`[Webhook] Cancelling Order ${tnIdStr}`);
+
+    try {
+        // 1. Find the online order
+        const { data: order, error: oErr } = await supabase
+            .from('pedidos_online')
+            .select('*')
+            .eq('tiendanube_id', tnIdStr)
+            .maybeSingle();
+
+        if (oErr) {
+            console.error(`[Webhook] Error fetching order ${tnIdStr}:`, oErr.message);
+            return { success: false, error: oErr.message };
+        }
+
+        if (!order) {
+            console.warn(`[Webhook] Order ${tnIdStr} not found in ERP`);
+            return { success: false, message: "Order not found in ERP" };
+        }
+
+        if (order.estado === 'CANCELADO') {
+            console.log(`[Webhook] Order ${tnIdStr} is already CANCELADO`);
+            return { success: true, message: "Order already cancelled" };
+        }
+
+        // 2. Identify and retrieve the venta_id to delete the sale
+        let ventaId = null;
+
+        // Try getting it from the reserved unit
+        if (order.unidad_reservada_id) {
+            const { data: unit, error: uErr } = await supabase
+                .from('unidades')
+                .select('venta_id')
+                .eq('id', order.unidad_reservada_id)
+                .maybeSingle();
+
+            if (!uErr && unit?.venta_id) {
+                ventaId = unit.venta_id;
+            }
+        }
+
+        // If not found via reserved unit, try finding the sale via matching details
+        if (!ventaId) {
+            const { data: matchedVenta } = await supabase
+                .from('ventas')
+                .select('id')
+                .eq('nombre_cliente', order.cliente_nombre)
+                .eq('tipo', 'VENTA_ONLINE')
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (matchedVenta && matchedVenta.length > 0) {
+                ventaId = matchedVenta[0].id;
+                console.log(`[Webhook] Matched orphaned sale ID ${ventaId} for order #${order.nro_pedido}`);
+            }
+        }
+
+        // 3. Delete the sale (this releases all associated units to DISPONIBLE and auto-syncs TN)
+        if (ventaId) {
+            console.log(`[Webhook] Deleting sale ${ventaId} for order #${order.nro_pedido}`);
+            const delRes = await deleteSale(ventaId);
+            if (!delRes.success) {
+                console.error(`[Webhook] Failed to delete sale ${ventaId}:`, delRes.message);
+            }
+        }
+
+        // 4. Safety backup: If deleteSale didn't run or if unit was still reserved, release it manually
+        if (order.unidad_reservada_id) {
+            // Get model_id for sync before releasing
+            const { data: unitInfo } = await supabase
+                .from('unidades')
+                .select('variantes(modelo_id)')
+                .eq('id', order.unidad_reservada_id)
+                .single();
+
+            const { error: relErr } = await supabase
+                .from('unidades')
+                .update({
+                    estado: 'DISPONIBLE',
+                    venta_id: null,
+                    fecha_venta: null
+                })
+                .eq('id', order.unidad_reservada_id);
+
+            if (relErr) {
+                console.error(`[Webhook] Error manually releasing unit ${order.unidad_reservada_id}:`, relErr.message);
+            } else {
+                console.log(`[Webhook] Manually released unit ${order.unidad_reservada_id} to DISPONIBLE`);
+                // Trigger auto-sync if we have model ID
+                if (unitInfo?.variantes?.modelo_id) {
+                    await syncProductToTiendanube(unitInfo.variantes.modelo_id);
+                }
+            }
+        }
+
+        // 5. Update order status in Local DB
+        const { error: pError } = await supabase
+            .from('pedidos_online')
+            .update({
+                estado: 'CANCELADO',
+                unidad_reservada_id: null
+            })
+            .eq('id', order.id);
+
+        if (pError) {
+            console.error(`[Webhook] Error updating order ${order.nro_pedido} status to CANCELADO:`, pError.message);
+            throw pError;
+        }
+
+        console.log(`[Webhook] Order #${order.nro_pedido} successfully CANCELLED and units released`);
+        return { success: true };
+    } catch (err) {
+        console.error(`[Webhook] cancelOnlineOrder Exception:`, err.message);
+        return { success: false, error: err.message };
+    }
+}
+
+
 export async function getPendingDispatches() {
     const supabase = createClient();
     try {
@@ -2364,6 +2486,18 @@ export async function completeDispatch(pedidoId, qrCodes, customPrice = null) {
         }
 
         let ventaId = order.venta_id;
+
+        // If order.venta_id is not a column (or is null), try to get it from the reserved unit
+        if (!ventaId && order.unidad_reservada_id) {
+            const { data: resUnit } = await supabase
+                .from('unidades')
+                .select('venta_id')
+                .eq('id', order.unidad_reservada_id)
+                .maybeSingle();
+            if (resUnit?.venta_id) {
+                ventaId = resUnit.venta_id;
+            }
+        }
 
         // 2. Fallback: If Sale record is missing, create one
         if (!ventaId) {
