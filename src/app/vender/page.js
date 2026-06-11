@@ -68,6 +68,10 @@ export default function VenderPage() {
         } else if (activeMethod === 'QR_LISTA') {
             setDiasAcreditacion(0)
             setMontoNeto('')
+        } else if (activeMethod === 'GOCUOTAS_TOMI') {
+            setDiasAcreditacion(22)
+            const calculated = (baseAmount * 0.909).toFixed(2)
+            setMontoNeto(calculated)
         } else {
             setMontoNeto('')
         }
@@ -394,6 +398,7 @@ export default function VenderPage() {
                                 <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
                                 <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
                                 <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
+                                <option value="GOCUOTAS_TOMI">GoCuotas (Tomi) 🟣</option>
                                 <option value="DIVIDIR_PAGOS">Dividir Pago (Efe + Otro) ⚖️</option>
                             </select>
                             {items.length > 1 && medioPago !== 'MAYORISTA_EFECTIVO' && (
@@ -403,9 +408,14 @@ export default function VenderPage() {
                             )}
                         </div>
 
-                        {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA'].includes(medioPago) && (
-                            <div className="card mt-md grid" style={{ gap: '10px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                                <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)', margin: 0 }}>Detalle de Cobro (Sofi):</p>
+                        {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA', 'GOCUOTAS_TOMI'].includes(medioPago) && (
+                            <div className="card mt-md grid" style={{ gap: '10px', background: medioPago === 'GOCUOTAS_TOMI' ? 'rgba(139, 92, 246, 0.05)' : 'rgba(59, 130, 246, 0.05)', border: medioPago === 'GOCUOTAS_TOMI' ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)', margin: 0 }}>
+                                    {medioPago === 'GOCUOTAS_TOMI' ? 'Detalle de Cobro GoCuotas (Tomi):' : 'Detalle de Cobro (Sofi):'}
+                                </p>
+                                {medioPago === 'GOCUOTAS_TOMI' && (
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.6, margin: 0 }}>Comisión GoCuotas: 9.1% — Acreditación en 22 días</p>
+                                )}
                                 <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                                     <div>
                                         <label style={{ fontSize: '0.7rem', opacity: 0.6 }}>Monto Neto ($):</label>
@@ -417,7 +427,7 @@ export default function VenderPage() {
                                             onChange={(e) => setMontoNeto(e.target.value)}
                                         />
                                         <p style={{ fontSize: '0.6rem', opacity: 0.4, marginTop: '2px' }}>
-                                            Estimado: ${(finalTotal * (medioPago === 'TARJETA_CREDITO' ? 0.7907716 : (medioPago === 'TARJETA_DEBITO' ? 0.962008 : 0.942))).toFixed(2)}
+                                            Estimado: ${(finalTotal * (medioPago === 'TARJETA_CREDITO' ? 0.7907716 : medioPago === 'TARJETA_DEBITO' ? 0.962008 : medioPago === 'GOCUOTAS_TOMI' ? 0.909 : 0.942)).toFixed(2)}
                                         </p>
                                     </div>
                                     <div>

@@ -397,6 +397,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     if (effectiveMP === 'TRANSFERENCIA_LUCAS') targetAccount = 'LUCAS';
     if (effectiveMP === 'TRANSFERENCIA_TOMI') targetAccount = 'TOMI';
     if (effectiveMP === 'TRANSFERENCIA_PROVEEDOR') targetAccount = 'PROVEEDOR';
+    if (effectiveMP === 'GOCUOTAS_TOMI') targetAccount = 'TOMI';
     // If it's something like 'TARJETA' or 'QR', it remains 'SOFI_MP'
 
     let fechaAcreditacion = new Date();
@@ -1285,6 +1286,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 else if (mpUpper === 'TRANSFERENCIA_LUCAS' || mpUpper === 'TRANSFERENCIA') target = 'LUCAS';
                 else if (mpUpper === 'TRANSFERENCIA_TOMI') target = 'TOMI';
                 else if (mpUpper === 'TRANSFERENCIA_PROVEEDOR') target = 'PROVEEDOR';
+                else if (mpUpper === 'GOCUOTAS_TOMI') target = 'TOMI';
                 else if (['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR', 'QR_LISTA'].includes(mpUpper)) {
                     target = 'SOFI_MP'; // Assume Sofi for these if unknown
                 }
@@ -1296,7 +1298,8 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
             // 2. Tomi account respects accreditation ONLY for Online (Tiendanube) sales.
             // 3. Lucas, Supplier and regular Tomi sales are always considered instant.
             const isOnline = s.tipo === 'VENTA_ONLINE' || (s.medio_pago && s.medio_pago.toUpperCase().includes('TIENDANUBE'));
-            const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && isOnline);
+            const isGoCuotas = (s.medio_pago || '').toUpperCase() === 'GOCUOTAS_TOMI';
+            const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && (isOnline || isGoCuotas));
             
             const hasAccDate = !!s.fecha_acreditacion;
             let isAcredited = false;
@@ -2887,6 +2890,7 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
             if (effectiveMP === 'TRANSFERENCIA_LUCAS') targetAccount = 'LUCAS';
             if (effectiveMP === 'TRANSFERENCIA_TOMI') targetAccount = 'TOMI';
             if (effectiveMP === 'TRANSFERENCIA_PROVEEDOR') targetAccount = 'PROVEEDOR';
+            if (effectiveMP === 'GOCUOTAS_TOMI') targetAccount = 'TOMI';
 
             const { data: venta, error: vErr } = await supabase
                 .from('ventas')
