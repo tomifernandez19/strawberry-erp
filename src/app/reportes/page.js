@@ -239,10 +239,18 @@ export default function ReportesPage() {
                                     <span style={{ fontSize: '0.8rem' }}>Tienda Nube • {nextMonthName}+ (Pendiente)</span>
                                     <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {(Number(accounts.ONLINE_NEXT_MONTH) || 0).toLocaleString()}</span>
                                 </div>
+                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '8px', marginTop: '5px', display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
+                                    <span style={{ fontSize: '0.8rem' }}>GoCuotas (Tomi) • {selectedMonthName} (Por Cobrar)</span>
+                                    <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {(Number(accounts.GOCUOTAS_PENDING) || 0).toLocaleString()}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.5 }}>
+                                    <span style={{ fontSize: '0.8rem' }}>GoCuotas (Tomi) • {nextMonthName}+ (Pendiente)</span>
+                                    <span style={{ fontWeight: 'bold', fontSize: '0.8rem' }}>$ {(Number(accounts.GOCUOTAS_NEXT_MONTH) || 0).toLocaleString()}</span>
+                                </div>
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', marginTop: '5px', display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ fontWeight: 'bold' }}>TOTAL LIQUIDEZ {selectedMonthName}</span>
                                     <span style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}>
-                                        $ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0) + Number(accounts.ONLINE_PENDING || 0)).toLocaleString()}
+                                        $ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0) + Number(accounts.ONLINE_PENDING || 0) + Number(accounts.GOCUOTAS_PENDING || 0)).toLocaleString()}
                                     </span>
                                 </div>
                             </div>
@@ -296,7 +304,7 @@ export default function ReportesPage() {
                                 <div className="mt-md" style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem' }}>
                                         <span>Total Efectivo + Bancos + Por Cobrar</span>
-                                        <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0) + Number(accounts.ONLINE_PENDING || 0)).toLocaleString()}</span>
+                                        <span style={{ fontWeight: 'bold' }}>$ {(Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0) + Number(accounts.ONLINE_PENDING || 0) + Number(accounts.GOCUOTAS_PENDING || 0)).toLocaleString()}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '0.9rem', color: '#ef4444' }}>
                                         <span title="Incluye alquiler, sueldos fijos y el gasto mensual de Carolina configurado.">(-) Gastos Fijos Pendientes {isAnnual ? 'del Año' : 'del Mes'}</span>
@@ -306,11 +314,11 @@ export default function ReportesPage() {
                                         <span title="Es la plata que deberíamos pagar a proveedores para reponer los pares que vendimos en este periodo.">(-) Reserva Sugerida para Proveedores (CMV)</span>
                                         <span style={{ fontWeight: 'bold' }}>- $ {(Math.max(0, Number(dividendTotals.supplierReserve))).toLocaleString()}</span>
                                     </div>
-                                    
+
                                     <div style={{ borderTop: '1px solid rgba(16, 185, 129, 0.2)', paddingTop: '15px', textAlign: 'center' }}>
                                         <p style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '5px', textTransform: 'uppercase', color: '#10b981', fontWeight: 'bold' }}>Sueldo Líquido Sugerido ({isAnnual ? 'Acumulado Año' : 'Hoy'})</p>
                                         <h2 style={{ margin: 0, color: '#10b981' }}>
-                                            $ {Math.max(0, Math.floor(((Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0) + Number(accounts.ONLINE_PENDING || 0)) - (Number(dividendTotals.pendingProvisions) || 0) - (Math.max(0, Number(dividendTotals.supplierReserve)))) / 3)).toLocaleString()}
+                                            $ {Math.max(0, Math.floor(((Number(accounts.CAJA_LOCAL || 0) + Number(accounts.SOFI_MP || 0) + Number(accounts.TOMI || 0) + Number(accounts.LUCAS || 0) + Number(accounts.SOFI_PENDING || 0) + Number(accounts.ONLINE_PENDING || 0) + Number(accounts.GOCUOTAS_PENDING || 0)) - (Number(dividendTotals.pendingProvisions) || 0) - (Math.max(0, Number(dividendTotals.supplierReserve)))) / 3)).toLocaleString()}
                                         </h2>
                                         <p style={{ fontSize: '0.65rem', opacity: 0.6, marginTop: '10px', lineHeight: '1.4' }}>
                                             💡 <b>Recomendación de Pago:</b> Para mantener el stock sano, {isAnnual ? 'en el año' : 'este mes'} deberías pagarles a los proveedores <b>$ {(Math.max(0, Number(dividendTotals.supplierReserve))).toLocaleString()}</b>. <br/>

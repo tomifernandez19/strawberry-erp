@@ -1230,11 +1230,13 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         SOFI_MP: 0,
         SOFI_PENDING: 0,
         ONLINE_PENDING: 0,
+        GOCUOTAS_PENDING: 0,
+        GOCUOTAS_NEXT_MONTH: 0,
         TOMI: 0,
         LUCAS: 0,
         SOFI_NEXT_MONTH: 0,
         ONLINE_NEXT_MONTH: 0,
-        CAROLINA: -13000000, 
+        CAROLINA: -13000000,
         PROVEEDOR: supplierSaldoRes.data?.saldo_total || 0
     };
 
@@ -1328,6 +1330,9 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 if (target === 'SOFI_MP') {
                     if (isCurrentMonth) accounts.SOFI_PENDING += other;
                     else accounts.SOFI_NEXT_MONTH += other;
+                } else if (isGoCuotas) {
+                    if (isCurrentMonth) accounts.GOCUOTAS_PENDING += other;
+                    else accounts.GOCUOTAS_NEXT_MONTH += other;
                 } else if (target === 'TOMI' && isOnline) {
                     if (isCurrentMonth) accounts.ONLINE_PENDING += other;
                     else accounts.ONLINE_NEXT_MONTH += other;
