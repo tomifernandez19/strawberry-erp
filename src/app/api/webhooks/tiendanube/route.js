@@ -50,19 +50,34 @@ export async function POST(req) {
             const orderData = await response.json();
 
             // 3. Process the order in our ERP
+            console.log('[Webhook] Payment details:', JSON.stringify({
+                gateway: orderData.gateway,
+                payment_details: orderData.payment_details,
+                total: orderData.total,
+                shipping_cost_owner: orderData.shipping_cost_owner,
+                shipping_cost_customer: orderData.shipping_cost_customer,
+            }));
+
             const internalOrder = {
                 id: orderData.id,
                 number: orderData.number,
                 customer: {
                     name: orderData.customer?.name || 'Cliente Online',
-                    email: orderData.customer?.email
+                    email: orderData.customer?.email,
+                    phone: orderData.customer?.phone
                 },
                 products: orderData.products.map(p => ({
                     name: p.name,
-                    variant_values: p.variant_values, // e.g. ["Blanco", "38"]
+                    variant_values: p.variant_values,
                     sku: p.sku,
                     price: p.price
-                }))
+                })),
+                // Payment & pricing fields
+                gateway: orderData.gateway,
+                payment_details: orderData.payment_details,
+                total: orderData.total,
+                shipping_cost_owner: orderData.shipping_cost_owner,
+                shipping_cost_customer: orderData.shipping_cost_customer,
             };
 
             await recordOnlineOrder(internalOrder);

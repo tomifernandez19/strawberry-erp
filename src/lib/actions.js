@@ -2224,7 +2224,8 @@ export async function recordOnlineOrder(orderData) {
     const clienteNombre = customer?.name || orderData.shipping_address?.first_name || 'Cliente Online';
     const clienteEmail = customer?.email || orderData.shipping_address?.email || null;
     const clienteTelefono = customer?.phone || orderData.shipping_address?.phone || null;
-    const gateway = orderData.gateway || orderData.payment_details?.method || 'TIENDANUBE';
+    const gateway = orderData.gateway || 'TIENDANUBE';
+    const gatewayLabel = gateway !== 'TIENDANUBE' ? `TIENDANUBE_${gateway.toUpperCase()}` : 'TIENDANUBE';
 
     const { data: pedido, error: pError } = await supabase
         .from('pedidos_online')
@@ -2236,7 +2237,7 @@ export async function recordOnlineOrder(orderData) {
             nro_pedido: String(number),
             items_raw: products,
             estado: 'PENDIENTE_DESPACHO',
-            medio_pago: gateway
+            medio_pago: gatewayLabel
         }])
         .select()
         .single();
@@ -2247,23 +2248,67 @@ export async function recordOnlineOrder(orderData) {
     }
 
     // 2. Try to reserve units and create the Sale record
-    let accreditationDays = 10;
-    let netoRatio = 0.85; // Default for Tiendanube
-    const mpLower = gateway.toLowerCase();
+    const totalVenta = parseFloat(orderData.total) || 0;
+    const shippingCost = parseFloat(orderData.shipping_cost_owner || orderData.shipping_cost_customer || 0);
 
-    if (mpLower.includes('credit') || mpLower.includes('credito')) {
-        accreditationDays = 10;
-        netoRatio = 0.7907716;
-    } else if (mpLower.includes('debit') || mpLower.includes('debito')) {
-        accreditationDays = 2;
-        netoRatio = 0.962008;
-    } else if (mpLower.includes('transferencia')) {
-        accreditationDays = 0;
-        netoRatio = 1;
+    // Detect gateway and installments from TiendaNube payment data
+    const gwRaw = (orderData.gateway || gateway || '').toLowerCase();
+    const payDetails = Array.isArray(orderData.payment_details)
+        ? orderData.payment_details[0]
+        : orderData.payment_details;
+    const installments = parseInt(payDetails?.installments || payDetails?.cuotas || 1) || 1;
+    const payMethod = (payDetails?.method || payDetails?.tipo || '').toLowerCase();
+
+    console.log(`[Webhook] Gateway: ${gwRaw}, installments: ${installments}, method: ${payMethod}`);
+
+    // Fee rates include IVA (21%). netoRatio = 1 - fee_with_IVA
+    let netoRatio = 0.85; // safe fallback
+    let accreditationDays = 14;
+
+    if (gwRaw.includes('pagofacil') || gwRaw.includes('pagoNube') || gwRaw === 'nuvempago') {
+        // Pago Nube
+        accreditationDays = 14;
+        if (gwRaw.includes('transferencia') || gwRaw.includes('bank') || gwRaw.includes('transfer')) {
+            netoRatio = 1 - (0.015 * 1.21);   // 1.5% + IVA, 1 día
+            accreditationDays = 1;
+        } else if (installments >= 6) {
+            netoRatio = 1 - ((0.0349 + 0.1367) * 1.21); // 3.49% + 13.67% + IVA
+        } else if (installments === 3) {
+            netoRatio = 1 - ((0.0349 + 0.118) * 1.21);  // 3.49% + 11.8% + IVA
+        } else if (installments === 2) {
+            netoRatio = 1 - ((0.0349 + 0.096) * 1.21);  // 3.49% + 9.6% + IVA
+        } else {
+            netoRatio = 1 - (0.0349 * 1.21);             // 3.49% + IVA (débito/billetera/crédito 1 cuota)
+        }
+    } else if (gwRaw.includes('gocuotas')) {
+        // Go Cuotas — débito, 9.1% + IVA, 32 días
+        netoRatio = 1 - (0.091 * 1.21);
+        accreditationDays = 32;
+    } else if (gwRaw.includes('mercadopago') || gwRaw.includes('mercado_pago')) {
+        // Mercado Pago — base 1.49% + IVA siempre, + extras según método
+        accreditationDays = 35;
+        const isCredit = payMethod.includes('credit') || payMethod.includes('credito');
+        if (isCredit) {
+            if (installments >= 6) {
+                netoRatio = 1 - ((0.0149 + 0.0156 + 0.1909) * 1.21); // base + 1.56% + 19.09%
+            } else if (installments === 3) {
+                netoRatio = 1 - ((0.0149 + 0.0156 + 0.1219) * 1.21); // base + 1.56% + 12.19%
+            } else if (installments === 2) {
+                netoRatio = 1 - ((0.0149 + 0.0156 + 0.0949) * 1.21); // base + 1.56% + 9.49%
+            } else {
+                netoRatio = 1 - ((0.0149 + 0.0156) * 1.21);          // base + 1.56%
+            }
+        } else {
+            // Débito, billetera, efectivo, prepaga, cuotas sin tarjeta
+            netoRatio = 1 - ((0.0149 + 0.0156) * 1.21);
+        }
+    } else if (gwRaw.includes('transferencia') || gwRaw.includes('bank')) {
+        netoRatio = 1 - (0.015 * 1.21);
+        accreditationDays = 1;
     }
 
-    const totalVenta = parseFloat(orderData.total) || 0;
-    const montoNetoCalculated = totalVenta * netoRatio;
+    // Subtract shipping cost from neto (goes to carrier, not to us)
+    const montoNetoCalculated = Math.max(0, (totalVenta * netoRatio) - shippingCost);
     const fechaAcc = new Date();
     if (accreditationDays > 0) {
         fechaAcc.setDate(fechaAcc.getDate() + accreditationDays);
@@ -2273,7 +2318,7 @@ export async function recordOnlineOrder(orderData) {
         .from('ventas')
         .insert([{
             total: totalVenta,
-            medio_pago: gateway,
+            medio_pago: gatewayLabel,
             facturado: false,
             tipo: 'VENTA_ONLINE',
             nombre_cliente: clienteNombre,
