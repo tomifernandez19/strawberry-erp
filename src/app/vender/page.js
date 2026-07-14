@@ -12,7 +12,7 @@ export default function VenderPage() {
     const [customerEmail, setCustomerEmail] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
-    const [medioPago, setMedioPago] = useState('EFECTIVO')
+    const [medioPago, setMedioPago] = useState('')
     const [montoDescuento, setMontoDescuento] = useState(0)
     const [montoAbonado, setMontoAbonado] = useState('')
     const [isSena, setIsSena] = useState(false)
@@ -124,6 +124,7 @@ export default function VenderPage() {
 
     const handleConfirmSale = async () => {
         if (items.length === 0) return
+        if (!medioPago) { setError('Seleccioná un medio de pago antes de confirmar.'); return }
 
         if (medioPago === 'DIVIDIR_PAGOS') {
             if (!montoEfectivo || !montoOtro) {
@@ -177,7 +178,7 @@ export default function VenderPage() {
         setError('')
         setMontoEfectivo('')
         setMontoOtro('')
-        setMedioPago('EFECTIVO')
+        setMedioPago('')
         setCustomerName('')
         setCustomerPhone('')
         setCustomerEmail('')
@@ -390,6 +391,7 @@ export default function VenderPage() {
                                     borderWidth: (items.length > 1 && medioPago !== 'MAYORISTA_EFECTIVO') ? '2px' : '1px'
                                 }}
                             >
+                                <option value="" disabled>— Seleccionar medio de pago —</option>
                                 <option value="EFECTIVO">Efectivo 💵</option>
                                 <option value="MAYORISTA_EFECTIVO">Mayorista Efectivo 📦 {items.length > 1 ? '(RECOMENDADO)' : ''}</option>
                                 <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
