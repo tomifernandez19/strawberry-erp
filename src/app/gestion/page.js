@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena, getFallasPendientes, registrarFalla, resolverFalla } from '@/lib/actions'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -19,6 +19,13 @@ export default function GestionPage() {
     const [editPrices, setEditPrices] = useState({ lista: 0, efectivo: 0 })
     const [searchQuery, setSearchQuery] = useState('')
     const [senas, setSenas] = useState([])
+    const [fallas, setFallas] = useState([])
+    const [fallaQR, setFallaQR] = useState('')
+    const [fallaNotas, setFallaNotas] = useState('')
+    const [fallaLoading, setFallaLoading] = useState(false)
+    const [fallaMsg, setFallaMsg] = useState(null)
+    const [resolviendo, setResolviendo] = useState(null) // fallaId being resolved
+    const [montoCredito, setMontoCredito] = useState('')
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -33,6 +40,7 @@ export default function GestionPage() {
             else if (tab === 'stock') fetchStock(searchQuery)
             else if (tab === 'imagenes') fetchMissingImages(searchQuery)
             else if (tab === 'senas') fetchSenas()
+            else if (tab === 'fallas') fetchFallas()
         }, 400);
 
         return () => clearTimeout(handler);
@@ -80,6 +88,10 @@ export default function GestionPage() {
         // Count pending senas
         const s = await getPendingSenasList()
         setSenas(s)
+
+        // Count pending fallas
+        const f = await getFallasPendientes()
+        setFallas(f)
     }
 
     async function fetchSenas() {
@@ -87,6 +99,42 @@ export default function GestionPage() {
         const data = await getPendingSenasList()
         setSenas(data)
         setLoading(false)
+    }
+
+    async function fetchFallas() {
+        setLoading(true)
+        const data = await getFallasPendientes()
+        setFallas(data)
+        setLoading(false)
+    }
+
+    async function handleRegistrarFalla() {
+        if (!fallaQR.trim()) return
+        setFallaLoading(true)
+        setFallaMsg(null)
+        const res = await registrarFalla(fallaQR.trim(), fallaNotas)
+        setFallaLoading(false)
+        if (res.success) {
+            setFallaMsg({ tipo: 'ok', texto: `✅ Falla registrada correctamente` })
+            setFallaQR('')
+            setFallaNotas('')
+            fetchFallas()
+            fetchCounters()
+        } else {
+            setFallaMsg({ tipo: 'error', texto: res.message })
+        }
+    }
+
+    async function handleResolverFalla(fallaId, tipo) {
+        const res = await resolverFalla(fallaId, tipo, tipo === 'NOTA_CREDITO' ? montoCredito : null)
+        if (res.success) {
+            setResolviendo(null)
+            setMontoCredito('')
+            fetchFallas()
+            fetchCounters()
+        } else {
+            alert(res.message)
+        }
     }
 
     async function fetchVentas(search = '') {
@@ -363,6 +411,13 @@ export default function GestionPage() {
                 >
                     Cargar Fotos
                 </button>
+                <button
+                    className={tab === 'fallas' ? 'btn-primary' : 'btn-secondary'}
+                    onClick={() => { setTab('fallas'); setSearchQuery(''); }}
+                    style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem', borderColor: fallas.length > 0 ? '#ef4444' : undefined }}
+                >
+                    ⚠️ Fallas{fallas.length > 0 ? ` (${fallas.length})` : ''}
+                </button>
             </nav>
 
             <div className="card mt-md" style={{ padding: '10px' }}>
@@ -429,6 +484,136 @@ export default function GestionPage() {
                                 </div>
                             ))
                         )}
+                    </div>
+                ) : tab === 'fallas' ? (
+                    <div className="grid" style={{ gap: '20px' }}>
+                        {/* Registrar nueva falla */}
+                        <div className="card" style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.03)' }}>
+                            <p style={{ fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '12px' }}>⚠️ Registrar Producto con Falla</p>
+                            <input
+                                type="text"
+                                className="input-field"
+                                placeholder="Código QR (ej: ST-123456)"
+                                value={fallaQR}
+                                onChange={e => setFallaQR(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleRegistrarFalla()}
+                                style={{ marginBottom: '8px' }}
+                                autoFocus
+                            />
+                            <textarea
+                                className="input-field"
+                                placeholder="Descripción de la falla (opcional)"
+                                value={fallaNotas}
+                                onChange={e => setFallaNotas(e.target.value)}
+                                rows={2}
+                                style={{ marginBottom: '10px', resize: 'vertical' }}
+                            />
+                            {fallaMsg && (
+                                <p style={{ fontSize: '0.8rem', color: fallaMsg.tipo === 'ok' ? 'var(--accent)' : '#ef4444', marginBottom: '8px' }}>
+                                    {fallaMsg.texto}
+                                </p>
+                            )}
+                            <button
+                                className="btn-primary"
+                                style={{ background: '#ef4444', width: '100%' }}
+                                onClick={handleRegistrarFalla}
+                                disabled={fallaLoading || !fallaQR.trim()}
+                            >
+                                {fallaLoading ? 'Registrando...' : 'Registrar Falla'}
+                            </button>
+                        </div>
+
+                        {/* Lista de fallas pendientes */}
+                        <div>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.5, marginBottom: '10px', fontWeight: 'bold' }}>
+                                PENDIENTES CON PROVEEDOR ({fallas.length})
+                            </p>
+                            {fallas.length === 0 ? (
+                                <p className="text-center" style={{ opacity: 0.4, padding: '30px' }}>No hay fallas pendientes.</p>
+                            ) : (
+                                fallas.map(f => {
+                                    const u = f.unidades
+                                    const v = u?.variantes
+                                    const isResolving = resolviendo === f.id
+                                    return (
+                                        <div key={f.id} className="card" style={{ marginBottom: '10px', borderLeft: '4px solid #ef4444' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <p style={{ fontWeight: 'bold', margin: 0, fontSize: '0.95rem' }}>
+                                                        {v?.modelos?.descripcion || '—'} ({v?.color}) T{u?.talle_especifico}
+                                                    </p>
+                                                    <p style={{ fontSize: '0.75rem', opacity: 0.5, margin: '2px 0' }}>
+                                                        QR: {u?.codigo_qr} • {new Date(f.created_at).toLocaleDateString()}
+                                                    </p>
+                                                    {f.notas && (
+                                                        <p style={{ fontSize: '0.8rem', color: '#ef4444', margin: '4px 0 0' }}>{f.notas}</p>
+                                                    )}
+                                                </div>
+                                                {!isResolving && (
+                                                    <button
+                                                        className="btn-secondary"
+                                                        style={{ fontSize: '0.75rem', padding: '6px 10px' }}
+                                                        onClick={() => { setResolviendo(f.id); setMontoCredito('') }}
+                                                    >
+                                                        Resolver
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {isResolving && (
+                                                <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px' }}>
+                                                    <p style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '10px' }}>¿Cómo se resolvió?</p>
+                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                        <button
+                                                            className="btn-primary"
+                                                            style={{ flex: 1, background: 'var(--accent)', fontSize: '0.8rem' }}
+                                                            onClick={() => handleResolverFalla(f.id, 'REEMPLAZADO')}
+                                                        >
+                                                            ✅ Reemplazado por uno nuevo
+                                                        </button>
+                                                        <button
+                                                            className="btn-secondary"
+                                                            style={{ flex: 1, fontSize: '0.8rem', borderColor: '#f59e0b', color: '#f59e0b' }}
+                                                            onClick={() => setResolviendo(f.id + '_credito')}
+                                                        >
+                                                            📄 Nota de Crédito
+                                                        </button>
+                                                        <button
+                                                            className="btn-secondary"
+                                                            style={{ fontSize: '0.8rem', color: '#ef4444' }}
+                                                            onClick={() => setResolviendo(null)}
+                                                        >
+                                                            Cancelar
+                                                        </button>
+                                                    </div>
+                                                    {resolviendo === f.id + '_credito' && (
+                                                        <div style={{ marginTop: '10px' }}>
+                                                            <label style={{ fontSize: '0.75rem', opacity: 0.7 }}>Monto de la nota de crédito ($):</label>
+                                                            <input
+                                                                type="number"
+                                                                className="input-field"
+                                                                placeholder={`Precio ref: $${(v?.precio_efectivo || 0).toLocaleString()}`}
+                                                                value={montoCredito}
+                                                                onChange={e => setMontoCredito(e.target.value)}
+                                                                style={{ marginTop: '4px', marginBottom: '8px' }}
+                                                                autoFocus
+                                                            />
+                                                            <button
+                                                                className="btn-primary"
+                                                                style={{ width: '100%', background: '#f59e0b', color: 'black', fontSize: '0.85rem' }}
+                                                                onClick={() => handleResolverFalla(f.id, 'NOTA_CREDITO')}
+                                                                disabled={!montoCredito}
+                                                            >
+                                                                Confirmar Nota de Crédito — ${Number(montoCredito || 0).toLocaleString()}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })
+                            )}
+                        </div>
                     </div>
                 ) : tab === 'ventas' ? (
                     <div className="grid" style={{ gap: '15px' }}>

@@ -3526,3 +3526,87 @@ export async function completeSena(ventaId, paymentData) {
 
     return { success: true };
 }
+
+// ─── FALLAS ────────────────────────────────────────────────────────────────
+
+export async function registrarFalla(qrCode, notas = '') {
+    const supabase = createClient();
+    const cleanQR = (qrCode || '').trim().toUpperCase();
+
+    const { data: unit, error: uErr } = await supabase
+        .from('unidades')
+        .select('id, estado, variantes(color, precio_efectivo, modelos(descripcion))')
+        .eq('codigo_qr', cleanQR)
+        .maybeSingle();
+
+    if (uErr) return { success: false, message: uErr.message };
+    if (!unit) return { success: false, message: `No se encontró ningún producto con el QR ${cleanQR}` };
+    if (unit.estado === 'FALLA') return { success: false, message: 'Este producto ya está registrado como falla' };
+
+    const { error: fErr, data: falla } = await supabase
+        .from('fallas')
+        .insert([{ unidad_id: unit.id, notas, estado: 'PENDIENTE' }])
+        .select()
+        .single();
+
+    if (fErr) return { success: false, message: fErr.message };
+
+    await supabase.from('unidades').update({ estado: 'FALLA' }).eq('id', unit.id);
+
+    return { success: true, falla, unit };
+}
+
+export async function getFallasPendientes() {
+    const supabase = createClient();
+    const { data, error } = await supabase
+        .from('fallas')
+        .select(`
+            id, created_at, estado, monto_credito, notas, resuelto_at,
+            unidades(
+                id, codigo_qr, talle_especifico,
+                variantes(color, precio_efectivo, precio_lista, modelos(descripcion, marca))
+            )
+        `)
+        .eq('estado', 'PENDIENTE')
+        .order('created_at', { ascending: false });
+
+    if (error) return [];
+    return data || [];
+}
+
+export async function resolverFalla(fallaId, tipo, monto = null) {
+    const supabase = createClient();
+    if (!['REEMPLAZADO', 'NOTA_CREDITO'].includes(tipo)) {
+        return { success: false, message: 'Tipo de resolución inválido' };
+    }
+
+    const { data: falla, error: fErr } = await supabase
+        .from('fallas')
+        .select('id, unidad_id')
+        .eq('id', fallaId)
+        .single();
+
+    if (fErr || !falla) return { success: false, message: 'Falla no encontrada' };
+
+    const updates = { estado: tipo, resuelto_at: new Date().toISOString() };
+    if (tipo === 'NOTA_CREDITO' && monto) updates.monto_credito = parseFloat(monto);
+
+    const { error: uErr } = await supabase.from('fallas').update(updates).eq('id', fallaId);
+    if (uErr) return { success: false, message: uErr.message };
+
+    if (tipo === 'REEMPLAZADO') {
+        // Unidad queda en FALLA hasta que entre la reposición — no se libera
+    } else if (tipo === 'NOTA_CREDITO' && monto) {
+        // Desconta el monto de la deuda con proveedor
+        await supabase.from('movimientos_caja').insert([{
+            monto: parseFloat(monto),
+            tipo: 'INGRESO',
+            motivo: `Nota de crédito proveedor — falla producto`,
+            categoria: 'PAGO_PROVEEDOR',
+            persona: 'Proveedor',
+            cuenta: 'PROVEEDOR'
+        }]);
+    }
+
+    return { success: true };
+}

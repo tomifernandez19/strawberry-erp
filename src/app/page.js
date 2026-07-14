@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary, getRecentUnifiedCaja, getPendingSenasList, completeSena } from '@/lib/actions'
+import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary, getRecentUnifiedCaja, getPendingSenasList, completeSena, getFallasPendientes } from '@/lib/actions'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -20,6 +20,7 @@ export default function HomePage() {
     const [pendingSenas, setPendingSenas] = useState([])
     const [showSenasModal, setShowSenasModal] = useState(false)
     const [isCompletingSena, setIsCompletingSena] = useState(false)
+    const [pendingFallas, setPendingFallas] = useState([])
 
     useEffect(() => {
         if (!user) return
@@ -67,6 +68,12 @@ export default function HomePage() {
             // Task 6: Pending Senas (Visible to everyone)
             const senas = await getPendingSenasList()
             setPendingSenas(senas || [])
+
+            // Task 7: Pending Fallas (admin only)
+            if (isAdmin) {
+                const fallas = await getFallasPendientes()
+                setPendingFallas(fallas || [])
+            }
         }
 
         loadData()
@@ -240,6 +247,28 @@ export default function HomePage() {
                 <div className="grid mt-md">
                     {renderCard('SENA')}
                 </div>
+            )}
+
+            {/* Section: Pending Fallas - Admin only */}
+            {isAdmin && pendingFallas.length > 0 && (
+                <Link href="/gestion?tab=fallas" style={{ textDecoration: 'none' }}>
+                    <section className="card mt-md" style={{
+                        border: '1px solid rgba(239,68,68,0.4)',
+                        background: 'rgba(239,68,68,0.05)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 20px'
+                    }}>
+                        <div>
+                            <p style={{ fontWeight: 'bold', margin: 0, color: '#ef4444' }}>⚠️ Fallas Pendientes con Proveedor</p>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: '2px 0 0' }}>
+                                {pendingFallas.length} producto{pendingFallas.length > 1 ? 's' : ''} esperando resolución
+                            </p>
+                        </div>
+                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ef4444' }}>{pendingFallas.length}</span>
+                    </section>
+                </Link>
             )}
 
             {/* Section 1: Top Pending (only those > 0) */}
