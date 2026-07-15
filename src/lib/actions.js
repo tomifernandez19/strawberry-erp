@@ -3268,7 +3268,7 @@ export async function getRecentSalesList(search = '') {
             id, fecha_venta, estado,
             codigo_qr,
             venta_id,
-            ventas (id, total, medio_pago, monto_neto),
+            ventas (id, total, medio_pago, monto_neto, fecha_acreditacion),
             variantes!inner (color, modelos!inner (descripcion))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
@@ -3290,6 +3290,30 @@ export async function getRecentSalesList(search = '') {
         ...u,
         ventas: Array.isArray(u.ventas) ? u.ventas[0] : u.ventas
     }));
+}
+
+export async function updateSale(ventaId, { medio_pago, monto_neto, fecha_acreditacion }) {
+    const supabase = createClient();
+
+    const updates = {};
+    if (medio_pago !== undefined) updates.medio_pago = medio_pago;
+    if (monto_neto !== undefined) updates.monto_neto = monto_neto !== '' ? parseFloat(monto_neto) : null;
+    if (fecha_acreditacion !== undefined) updates.fecha_acreditacion = fecha_acreditacion || null;
+
+    // Recalculate cuenta_destino if medio_pago changed
+    if (medio_pago) {
+        const effectiveMP = medio_pago;
+        if (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(effectiveMP)) updates.cuenta_destino = 'CAJA_LOCAL';
+        else if (effectiveMP === 'TRANSFERENCIA_LUCAS') updates.cuenta_destino = 'LUCAS';
+        else if (['TRANSFERENCIA_TOMI', 'GOCUOTAS_TOMI'].includes(effectiveMP)) updates.cuenta_destino = 'TOMI';
+        else if (effectiveMP === 'TRANSFERENCIA_PROVEEDOR') updates.cuenta_destino = 'PROVEEDOR';
+        else if (effectiveMP.includes('TIENDANUBE')) updates.cuenta_destino = 'TOMI';
+        else updates.cuenta_destino = 'SOFI_MP';
+    }
+
+    const { error } = await supabase.from('ventas').update(updates).eq('id', ventaId);
+    if (error) return { success: false, message: error.message };
+    return { success: true };
 }
 
 /**

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena, getFallasPendientes, registrarFalla, resolverFalla } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena, getFallasPendientes, registrarFalla, resolverFalla, updateSale } from '@/lib/actions'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -24,8 +24,11 @@ export default function GestionPage() {
     const [fallaNotas, setFallaNotas] = useState('')
     const [fallaLoading, setFallaLoading] = useState(false)
     const [fallaMsg, setFallaMsg] = useState(null)
-    const [resolviendo, setResolviendo] = useState(null) // fallaId being resolved
+    const [resolviendo, setResolviendo] = useState(null)
     const [montoCredito, setMontoCredito] = useState('')
+    const [editingVenta, setEditingVenta] = useState(null) // ventaId being edited
+    const [editVentaData, setEditVentaData] = useState({})
+    const [editVentaLoading, setEditVentaLoading] = useState(false)
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -122,6 +125,29 @@ export default function GestionPage() {
             fetchCounters()
         } else {
             setFallaMsg({ tipo: 'error', texto: res.message })
+        }
+    }
+
+    async function handleEditVenta(sale) {
+        setEditingVenta(sale.id)
+        setEditVentaData({
+            medio_pago: sale.medio_pago || '',
+            monto_neto: sale.monto_neto ?? '',
+            fecha_acreditacion: sale.fecha_acreditacion
+                ? new Date(sale.fecha_acreditacion).toISOString().slice(0, 10)
+                : ''
+        })
+    }
+
+    async function handleSaveVenta() {
+        setEditVentaLoading(true)
+        const res = await updateSale(editingVenta, editVentaData)
+        setEditVentaLoading(false)
+        if (res.success) {
+            setEditingVenta(null)
+            fetchVentas(searchQuery)
+        } else {
+            alert(res.message)
         }
     }
 
@@ -619,6 +645,8 @@ export default function GestionPage() {
                     <div className="grid" style={{ gap: '15px' }}>
                         {ventas.map(v => {
                             const sale = v.ventas;
+                            const isEditing = editingVenta === sale?.id;
+                            const needsNeto = editVentaData.medio_pago && !['EFECTIVO', 'MAYORISTA_EFECTIVO', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_PROVEEDOR'].includes(editVentaData.medio_pago);
                             return (
                                 <div key={v.id} className="card" style={{ padding: '15px', borderLeft: v.estado === 'VENDIDO_ONLINE' ? '4px solid #eab308' : 'none' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -634,20 +662,97 @@ export default function GestionPage() {
                                                     </p>
                                                     <p style={{ fontSize: '0.65rem', opacity: 0.4, margin: 0 }}>
                                                         Lista: $ {(sale?.total || 0).toLocaleString()}
+                                                        {sale?.fecha_acreditacion && ` • Acred: ${new Date(sale.fecha_acreditacion).toLocaleDateString()}`}
                                                     </p>
                                                 </div>
                                                 {v.estado === 'VENDIDO_ONLINE' && <span className="badge" style={{ fontSize: '0.65rem', padding: '2px 8px', background: '#eab308', color: 'black' }}>ONLINE</span>}
                                             </div>
                                         </div>
-                                        {sale && (
-                                            <button
-                                                onClick={() => handleDeleteSale(sale.id)}
-                                                style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
-                                            >
-                                                Anular ✕
-                                            </button>
-                                        )}
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            {sale && !isEditing && (
+                                                <button
+                                                    onClick={() => handleEditVenta(sale)}
+                                                    style={{ background: 'rgba(59,130,246,0.1)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                                >
+                                                    Editar
+                                                </button>
+                                            )}
+                                            {sale && !isEditing && (
+                                                <button
+                                                    onClick={() => handleDeleteSale(sale.id)}
+                                                    style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                                >
+                                                    Anular ✕
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
+
+                                    {/* Inline edit form */}
+                                    {isEditing && (
+                                        <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px', display: 'grid', gap: '10px' }}>
+                                            <div>
+                                                <label style={{ fontSize: '0.75rem', opacity: 0.6 }}>Medio de Pago:</label>
+                                                <select
+                                                    className="input-field"
+                                                    style={{ marginTop: '4px' }}
+                                                    value={editVentaData.medio_pago}
+                                                    onChange={e => setEditVentaData(d => ({ ...d, medio_pago: e.target.value }))}
+                                                >
+                                                    <option value="EFECTIVO">Efectivo 💵</option>
+                                                    <option value="MAYORISTA_EFECTIVO">Mayorista Efectivo 📦</option>
+                                                    <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
+                                                    <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
+                                                    <option value="TRANSFERENCIA_PROVEEDOR">Transferencia Proveedor 🚚</option>
+                                                    <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
+                                                    <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
+                                                    <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
+                                                    <option value="GOCUOTAS_TOMI">GoCuotas (Tomi) 🟣</option>
+                                                    <option value="DIVIDIR_PAGOS">Dividir Pago ⚖️</option>
+                                                </select>
+                                            </div>
+                                            {needsNeto && (
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                                    <div>
+                                                        <label style={{ fontSize: '0.75rem', opacity: 0.6 }}>Monto Neto ($):</label>
+                                                        <input
+                                                            type="number"
+                                                            className="input-field"
+                                                            style={{ marginTop: '4px' }}
+                                                            value={editVentaData.monto_neto}
+                                                            onChange={e => setEditVentaData(d => ({ ...d, monto_neto: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '0.75rem', opacity: 0.6 }}>Fecha Acreditación:</label>
+                                                        <input
+                                                            type="date"
+                                                            className="input-field"
+                                                            style={{ marginTop: '4px' }}
+                                                            value={editVentaData.fecha_acreditacion}
+                                                            onChange={e => setEditVentaData(d => ({ ...d, fecha_acreditacion: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button
+                                                    className="btn-primary"
+                                                    style={{ flex: 1 }}
+                                                    onClick={handleSaveVenta}
+                                                    disabled={editVentaLoading}
+                                                >
+                                                    {editVentaLoading ? 'Guardando...' : 'Guardar'}
+                                                </button>
+                                                <button
+                                                    className="btn-secondary"
+                                                    onClick={() => setEditingVenta(null)}
+                                                >
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
