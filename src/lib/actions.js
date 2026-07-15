@@ -3559,7 +3559,7 @@ export async function registrarFalla(qrCode, notas = '') {
 
     const { data: unit, error: uErr } = await supabase
         .from('unidades')
-        .select('id, estado, variantes(color, precio_efectivo, modelos(descripcion))')
+        .select('id, estado, variante_id, variantes(color, precio_efectivo, modelo_id, modelos(descripcion))')
         .eq('codigo_qr', cleanQR)
         .maybeSingle();
 
@@ -3576,6 +3576,10 @@ export async function registrarFalla(qrCode, notas = '') {
     if (fErr) return { success: false, message: fErr.message };
 
     await supabase.from('unidades').update({ estado: 'FALLA' }).eq('id', unit.id);
+
+    // Sync TiendaNube to reflect the stock decrease
+    const modeloId = unit.variantes?.modelo_id;
+    if (modeloId) await syncProductToTiendanube(modeloId);
 
     return { success: true, falla, unit };
 }
