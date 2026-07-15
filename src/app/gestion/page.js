@@ -26,6 +26,7 @@ export default function GestionPage() {
     const [fallaMsg, setFallaMsg] = useState(null)
     const [resolviendo, setResolviendo] = useState(null)
     const [montoCredito, setMontoCredito] = useState('')
+    const [qrReemplazo, setQrReemplazo] = useState('')
     const [editingVenta, setEditingVenta] = useState(null) // ventaId being edited
     const [editVentaData, setEditVentaData] = useState({})
     const [editVentaLoading, setEditVentaLoading] = useState(false)
@@ -152,10 +153,14 @@ export default function GestionPage() {
     }
 
     async function handleResolverFalla(fallaId, tipo) {
-        const res = await resolverFalla(fallaId, tipo, tipo === 'NOTA_CREDITO' ? montoCredito : null)
+        const res = await resolverFalla(fallaId, tipo, {
+            monto: tipo === 'NOTA_CREDITO' ? montoCredito : null,
+            qrReemplazo: tipo === 'REEMPLAZADO' ? qrReemplazo : null
+        })
         if (res.success) {
             setResolviendo(null)
             setMontoCredito('')
+            setQrReemplazo('')
             fetchFallas()
             fetchCounters()
         } else {
@@ -592,7 +597,7 @@ export default function GestionPage() {
                                                         <button
                                                             className="btn-primary"
                                                             style={{ flex: 1, background: 'var(--accent)', fontSize: '0.8rem' }}
-                                                            onClick={() => handleResolverFalla(f.id, 'REEMPLAZADO')}
+                                                            onClick={() => setResolviendo(f.id + '_reemplazo')}
                                                         >
                                                             ✅ Reemplazado por uno nuevo
                                                         </button>
@@ -611,6 +616,31 @@ export default function GestionPage() {
                                                             Cancelar
                                                         </button>
                                                     </div>
+                                                    {resolviendo === f.id + '_reemplazo' && (
+                                                        <div style={{ marginTop: '10px' }}>
+                                                            <label style={{ fontSize: '0.75rem', opacity: 0.7 }}>QR del producto de reemplazo:</label>
+                                                            <input
+                                                                type="text"
+                                                                className="input-field"
+                                                                placeholder="ST-000000"
+                                                                value={qrReemplazo}
+                                                                onChange={e => setQrReemplazo(e.target.value)}
+                                                                style={{ marginTop: '4px', marginBottom: '8px' }}
+                                                                autoFocus
+                                                            />
+                                                            <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: '0 0 8px' }}>
+                                                                El par nuevo va a entrar al stock con costo $0.
+                                                            </p>
+                                                            <button
+                                                                className="btn-primary"
+                                                                style={{ width: '100%', fontSize: '0.85rem' }}
+                                                                onClick={() => handleResolverFalla(f.id, 'REEMPLAZADO')}
+                                                                disabled={!qrReemplazo.trim()}
+                                                            >
+                                                                Confirmar Reemplazo
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                     {resolviendo === f.id + '_credito' && (
                                                         <div style={{ marginTop: '10px' }}>
                                                             <label style={{ fontSize: '0.75rem', opacity: 0.7 }}>Monto de la nota de crédito ($):</label>

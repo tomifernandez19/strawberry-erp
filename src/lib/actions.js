@@ -3598,7 +3598,7 @@ export async function getFallasPendientes() {
     return data || [];
 }
 
-export async function resolverFalla(fallaId, tipo, monto = null) {
+export async function resolverFalla(fallaId, tipo, { monto = null, qrReemplazo = null } = {}) {
     const supabase = createClient();
     if (!['REEMPLAZADO', 'NOTA_CREDITO'].includes(tipo)) {
         return { success: false, message: 'Tipo de resolución inválido' };
@@ -3614,14 +3614,49 @@ export async function resolverFalla(fallaId, tipo, monto = null) {
 
     const updates = { estado: tipo, resuelto_at: new Date().toISOString() };
     if (tipo === 'NOTA_CREDITO' && monto) updates.monto_credito = parseFloat(monto);
+    if (tipo === 'REEMPLAZADO' && qrReemplazo) updates.qr_reemplazo = qrReemplazo.trim().toUpperCase();
 
     const { error: uErr } = await supabase.from('fallas').update(updates).eq('id', fallaId);
     if (uErr) return { success: false, message: uErr.message };
 
-    if (tipo === 'REEMPLAZADO') {
-        // Unidad queda en FALLA hasta que entre la reposición — no se libera
+    if (tipo === 'REEMPLAZADO' && qrReemplazo) {
+        // Fetch original unit to get variante_id and talle
+        const { data: originalUnit } = await supabase
+            .from('unidades')
+            .select('variante_id, talle_especifico, variantes(modelo_id)')
+            .eq('id', falla.unidad_id)
+            .single();
+
+        if (originalUnit) {
+            const cleanQR = qrReemplazo.trim().toUpperCase();
+
+            // Check the QR doesn't already exist
+            const { data: existing } = await supabase
+                .from('unidades')
+                .select('id')
+                .eq('codigo_qr', cleanQR)
+                .maybeSingle();
+
+            if (existing) {
+                return { success: false, message: `El QR ${cleanQR} ya existe en el sistema` };
+            }
+
+            // Create replacement unit with cost $0 (no compra_id)
+            await supabase.from('unidades').insert([{
+                codigo_qr: cleanQR,
+                variante_id: originalUnit.variante_id,
+                talle_especifico: originalUnit.talle_especifico,
+                estado: 'DISPONIBLE',
+                fecha_ingreso: new Date().toISOString(),
+                compra_id: null
+            }]);
+
+            // Sync stock to TiendaNube
+            if (originalUnit.variantes?.modelo_id) {
+                await syncProductToTiendanube(originalUnit.variantes.modelo_id);
+            }
+        }
     } else if (tipo === 'NOTA_CREDITO' && monto) {
-        // Desconta el monto de la deuda con proveedor
         await supabase.from('movimientos_caja').insert([{
             monto: parseFloat(monto),
             tipo: 'INGRESO',
