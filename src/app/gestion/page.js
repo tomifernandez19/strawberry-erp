@@ -565,7 +565,7 @@ export default function GestionPage() {
                                 fallas.map(f => {
                                     const u = f.unidades
                                     const v = u?.variantes
-                                    const isResolving = resolviendo === f.id
+                                    const isResolving = resolviendo === f.id || resolviendo === f.id + '_reemplazo' || resolviendo === f.id + '_credito'
                                     return (
                                         <div key={f.id} className="card" style={{ marginBottom: '10px', borderLeft: '4px solid #ef4444' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

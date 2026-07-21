@@ -265,7 +265,10 @@ export default function ReportesPage() {
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Proveedores Pendientes</span>
-                                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {(Math.abs(Number(accounts.PROVEEDOR) || 0)).toLocaleString()}</span>
+                                    <span style={{ fontWeight: 'bold', color: Number(accounts.PROVEEDOR) <= 0 ? '#ef4444' : 'var(--accent)' }}>
+                                        {Number(accounts.PROVEEDOR) > 0 ? '✅ A favor ' : ''}
+                                        $ {Math.abs(Number(accounts.PROVEEDOR) || 0).toLocaleString()}
+                                    </span>
                                 </div>
                             </div>
                         </div>
