@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary, getRecentUnifiedCaja, getPendingSenasList, completeSena, getFallasPendientes } from '@/lib/actions'
+import { getDailySummary, registerTiendanubeWebhooks, getPendingInvoicesSummary, getRecentUnifiedCaja, getPendingSenasList, completeSena, getFallasPendientes, recordCashMovement } from '@/lib/actions'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -21,6 +21,10 @@ export default function HomePage() {
     const [showSenasModal, setShowSenasModal] = useState(false)
     const [isCompletingSena, setIsCompletingSena] = useState(false)
     const [pendingFallas, setPendingFallas] = useState([])
+    const [gastoMonto, setGastoMonto] = useState('')
+    const [gastoDescripcion, setGastoDescripcion] = useState('')
+    const [gastoLoading, setGastoLoading] = useState(false)
+    const [gastoMsg, setGastoMsg] = useState(null)
 
     useEffect(() => {
         if (!user) return
@@ -29,6 +33,13 @@ export default function HomePage() {
             const s = await getDailySummary(isAdmin ? null : user.id)
             setSummary(s)
 
+            // Pending dispatches: visible to everyone
+            const { count: dispatchCount } = await supabase
+                .from('pedidos_online')
+                .select('*', { count: 'exact', head: true })
+                .eq('estado', 'PENDIENTE_DESPACHO')
+            setPendingDispatches(dispatchCount || 0)
+
             if (isAdmin) {
                 // Task 1: Units without QR
                 const { count: qrCount } = await supabase
@@ -36,13 +47,6 @@ export default function HomePage() {
                     .select('*', { count: 'exact', head: true })
                     .eq('estado', 'PENDIENTE_QR')
                 setPendingQR(qrCount || 0)
-
-                // Task 2: Pending Online Dispatches
-                const { count: dispatchCount } = await supabase
-                    .from('pedidos_online')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('estado', 'PENDIENTE_DESPACHO')
-                setPendingDispatches(dispatchCount || 0)
 
                 // Task 3: Units with QR but without Location
                 const { count: locCount } = await supabase
@@ -274,6 +278,28 @@ export default function HomePage() {
             {/* Section 1: Top Pending (only those > 0) */}
             {isAdmin && <PendingGrid mode="TOP" />}
 
+            {/* Despachos pendientes para vendedor */}
+            {!isAdmin && pendingDispatches > 0 && (
+                <Link href="/despachar" style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <section className="card mt-md" style={{
+                        border: '1px solid rgba(234, 179, 8, 0.3)',
+                        background: 'rgba(234, 179, 8, 0.05)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 20px'
+                    }}>
+                        <div>
+                            <p style={{ fontWeight: 'bold', margin: 0, color: '#eab308' }}>📦 Despachos Pendientes</p>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: '2px 0 0' }}>
+                                {pendingDispatches} pedido{pendingDispatches > 1 ? 's' : ''} de Tiendanube para separar
+                            </p>
+                        </div>
+                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#eab308' }}>{pendingDispatches}</span>
+                    </section>
+                </Link>
+            )}
+
             <section className={`mt-lg grid ${isAdmin ? 'grid-cols-2 grid-mobile-stack' : ''}`} style={{ gap: '15px' }}>
                 <Link href="/consultar" className="btn-primary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                     <span style={{ fontSize: '1.2rem' }}>🔍</span>
@@ -371,6 +397,64 @@ export default function HomePage() {
 
                 {/* Section 2: Bottom Pending removed as requested by user - only show if count > 0 */}
             </div>
+
+            {/* Gastos de caja - solo vendedor */}
+            {!isAdmin && (
+                <div className="card mt-lg" style={{ border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.03)' }}>
+                    <p style={{ fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '12px' }}>📤 Registrar Gasto de Caja</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <input
+                            type="number"
+                            className="input-field"
+                            placeholder="Monto del gasto"
+                            value={gastoMonto}
+                            onChange={e => setGastoMonto(e.target.value)}
+                        />
+                        <input
+                            type="text"
+                            className="input-field"
+                            placeholder="Descripción (ej: compra bolsas, limpieza...)"
+                            value={gastoDescripcion}
+                            onChange={e => setGastoDescripcion(e.target.value)}
+                        />
+                        <button
+                            className="btn-primary"
+                            style={{ background: 'rgba(239,68,68,0.8)', marginTop: '4px' }}
+                            disabled={gastoLoading || !gastoMonto || !gastoDescripcion}
+                            onClick={async () => {
+                                if (!gastoMonto || !gastoDescripcion) return;
+                                setGastoLoading(true);
+                                setGastoMsg(null);
+                                try {
+                                    await recordCashMovement({
+                                        monto: Number(gastoMonto),
+                                        tipo: 'EGRESO',
+                                        motivo: gastoDescripcion,
+                                        persona: 'vendedor',
+                                        cuenta: 'CAJA_LOCAL',
+                                        categoria: 'GASTOS_GENERALES'
+                                    });
+                                    setGastoMonto('');
+                                    setGastoDescripcion('');
+                                    setGastoMsg({ ok: true, text: 'Gasto registrado.' });
+                                } catch (e) {
+                                    setGastoMsg({ ok: false, text: 'Error al registrar el gasto.' });
+                                } finally {
+                                    setGastoLoading(false);
+                                    setTimeout(() => setGastoMsg(null), 3000);
+                                }
+                            }}
+                        >
+                            {gastoLoading ? 'Registrando...' : 'Registrar Gasto'}
+                        </button>
+                        {gastoMsg && (
+                            <p style={{ fontSize: '0.8rem', color: gastoMsg.ok ? 'var(--accent)' : '#ef4444', textAlign: 'center' }}>
+                                {gastoMsg.text}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className="mt-lg">
                 <h3 style={{ fontSize: '1rem', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
