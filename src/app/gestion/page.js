@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena, getFallasPendientes, registrarFalla, resolverFalla, updateSale } from '@/lib/actions'
+import { deleteSale, deleteUnit, updateVariant, getPendingInvoicesSummary, getMissingImagesList, uploadProductImage, getRecentSalesList, getPendingSenasList, completeSena, cancelarSena, getFallasPendientes, registrarFalla, resolverFalla, updateSale } from '@/lib/actions'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -488,28 +488,43 @@ export default function GestionPage() {
                                             <p style={{ color: '#eab308', fontWeight: 'bold', fontSize: '1.1rem', margin: 0 }}>
                                                 Faltan: $ {(sena.total - (Number(sena.monto_efectivo) + Number(sena.monto_otro))).toLocaleString()}
                                             </p>
-                                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Total: ${sena.total.toLocaleString()}</p>
-                                            <button
-                                                className="btn-primary mt-sm"
-                                                style={{ fontSize: '0.75rem', padding: '6px 12px', background: '#eab308', color: 'black' }}
-                                                onClick={() => {
-                                                    // This will open a way to complete it. For simplicity in Gestion tab, 
-                                                    // let's just tell them to go to Home or we can implement a quick cobrar here.
-                                                    if (confirm('¿Deseas completar esta seña ahora? El saldo se cobrará en EFECTIVO.')) {
-                                                        const due = sena.total - (Number(sena.monto_efectivo) + Number(sena.monto_otro));
-                                                        completeSena(sena.id, {
-                                                            monto_efectivo: due,
-                                                            medio_pago: 'EFECTIVO',
-                                                            cuenta_destino: 'CAJA_LOCAL'
-                                                        }).then(() => {
-                                                            fetchSenas();
-                                                            fetchCounters();
-                                                        });
-                                                    }
-                                                }}
-                                            >
-                                                Completar
-                                            </button>
+                                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Total: ${sena.total.toLocaleString()} • Seña: ${(Number(sena.monto_efectivo) + Number(sena.monto_otro)).toLocaleString()}</p>
+                                            <div style={{ display: 'flex', gap: '6px', marginTop: '8px', justifyContent: 'flex-end' }}>
+                                                <button
+                                                    className="btn-primary"
+                                                    style={{ fontSize: '0.75rem', padding: '6px 12px', background: '#eab308', color: 'black' }}
+                                                    onClick={() => {
+                                                        if (confirm('¿Deseas completar esta seña ahora? El saldo se cobrará en EFECTIVO.')) {
+                                                            const due = sena.total - (Number(sena.monto_efectivo) + Number(sena.monto_otro));
+                                                            completeSena(sena.id, {
+                                                                monto_efectivo: due,
+                                                                medio_pago: 'EFECTIVO',
+                                                                cuenta_destino: 'CAJA_LOCAL'
+                                                            }).then(() => {
+                                                                fetchSenas();
+                                                                fetchCounters();
+                                                            });
+                                                        }
+                                                    }}
+                                                >
+                                                    Cobrar saldo
+                                                </button>
+                                                <button
+                                                    className="btn-secondary"
+                                                    style={{ fontSize: '0.75rem', padding: '6px 12px', color: '#ef4444', borderColor: '#ef4444' }}
+                                                    onClick={() => {
+                                                        const senaMonto = Number(sena.monto_efectivo) + Number(sena.monto_otro);
+                                                        if (confirm(`¿Confirmar que el cliente no completó la compra?\n\nEl producto vuelve a estar disponible.\nLa seña ($${senaMonto.toLocaleString()}) queda registrada como ingreso del día ${new Date(sena.fecha).toLocaleDateString()}.`)) {
+                                                            cancelarSena(sena.id).then(() => {
+                                                                fetchSenas();
+                                                                fetchCounters();
+                                                            });
+                                                        }
+                                                    }}
+                                                >
+                                                    No completó
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

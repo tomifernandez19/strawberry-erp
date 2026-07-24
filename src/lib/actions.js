@@ -3551,6 +3551,47 @@ export async function completeSena(ventaId, paymentData) {
     return { success: true };
 }
 
+/**
+ * Cancels a pending deposit: frees the units back to DISPONIBLE and marks the
+ * sale as SENA_CANCELADA so the deposit amount remains as income on its original date.
+ */
+export async function cancelarSena(ventaId) {
+    const supabase = createClient();
+
+    // Get venta with units to know which models to sync
+    const { data: venta, error: vErr } = await supabase
+        .from('ventas')
+        .select('id, unidades(id, variante_id, variantes(modelo_id))')
+        .eq('id', ventaId)
+        .single();
+
+    if (vErr) throw vErr;
+
+    // Free the units
+    const { error: uErr } = await supabase
+        .from('unidades')
+        .update({ estado: 'DISPONIBLE', venta_id: null, fecha_venta: null })
+        .eq('venta_id', ventaId);
+
+    if (uErr) throw uErr;
+
+    // Mark the sale as cancelled (keeps money as income)
+    const { error: sErr } = await supabase
+        .from('ventas')
+        .update({ tipo: 'SENA_CANCELADA' })
+        .eq('id', ventaId);
+
+    if (sErr) throw sErr;
+
+    // Sync TiendaNube stock for each model
+    const modelIds = [...new Set((venta.unidades || []).map(u => u.variantes?.modelo_id).filter(Boolean))];
+    for (const mId of modelIds) {
+        await syncProductToTiendanube(mId).catch(e => console.error(`[cancelarSena] sync failed for model ${mId}:`, e));
+    }
+
+    return { success: true };
+}
+
 // ─── FALLAS ────────────────────────────────────────────────────────────────
 
 export async function registrarFalla(qrCode, notas = '') {
