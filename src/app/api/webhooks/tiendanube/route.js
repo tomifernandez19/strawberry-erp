@@ -76,6 +76,7 @@ export async function POST(req) {
                 gateway: orderData.gateway,
                 payment_details: orderData.payment_details,
                 total: orderData.total,
+                subtotal: orderData.subtotal,
                 shipping_cost_owner: orderData.shipping_cost_owner,
                 shipping_cost_customer: orderData.shipping_cost_customer,
             };

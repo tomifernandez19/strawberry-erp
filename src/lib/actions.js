@@ -2248,7 +2248,8 @@ export async function recordOnlineOrder(orderData) {
     }
 
     // 2. Try to reserve units and create the Sale record
-    const totalVenta = parseFloat(orderData.total) || 0;
+    const rawTotal = parseFloat(orderData.total) || 0;
+    const subtotal = parseFloat(orderData.subtotal) || 0;
     const shippingCost = parseFloat(orderData.shipping_cost_owner || orderData.shipping_cost_customer || 0);
 
     // Detect gateway and installments from TiendaNube payment data
@@ -2260,6 +2261,10 @@ export async function recordOnlineOrder(orderData) {
     const payMethod = (payDetails?.method || payDetails?.tipo || '').toLowerCase();
 
     console.log(`[Webhook] Gateway: ${gwRaw}, installments: ${installments}, method: ${payMethod}`);
+
+    // GoCuotas inflates TiendaNube's `total` with consumer-side interest; use subtotal instead
+    const isGoCuotasGw = gwRaw.includes('gocuotas');
+    const totalVenta = isGoCuotasGw && subtotal > 0 ? subtotal : rawTotal;
 
     // Fee rates include IVA (21%). netoRatio = 1 - fee_with_IVA
     let netoRatio = 0.85; // safe fallback
@@ -2281,7 +2286,8 @@ export async function recordOnlineOrder(orderData) {
             netoRatio = 1 - (0.0349 * 1.21);             // 3.49% + IVA (débito/billetera/crédito 1 cuota)
         }
     } else if (gwRaw.includes('gocuotas')) {
-        // Go Cuotas — débito, 9.1% + IVA, 32 días
+        // GoCuotas adds a consumer surcharge, so TiendaNube's `total` reflects what the customer
+        // paid to GoCuotas (product price + their interest). We use `subtotal` (product price only).
         netoRatio = 1 - (0.091 * 1.21);
         accreditationDays = 32;
     } else if (gwRaw.includes('mercadopago') || gwRaw.includes('mercado_pago')) {
