@@ -31,6 +31,15 @@ export default function GestionPage() {
     const [editVentaData, setEditVentaData] = useState({})
     const [editVentaLoading, setEditVentaLoading] = useState(false)
 
+    // MercadoLibre
+    const [mlConnected, setMlConnected] = useState(false)
+    const [mlItems, setMlItems] = useState([]) // { modelo_id, ml_item_id, modelos:{descripcion} }
+    const [mlModelos, setMlModelos] = useState([]) // all modelos for mapping
+    const [mlNewItemId, setMlNewItemId] = useState('')
+    const [mlNewModeloId, setMlNewModeloId] = useState('')
+    const [mlMsg, setMlMsg] = useState(null)
+    const [mlSyncing, setMlSyncing] = useState(false)
+
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
     const [pendingDispatches, setPendingDispatches] = useState(0)
@@ -45,6 +54,7 @@ export default function GestionPage() {
             else if (tab === 'imagenes') fetchMissingImages(searchQuery)
             else if (tab === 'senas') fetchSenas()
             else if (tab === 'fallas') fetchFallas()
+            else if (tab === 'ml') fetchMlData()
         }, 400);
 
         return () => clearTimeout(handler);
@@ -110,6 +120,67 @@ export default function GestionPage() {
         const data = await getFallasPendientes()
         setFallas(data)
         setLoading(false)
+    }
+
+    async function fetchMlData() {
+        setLoading(true)
+        // Check if ML is connected
+        const { data: token } = await supabase.from('mercadolibre_tokens').select('id').eq('id', 1).maybeSingle()
+        setMlConnected(!!token)
+        // Load existing mappings
+        const { data: items } = await supabase
+            .from('mercadolibre_items')
+            .select('id, modelo_id, ml_item_id, modelos(descripcion)')
+        setMlItems(items || [])
+        // Load all modelos for the selector
+        const { data: modelos } = await supabase.from('modelos').select('id, descripcion').order('descripcion')
+        setMlModelos(modelos || [])
+        setLoading(false)
+
+        // Check ml_auth param
+        const mlAuth = searchParams.get('ml_auth')
+        if (mlAuth === 'success') setMlMsg({ ok: true, text: '✅ MercadoLibre conectado correctamente.' })
+        if (mlAuth === 'error') setMlMsg({ ok: false, text: '❌ Error al conectar MercadoLibre. Intentá de nuevo.' })
+    }
+
+    async function handleMlLink() {
+        if (!mlNewModeloId || !mlNewItemId.trim()) return
+        setMlMsg(null)
+        const mlId = mlNewItemId.trim().toUpperCase()
+        const { error } = await supabase.from('mercadolibre_items').upsert({
+            modelo_id: mlNewModeloId,
+            ml_item_id: mlId,
+        }, { onConflict: 'ml_item_id' })
+        if (error) {
+            setMlMsg({ ok: false, text: 'Error al vincular: ' + error.message })
+        } else {
+            setMlNewItemId('')
+            setMlNewModeloId('')
+            setMlMsg({ ok: true, text: `Producto vinculado a ${mlId}.` })
+            fetchMlData()
+        }
+    }
+
+    async function handleMlUnlink(id) {
+        if (!confirm('¿Desvincular esta publicación de ML?')) return
+        await supabase.from('mercadolibre_items').delete().eq('id', id)
+        fetchMlData()
+    }
+
+    async function handleMlSyncAll() {
+        setMlSyncing(true)
+        setMlMsg(null)
+        let ok = 0, fail = 0
+        for (const item of mlItems) {
+            const res = await fetch('/api/ml/sync-product', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modeloId: item.modelo_id }),
+            })
+            if (res.ok) ok++; else fail++;
+        }
+        setMlSyncing(false)
+        setMlMsg({ ok: fail === 0, text: `Sincronización completa: ${ok} OK, ${fail} con error.` })
     }
 
     async function handleRegistrarFalla() {
@@ -448,6 +519,13 @@ export default function GestionPage() {
                     style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem', borderColor: fallas.length > 0 ? '#ef4444' : undefined }}
                 >
                     ⚠️ Fallas{fallas.length > 0 ? ` (${fallas.length})` : ''}
+                </button>
+                <button
+                    className={tab === 'ml' ? 'btn-primary' : 'btn-secondary'}
+                    onClick={() => { setTab('ml'); setSearchQuery(''); }}
+                    style={{ flex: 'none', padding: '8px 15px', fontSize: '0.8rem', borderColor: tab === 'ml' ? undefined : 'rgba(255,196,0,0.4)', color: tab === 'ml' ? undefined : '#ffc400' }}
+                >
+                    🛒 ML
                 </button>
             </nav>
 
@@ -801,6 +879,99 @@ export default function GestionPage() {
                                 </div>
                             );
                         })}
+                    </div>
+                ) : tab === 'ml' ? (
+                    <div className="grid" style={{ gap: '20px' }}>
+                        {/* Conexión */}
+                        <div className="card" style={{ border: `1px solid ${mlConnected ? 'rgba(255,196,0,0.4)' : 'rgba(239,68,68,0.3)'}`, background: mlConnected ? 'rgba(255,196,0,0.03)' : 'rgba(239,68,68,0.03)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <p style={{ fontWeight: 'bold', fontSize: '0.9rem', margin: 0 }}>
+                                        {mlConnected ? '🟡 MercadoLibre conectado' : '⚫ MercadoLibre no conectado'}
+                                    </p>
+                                    <p style={{ fontSize: '0.75rem', opacity: 0.6, margin: '4px 0 0' }}>
+                                        {mlConnected ? 'Tokens activos. Se renuevan automáticamente.' : 'Autorizá la app para sincronizar publicaciones y recibir ventas.'}
+                                    </p>
+                                </div>
+                                <a
+                                    href="/api/auth/mercadolibre/start"
+                                    className="btn-primary"
+                                    style={{ fontSize: '0.8rem', padding: '8px 14px', background: '#ffc400', color: 'black', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                                >
+                                    {mlConnected ? 'Reconectar' : 'Conectar'}
+                                </a>
+                            </div>
+                            {mlMsg && (
+                                <p style={{ marginTop: '10px', fontSize: '0.8rem', color: mlMsg.ok ? 'var(--accent)' : '#ef4444' }}>{mlMsg.text}</p>
+                            )}
+                        </div>
+
+                        {/* Vinculación de productos */}
+                        <div className="card">
+                            <p style={{ fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '12px' }}>🔗 Vincular producto del ERP con publicación de ML</p>
+                            <p style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '12px' }}>El Item ID lo encontrás en la URL de tu publicación: mercadolibre.com.ar/.../<strong>MLA123456789</strong></p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <select
+                                    className="input-field"
+                                    value={mlNewModeloId}
+                                    onChange={e => setMlNewModeloId(e.target.value)}
+                                >
+                                    <option value="">— Seleccionar modelo del ERP —</option>
+                                    {mlModelos.map(m => (
+                                        <option key={m.id} value={m.id}>{m.descripcion}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="text"
+                                    className="input-field"
+                                    placeholder="Item ID de ML (ej: MLA123456789)"
+                                    value={mlNewItemId}
+                                    onChange={e => setMlNewItemId(e.target.value.toUpperCase())}
+                                />
+                                <button
+                                    className="btn-primary"
+                                    style={{ background: '#ffc400', color: 'black' }}
+                                    disabled={!mlNewModeloId || !mlNewItemId.trim()}
+                                    onClick={handleMlLink}
+                                >
+                                    Vincular
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Lista de vínculos */}
+                        {mlItems.length > 0 && (
+                            <div className="card">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                    <p style={{ fontWeight: 'bold', fontSize: '0.85rem', margin: 0 }}>📋 Publicaciones vinculadas ({mlItems.length})</p>
+                                    <button
+                                        className="btn-primary"
+                                        style={{ fontSize: '0.75rem', padding: '6px 12px', background: '#ffc400', color: 'black' }}
+                                        disabled={mlSyncing || !mlConnected}
+                                        onClick={handleMlSyncAll}
+                                    >
+                                        {mlSyncing ? 'Sincronizando...' : '🔄 Sincronizar todo'}
+                                    </button>
+                                </div>
+                                <div className="grid" style={{ gap: '8px' }}>
+                                    {mlItems.map(item => (
+                                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'var(--secondary)', borderRadius: '8px' }}>
+                                            <div>
+                                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold', margin: 0 }}>{item.modelos?.descripcion}</p>
+                                                <p style={{ fontSize: '0.7rem', opacity: 0.6, margin: '2px 0 0' }}>{item.ml_item_id}</p>
+                                            </div>
+                                            <button
+                                                className="btn-secondary"
+                                                style={{ fontSize: '0.7rem', padding: '4px 10px', color: '#ef4444', borderColor: '#ef4444' }}
+                                                onClick={() => handleMlUnlink(item.id)}
+                                            >
+                                                Desvincular
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ) : tab === 'stock' ? (
                     <div className="grid" style={{ gap: '15px' }}>

@@ -3720,3 +3720,153 @@ export async function resolverFalla(fallaId, tipo, { monto = null, qrReemplazo =
 
     return { success: true };
 }
+
+// ─── MERCADOLIBRE ──────────────────────────────────────────────────────────
+
+/**
+ * Syncs price and stock of a modelo to its linked MercadoLibre item.
+ */
+export async function syncProductToML(modeloId) {
+    const { mlFetch } = await import('@/lib/mercadolibre');
+    const supabase = createClient();
+
+    // Get ML item id for this model
+    const { data: mlItem } = await supabase
+        .from('mercadolibre_items')
+        .select('ml_item_id')
+        .eq('modelo_id', modeloId)
+        .maybeSingle();
+
+    if (!mlItem) return { success: false, message: 'No hay publicación de ML vinculada a este modelo' };
+
+    // Get variants with stock count
+    const { data: variantes } = await supabase
+        .from('variantes')
+        .select('id, precio_lista, unidades(estado)')
+        .eq('modelo_id', modeloId);
+
+    if (!variantes?.length) return { success: false, message: 'No hay variantes' };
+
+    // Use the first variant price as the item price
+    const price = parseFloat(variantes[0].precio_lista) || 0;
+    const totalStock = variantes.reduce((sum, v) => {
+        return sum + (v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0);
+    }, 0);
+
+    try {
+        await mlFetch(`/items/${mlItem.ml_item_id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                price,
+                available_quantity: totalStock,
+            }),
+        });
+        return { success: true };
+    } catch (e) {
+        console.error(`[syncProductToML] Failed for ${mlItem.ml_item_id}:`, e.message);
+        return { success: false, message: e.message };
+    }
+}
+
+/**
+ * Records a paid MercadoLibre order into the ERP.
+ */
+export async function recordMLOrder(order) {
+    const supabase = createClient();
+
+    // Check if already processed
+    const { data: existing } = await supabase
+        .from('pedidos_online')
+        .select('id')
+        .eq('tiendanube_id', `ML-${order.id}`)
+        .maybeSingle();
+
+    if (existing) {
+        console.log(`[ML] Order ${order.id} already recorded, skipping`);
+        return;
+    }
+
+    const buyer = order.buyer || {};
+    const clienteNombre = `${buyer.first_name || ''} ${buyer.last_name || ''}`.trim() || 'Cliente ML';
+    const clienteEmail = buyer.email || null;
+
+    // Map order items
+    const items = (order.order_items || []).map(i => ({
+        name: i.item?.title || 'Producto ML',
+        sku: i.item?.seller_sku || null,
+        price: i.unit_price,
+        quantity: i.quantity,
+        ml_item_id: i.item?.id,
+        ml_variation_id: i.variation_id,
+    }));
+
+    const totalVenta = parseFloat(order.total_amount) || 0;
+    // ML commission: ~13% + IVA (varies by category; using 13% as default for shoes)
+    const netoRatio = 1 - (0.13 * 1.21);
+    const accreditationDays = 7; // ML typically acredits in 7 days after delivery confirmation
+    const fechaAcc = new Date();
+    fechaAcc.setDate(fechaAcc.getDate() + accreditationDays);
+
+    // Create sale record
+    const { data: venta, error: vErr } = await supabase
+        .from('ventas')
+        .insert([{
+            total: totalVenta,
+            medio_pago: 'MERCADOLIBRE',
+            facturado: false,
+            tipo: 'VENTA_ONLINE',
+            nombre_cliente: clienteNombre,
+            email_cliente: clienteEmail,
+            cuenta_destino: 'TOMI',
+            monto_neto: Math.max(0, totalVenta * netoRatio),
+            fecha_acreditacion: fechaAcc.toISOString(),
+        }])
+        .select()
+        .single();
+
+    if (vErr) {
+        console.error('[ML] Error creating sale:', vErr.message);
+        return;
+    }
+
+    // Create pedido_online record (reusing the same table as TiendaNube)
+    await supabase.from('pedidos_online').insert([{
+        tiendanube_id: `ML-${order.id}`,
+        cliente_nombre: clienteNombre,
+        cliente_email: clienteEmail,
+        nro_pedido: String(order.id),
+        items_raw: items,
+        estado: 'PENDIENTE_DESPACHO',
+        medio_pago: 'MERCADOLIBRE',
+    }]);
+
+    // Try to match and reserve units by SKU
+    const modelIds = new Set();
+    for (const item of items) {
+        if (!item.sku) continue;
+        // SKU format: MODEL-COLOR-SIZE (same as TiendaNube)
+        const { data: unit } = await supabase
+            .from('unidades')
+            .select('id, variantes(modelo_id)')
+            .eq('codigo_qr', item.sku)
+            .eq('estado', 'DISPONIBLE')
+            .maybeSingle();
+
+        if (unit) {
+            await supabase.from('unidades').update({
+                estado: 'VENDIDO_ONLINE',
+                venta_id: venta.id,
+                fecha_venta: new Date().toISOString(),
+            }).eq('id', unit.id);
+
+            if (unit.variantes?.modelo_id) modelIds.add(unit.variantes.modelo_id);
+        }
+    }
+
+    // Sync stock back to ML for affected models
+    for (const mId of modelIds) {
+        await syncProductToML(mId).catch(e => console.error('[ML] sync failed:', e.message));
+    }
+
+    console.log(`[ML] Order ${order.id} recorded, venta ${venta.id}`);
+}
