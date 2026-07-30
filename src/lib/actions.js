@@ -3754,7 +3754,7 @@ export async function syncProductToML(modeloId) {
     // Obtener descripcion del modelo para buscar también otras temporadas del mismo modelo
     const { data: modeloData } = await supabase
         .from('modelos')
-        .select('descripcion')
+        .select('descripcion, tiendanube_id')
         .eq('id', modeloId)
         .single();
 
@@ -3774,7 +3774,7 @@ export async function syncProductToML(modeloId) {
 
     if (!mlItems?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
 
-    // Get variants with stock count, grouped by color+talle (de todas las temporadas)
+    // Get variants con precio y talle (de todas las temporadas)
     const { data: variantes } = await supabase
         .from('variantes')
         .select('id, precio_lista, color, talle, unidades(estado)')
@@ -3782,19 +3782,60 @@ export async function syncProductToML(modeloId) {
 
     if (!variantes?.length) return { success: false, message: 'No hay variantes' };
 
-    // Build stock per color+talle and price per color (sumando todas las temporadas)
-    const stockByColorTalle = {}; // "NEGRO-37" -> 3
+    // Detectar si el modelo usa talle CURVA (sin desglose por talle)
+    const esCurva = variantes.some(v => (v.talle || '').toUpperCase() === 'CURVA');
+
+    // Precios por color (del ERP)
     const priceByColor = {};
+    // Stock por color+talle del ERP (sumando temporadas)
+    const stockByColorTalle = {};
+    // Stock total por color del ERP (para modelos CURVA)
+    const stockTotalByColor = {};
+
     for (const v of variantes) {
         const c = (v.color || '').toUpperCase();
         const t = (v.talle || '').toUpperCase();
-        const key = `${c}-${t}`;
         const qty = v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0;
-        stockByColorTalle[key] = (stockByColorTalle[key] || 0) + qty;
         priceByColor[c] = parseFloat(v.precio_lista) || priceByColor[c] || 0;
+        if (t !== 'CURVA') {
+            const key = `${c}-${t}`;
+            stockByColorTalle[key] = (stockByColorTalle[key] || 0) + qty;
+        }
+        stockTotalByColor[c] = (stockTotalByColor[c] || 0) + qty;
     }
     const maxPrice = Math.max(...Object.values(priceByColor));
-    const totalStock = Object.values(stockByColorTalle).reduce((s, n) => s + n, 0);
+
+    // Para modelos CURVA: obtener stock por talle desde TiendaNube (que sí tiene desglose)
+    // stockTNByColorTalle: "NEGRO-37" -> 2
+    const stockTNByColorTalle = {};
+    if (esCurva && modeloData?.tiendanube_id) {
+        // Buscar tiendanube_id en todos los modelos del mismo nombre
+        const { data: modelosData } = await supabase
+            .from('modelos')
+            .select('tiendanube_id')
+            .in('id', allModeloIds)
+            .not('tiendanube_id', 'is', null);
+        for (const m of modelosData || []) {
+            const storeId = process.env.TIENDANUBE_STORE_ID;
+            const token = process.env.TIENDANUBE_ACCESS_TOKEN;
+            try {
+                const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${m.tiendanube_id}`, {
+                    headers: { 'Authentication': `bearer ${token}`, 'User-Agent': 'StrawberryERP/1.0' }
+                });
+                if (!res.ok) continue;
+                const tnProduct = await res.json();
+                for (const tnV of tnProduct.variants || []) {
+                    const vals = tnV.values?.map(x => x.es?.toUpperCase()) || [];
+                    const colorVal = vals.find(x => priceByColor[x] !== undefined) || vals[0] || '';
+                    const talleVal = vals.find(x => x !== colorVal) || '';
+                    if (colorVal && talleVal) {
+                        const key = `${colorVal}-${talleVal}`;
+                        stockTNByColorTalle[key] = (stockTNByColorTalle[key] || 0) + (tnV.stock || 0);
+                    }
+                }
+            } catch (e) { /* ignorar errores de TN */ }
+        }
+    }
 
     const results = [];
     for (const mlItem of mlItems) {
@@ -3808,35 +3849,39 @@ export async function syncProductToML(modeloId) {
             if (current.variations?.length) {
                 body = {
                     variations: current.variations.map(v => {
-                        // Extraer talle: "37 AR" → "37"
                         const sizeAttr = v.attribute_combinations?.find(a => a.id === 'SIZE');
                         const talleNum = sizeAttr?.value_name?.replace(/\s*AR$/i, '').trim() || '';
-                        // Extraer color: mapear ML value_id → nombre ERP
                         const colorAttr = v.attribute_combinations?.find(a => a.id === 'COLOR');
                         const mlColorId = colorAttr?.value_id?.toString() || '';
-                        // Si el item tiene color asignado en la BD usarlo directo,
-                        // si no buscar entre todos los colores ERP que comparten ese value_id
-                        // cuál realmente existe en este modelo
+
                         let erpColor = itemColor;
                         if (!erpColor) {
                             const candidates = ML_COLOR_ID_TO_ERP_LIST[mlColorId] || [];
                             erpColor = candidates.find(c =>
                                 stockByColorTalle[`${c}-${talleNum}`] !== undefined ||
-                                stockByColorTalle[`${c}-CURVA`] !== undefined
+                                stockTNByColorTalle[`${c}-${talleNum}`] !== undefined ||
+                                stockTotalByColor[c] !== undefined
                             ) || candidates[0] || Object.keys(priceByColor)[0] || '';
                         }
-                        const erpKey = `${erpColor}-${talleNum}`;
-                        // Fallback para modelos con talle CURVA en el ERP (sin talles individuales)
-                        const curvaKey = `${erpColor}-CURVA`;
-                        const qty = stockByColorTalle[erpKey] ?? stockByColorTalle[curvaKey] ?? v.available_quantity;
+
+                        let qty;
+                        if (esCurva) {
+                            // Usar stock de TiendaNube por talle si está disponible
+                            const tnKey = `${erpColor}-${talleNum}`;
+                            qty = stockTNByColorTalle[tnKey] ?? v.available_quantity;
+                        } else {
+                            const erpKey = `${erpColor}-${talleNum}`;
+                            qty = stockByColorTalle[erpKey] ?? v.available_quantity;
+                        }
+
                         const varPrice = priceByColor[erpColor] || precio;
                         return { id: v.id, price: varPrice, available_quantity: qty };
                     })
                 };
             } else {
                 const itemStock = itemColor
-                    ? Object.entries(stockByColorTalle).filter(([k]) => k.startsWith(itemColor + '-')).reduce((s, [, n]) => s + n, 0)
-                    : totalStock;
+                    ? (stockTotalByColor[itemColor] || 0)
+                    : Object.values(stockTotalByColor).reduce((s, n) => s + n, 0);
                 body = { price: precio, available_quantity: itemStock };
             }
 
