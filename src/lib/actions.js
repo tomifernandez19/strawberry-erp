@@ -3849,7 +3849,7 @@ export async function syncProductToML(modeloId) {
             if (current.variations?.length) {
                 body = {
                     variations: current.variations.map(v => {
-                        const sizeAttr = v.attribute_combinations?.find(a => a.id === 'SIZE');
+                        const sizeAttr = v.attribute_combinations?.find(a => a.id === 'SIZE' || a.id === 'TALLE');
                         const talleNum = sizeAttr?.value_name?.replace(/\s*AR$/i, '').trim() || '';
                         const colorAttr = v.attribute_combinations?.find(a => a.id === 'COLOR');
                         const mlColorId = colorAttr?.value_id?.toString() || '';
@@ -4237,9 +4237,11 @@ export async function syncVariationsToML(modeloId) {
             const currentVariations = currentItem.variations || [];
 
             // Identificar combinaciones ya existentes: "COLOR_ID-SIZE_VALUE"
+            // ML puede usar 'SIZE' o 'TALLE' según el item
             const existingKeys = new Set(currentVariations.map(v => {
                 const color = v.attribute_combinations?.find(a => a.id === 'COLOR')?.value_id;
-                const size = v.attribute_combinations?.find(a => a.id === 'SIZE')?.value_name;
+                const sizeAttr = v.attribute_combinations?.find(a => a.id === 'SIZE' || a.id === 'TALLE');
+                const size = sizeAttr?.value_name;
                 return `${color}-${size}`;
             }));
 
