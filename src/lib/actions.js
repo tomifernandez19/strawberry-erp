@@ -4067,3 +4067,161 @@ export async function publishModeloToML(modeloId) {
 
     return { success: true, ml_item_id: created.id, permalink: created.permalink, status: created.status };
 }
+
+// Agrega variantes faltantes (colores/talles) a publicaciones de ML ya existentes
+export async function syncVariationsToML(modeloId) {
+    const { mlFetch } = await import('@/lib/mercadolibre');
+    const supabase = createClient();
+
+    // 1. Obtener los items de ML vinculados al modelo
+    const { data: mlLinks } = await supabase
+        .from('mercadolibre_items')
+        .select('ml_item_id, color')
+        .eq('modelo_id', modeloId);
+    if (!mlLinks?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
+
+    // 2. Obtener variantes de TiendaNube (fuente de verdad de stock)
+    const { data: modelo } = await supabase
+        .from('modelos')
+        .select('descripcion, tiendanube_id')
+        .eq('id', modeloId)
+        .single();
+    if (!modelo) return { success: false, message: 'Modelo no encontrado' };
+
+    let tnVariants = [];
+    let tnImages = [];
+    if (modelo.tiendanube_id) {
+        const storeId = process.env.TIENDANUBE_STORE_ID;
+        const token = process.env.TIENDANUBE_ACCESS_TOKEN;
+        const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${modelo.tiendanube_id}`, {
+            headers: { 'Authentication': `bearer ${token}`, 'User-Agent': 'StrawberryERP/1.0' }
+        });
+        if (res.ok) {
+            const tnProduct = await res.json();
+            tnVariants = tnProduct.variants || [];
+            tnImages = (tnProduct.images || []).slice(0, 6).map(img => img.src);
+        }
+    }
+    if (!tnVariants.length) return { success: false, message: 'No se encontraron variantes en TiendaNube' };
+
+    // 3. Obtener precios del ERP por color
+    const { data: erpVariantes } = await supabase
+        .from('variantes')
+        .select('color, precio_lista')
+        .eq('modelo_id', modeloId);
+    const preciosPorColor = {};
+    for (const v of (erpVariantes || [])) {
+        preciosPorColor[v.color?.toUpperCase()] = parseFloat(v.precio_lista) || 0;
+    }
+    const precioDefault = Object.values(preciosPorColor)[0] || 0;
+
+    const results = [];
+
+    for (const link of mlLinks) {
+        const mlItemId = link.ml_item_id;
+        const linkColor = link.color?.toUpperCase() || null;
+
+        try {
+            // 4. Obtener variantes actuales del item en ML
+            const currentItem = await mlFetch(`/items/${mlItemId}`);
+            const currentVariations = currentItem.variations || [];
+
+            // Identificar combinaciones ya existentes: "COLOR_ID-SIZE_VALUE"
+            const existingKeys = new Set(currentVariations.map(v => {
+                const color = v.attribute_combinations?.find(a => a.id === 'COLOR')?.value_id;
+                const size = v.attribute_combinations?.find(a => a.id === 'SIZE')?.value_name;
+                return `${color}-${size}`;
+            }));
+
+            // Recolectar picture_ids ya usados en el item
+            const existingPicIds = currentItem.pictures?.map(p => p.id) || [];
+
+            // 5. Subir fotos faltantes si hay colores nuevos
+            const newColors = new Set();
+            for (const tnV of tnVariants) {
+                const vals = tnV.values?.map(x => x.es?.toUpperCase()) || [];
+                const colorKey = vals.find(x => ML_COLOR_MAP[x]);
+                if (colorKey && (!linkColor || colorKey === linkColor)) {
+                    const mlColor = ML_COLOR_MAP[colorKey];
+                    const talleKey = vals.find(x => ML_SIZE_GRID_MAP[x]);
+                    if (!talleKey) continue;
+                    const mlSize = ML_SIZE_GRID_MAP[talleKey];
+                    const key = `${mlColor.colorId}-${mlSize.sizeValue}`;
+                    if (!existingKeys.has(key)) newColors.add(colorKey);
+                }
+            }
+
+            // Subir fotos solo si hay colores nuevos y no hay pics suficientes
+            let picIds = [...existingPicIds];
+            if (newColors.size > 0 && tnImages.length > 0 && picIds.length < 6) {
+                for (const url of tnImages.slice(picIds.length)) {
+                    try {
+                        const pic = await mlFetch('/pictures', {
+                            method: 'POST',
+                            body: JSON.stringify({ source: url }),
+                            useQueryToken: true
+                        });
+                        if (pic.id) picIds.push(pic.id);
+                    } catch (e) { /* ignorar errores de fotos individuales */ }
+                }
+            }
+            if (!picIds.length) picIds = existingPicIds;
+
+            // 6. Construir variantes nuevas a agregar
+            const newVariations = [];
+            for (const tnV of tnVariants) {
+                const vals = tnV.values?.map(x => x.es?.toUpperCase()) || [];
+                const colorKey = vals.find(x => ML_COLOR_MAP[x]);
+                const talleKey = vals.find(x => ML_SIZE_GRID_MAP[x]);
+                if (!colorKey || !talleKey) continue;
+                if (linkColor && colorKey !== linkColor) continue;
+
+                const mlColor = ML_COLOR_MAP[colorKey];
+                const mlSize = ML_SIZE_GRID_MAP[talleKey];
+                const key = `${mlColor.colorId}-${mlSize.sizeValue}`;
+                if (existingKeys.has(key)) continue; // ya existe
+
+                const precio = preciosPorColor[colorKey] || precioDefault;
+                newVariations.push({
+                    attribute_combinations: [
+                        { id: 'COLOR', value_id: mlColor.colorId, value_name: mlColor.colorName },
+                        { id: 'SIZE', value_name: mlSize.sizeValue }
+                    ],
+                    price: precio,
+                    available_quantity: tnV.stock || 0,
+                    picture_ids: [picIds[0]],
+                    attributes: [
+                        { id: 'MAIN_COLOR', value_id: mlColor.mainColorId },
+                        { id: 'SIZE_GRID_ROW_ID', value_name: mlSize.gridRowId }
+                    ]
+                });
+            }
+
+            if (!newVariations.length) {
+                results.push({ ml_item_id: mlItemId, added: 0, message: 'Sin variantes nuevas para agregar' });
+                continue;
+            }
+
+            // 7. PUT al item con variantes existentes + nuevas
+            const mergedVariations = [...currentVariations, ...newVariations];
+            await mlFetch(`/items/${mlItemId}`, {
+                method: 'PUT',
+                body: JSON.stringify({ variations: mergedVariations, pictures: picIds.map(id => ({ id })) })
+            });
+
+            results.push({ ml_item_id: mlItemId, added: newVariations.length });
+        } catch (e) {
+            results.push({ ml_item_id: mlItemId, error: e.message });
+        }
+    }
+
+    const totalAdded = results.reduce((s, r) => s + (r.added || 0), 0);
+    const errors = results.filter(r => r.error);
+    return {
+        success: errors.length === 0,
+        message: errors.length
+            ? `Errores: ${errors.map(e => `${e.ml_item_id}: ${e.error}`).join('; ')}`
+            : `Se agregaron ${totalAdded} variante(s) nueva(s).`,
+        results
+    };
+}

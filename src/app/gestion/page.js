@@ -42,6 +42,7 @@ export default function GestionPage() {
     const [mlSyncing, setMlSyncing] = useState(false)
     const [mlPublishModeloId, setMlPublishModeloId] = useState('')
     const [mlPublishing, setMlPublishing] = useState(false)
+    const [mlSyncingVariations, setMlSyncingVariations] = useState(null) // modelo_id being synced
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -170,6 +171,19 @@ export default function GestionPage() {
         if (!confirm('¿Desvincular esta publicación de ML?')) return
         await supabase.from('mercadolibre_items').delete().eq('id', id)
         fetchMlData()
+    }
+
+    async function handleMlSyncVariations(modeloId) {
+        setMlSyncingVariations(modeloId)
+        setMlMsg(null)
+        const res = await fetch('/api/ml/sync-variations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modeloId }),
+        })
+        const data = await res.json()
+        setMlSyncingVariations(null)
+        setMlMsg({ ok: data.success, text: data.success ? `✅ ${data.message}` : `❌ ${data.message}` })
     }
 
     async function handleMlPublish() {
@@ -1018,13 +1032,23 @@ export default function GestionPage() {
                                                 <p style={{ fontSize: '0.85rem', fontWeight: 'bold', margin: 0 }}>{item.modelos?.descripcion}{item.color ? ` — ${item.color}` : ''}</p>
                                                 <p style={{ fontSize: '0.7rem', opacity: 0.6, margin: '2px 0 0' }}>{item.ml_item_id}</p>
                                             </div>
-                                            <button
-                                                className="btn-secondary"
-                                                style={{ fontSize: '0.7rem', padding: '4px 10px', color: '#ef4444', borderColor: '#ef4444' }}
-                                                onClick={() => handleMlUnlink(item.id)}
-                                            >
-                                                Desvincular
-                                            </button>
+                                            <div style={{ display: 'flex', gap: '6px' }}>
+                                                <button
+                                                    className="btn-secondary"
+                                                    style={{ fontSize: '0.7rem', padding: '4px 10px' }}
+                                                    disabled={mlSyncingVariations === item.modelo_id || !mlConnected}
+                                                    onClick={() => handleMlSyncVariations(item.modelo_id)}
+                                                >
+                                                    {mlSyncingVariations === item.modelo_id ? '...' : '➕ Variantes'}
+                                                </button>
+                                                <button
+                                                    className="btn-secondary"
+                                                    style={{ fontSize: '0.7rem', padding: '4px 10px', color: '#ef4444', borderColor: '#ef4444' }}
+                                                    onClick={() => handleMlUnlink(item.id)}
+                                                >
+                                                    Desvincular
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
