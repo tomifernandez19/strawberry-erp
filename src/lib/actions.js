@@ -251,10 +251,11 @@ export async function assignQRToUnit(unitId, qrCode) {
 
         if (error) throw new Error(error.message)
 
-        // 3. AUTO-SYNC: Update Tiendanube now that we have one more item available
+        // 3. AUTO-SYNC: Update Tiendanube and ML now that we have one more item available
         const { data: unit } = await supabase.from('unidades').select('variantes(modelo_id)').eq('id', unitId).single();
         if (unit?.variantes?.modelo_id) {
             await syncProductToTiendanube(unit.variantes.modelo_id);
+            syncProductToML(unit.variantes.modelo_id).catch(e => console.error('[assignQR ML sync]', e.message));
         }
 
         return { success: true }
@@ -1585,6 +1586,7 @@ export async function deleteSale(saleId) {
             const modelIds = [...new Set(unitsToSync?.map(u => u.variantes?.modelo_id))].filter(Boolean);
             for (const mId of modelIds) {
                 await syncProductToTiendanube(mId);
+                syncProductToML(mId).catch(e => console.error('[deleteSale ML sync]', e.message));
             }
         } catch (e) {
             console.error("[deleteSale] AutoSync failed:", e);
@@ -1673,6 +1675,7 @@ export async function deleteUnit(unitId) {
         // Sync
         if (unit?.variantes?.modelo_id) {
             await syncProductToTiendanube(unit.variantes.modelo_id);
+            syncProductToML(unit.variantes.modelo_id).catch(e => console.error('[deleteUnit ML sync]', e.message));
         }
 
         return { success: true };
@@ -2501,6 +2504,7 @@ export async function cancelOnlineOrder(tiendanubeOrderId) {
                 // Trigger auto-sync if we have model ID
                 if (unitInfo?.variantes?.modelo_id) {
                     await syncProductToTiendanube(unitInfo.variantes.modelo_id);
+                    syncProductToML(unitInfo.variantes.modelo_id).catch(e => console.error('[cancelOrder ML sync]', e.message));
                 }
             }
         }
@@ -3613,7 +3617,8 @@ export async function cancelarSena(ventaId) {
     // Sync TiendaNube stock for each model
     const modelIds = [...new Set((venta.unidades || []).map(u => u.variantes?.modelo_id).filter(Boolean))];
     for (const mId of modelIds) {
-        await syncProductToTiendanube(mId).catch(e => console.error(`[cancelarSena] sync failed for model ${mId}:`, e));
+        await syncProductToTiendanube(mId).catch(e => console.error(`[cancelarSena] TN sync failed for model ${mId}:`, e));
+        syncProductToML(mId).catch(e => console.error(`[cancelarSena] ML sync failed for model ${mId}:`, e));
     }
 
     return { success: true };
@@ -3645,9 +3650,12 @@ export async function registrarFalla(qrCode, notas = '') {
 
     await supabase.from('unidades').update({ estado: 'FALLA' }).eq('id', unit.id);
 
-    // Sync TiendaNube to reflect the stock decrease
+    // Sync stock decrease
     const modeloId = unit.variantes?.modelo_id;
-    if (modeloId) await syncProductToTiendanube(modeloId);
+    if (modeloId) {
+        await syncProductToTiendanube(modeloId);
+        syncProductToML(modeloId).catch(e => console.error('[registrarFalla ML sync]', e.message));
+    }
 
     return { success: true, falla, unit };
 }
@@ -3723,9 +3731,10 @@ export async function resolverFalla(fallaId, tipo, { monto = null, qrReemplazo =
                 compra_id: null
             }]);
 
-            // Sync stock to TiendaNube
+            // Sync stock
             if (originalUnit.variantes?.modelo_id) {
                 await syncProductToTiendanube(originalUnit.variantes.modelo_id);
+                syncProductToML(originalUnit.variantes.modelo_id).catch(e => console.error('[resolverFalla ML sync]', e.message));
             }
         }
     } else if (tipo === 'NOTA_CREDITO' && monto) {
