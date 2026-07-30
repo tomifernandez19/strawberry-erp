@@ -441,16 +441,22 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
 
     if (updateError) throw updateError
 
-    // 5. AUTO-SYNC with Tiendanube
+    // 5. AUTO-SYNC with Tiendanube and MercadoLibre
     try {
         const modelIds = [...new Set(units.map(u => u.variantes?.modelo_id))].filter(Boolean);
         console.log(`[recordSale] Initiating sync for ${modelIds.length} models...`);
         for (const mId of modelIds) {
             const syncRes = await syncProductToTiendanube(mId);
             if (!syncRes.success) {
-                console.error(`[recordSale] Sync failed for model ${mId}:`, syncRes.message);
+                console.error(`[recordSale] TN sync failed for model ${mId}:`, syncRes.message);
             } else {
-                console.log(`[recordSale] Sync successful for model ${mId}`);
+                console.log(`[recordSale] TN sync successful for model ${mId}`);
+            }
+            const mlRes = await syncProductToML(mId);
+            if (!mlRes.success) {
+                console.error(`[recordSale] ML sync failed for model ${mId}:`, mlRes.message);
+            } else {
+                console.log(`[recordSale] ML sync successful for model ${mId}`);
             }
         }
     } catch (e) {
