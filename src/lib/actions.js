@@ -3751,14 +3751,6 @@ export async function syncProductToML(modeloId) {
     const { mlFetch } = await import('@/lib/mercadolibre');
     const supabase = createClient();
 
-    // Get all ML items linked to this model (can be multiple, one per color)
-    const { data: mlItems } = await supabase
-        .from('mercadolibre_items')
-        .select('ml_item_id, color')
-        .eq('modelo_id', modeloId);
-
-    if (!mlItems?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
-
     // Obtener descripcion del modelo para buscar también otras temporadas del mismo modelo
     const { data: modeloData } = await supabase
         .from('modelos')
@@ -3772,6 +3764,15 @@ export async function syncProductToML(modeloId) {
         .select('id')
         .eq('descripcion', modeloData?.descripcion || '');
     const allModeloIds = (modelosIds || []).map(m => m.id);
+
+    // Buscar links de ML en todos los modelos de la misma descripción
+    // (el link puede estar en otra temporada del mismo modelo)
+    const { data: mlItems } = await supabase
+        .from('mercadolibre_items')
+        .select('ml_item_id, color')
+        .in('modelo_id', allModeloIds);
+
+    if (!mlItems?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
 
     // Get variants with stock count, grouped by color+talle (de todas las temporadas)
     const { data: variantes } = await supabase
@@ -3819,10 +3820,10 @@ export async function syncProductToML(modeloId) {
                         let erpColor = itemColor;
                         if (!erpColor) {
                             const candidates = ML_COLOR_ID_TO_ERP_LIST[mlColorId] || [];
-                            erpColor = candidates.find(c => stockByColorTalle[`${c}-${talleNum}`] !== undefined)
-                                || candidates[0]
-                                || Object.keys(priceByColor)[0]
-                                || '';
+                            erpColor = candidates.find(c =>
+                                stockByColorTalle[`${c}-${talleNum}`] !== undefined ||
+                                stockByColorTalle[`${c}-CURVA`] !== undefined
+                            ) || candidates[0] || Object.keys(priceByColor)[0] || '';
                         }
                         const erpKey = `${erpColor}-${talleNum}`;
                         // Fallback para modelos con talle CURVA en el ERP (sin talles individuales)
