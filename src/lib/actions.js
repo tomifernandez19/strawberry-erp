@@ -3810,7 +3810,9 @@ export async function syncProductToML(modeloId) {
                                 || '';
                         }
                         const erpKey = `${erpColor}-${talleNum}`;
-                        const qty = stockByColorTalle[erpKey] ?? v.available_quantity;
+                        // Fallback para modelos con talle CURVA en el ERP (sin talles individuales)
+                        const curvaKey = `${erpColor}-CURVA`;
+                        const qty = stockByColorTalle[erpKey] ?? stockByColorTalle[curvaKey] ?? v.available_quantity;
                         const varPrice = priceByColor[erpColor] || precio;
                         return { id: v.id, price: varPrice, available_quantity: qty };
                     })
