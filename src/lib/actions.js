@@ -4203,7 +4203,9 @@ export async function syncVariationsToML(modeloId) {
             }
 
             // 7. PUT al item con variantes existentes + nuevas
-            const mergedVariations = [...currentVariations, ...newVariations];
+            // catalog_product_id no es modificable, hay que quitarlo de las variantes existentes
+            const sanitizedExisting = currentVariations.map(({ catalog_product_id, ...v }) => v);
+            const mergedVariations = [...sanitizedExisting, ...newVariations];
             await mlFetch(`/items/${mlItemId}`, {
                 method: 'PUT',
                 body: JSON.stringify({ variations: mergedVariations, pictures: picIds.map(id => ({ id })) })
