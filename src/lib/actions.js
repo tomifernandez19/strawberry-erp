@@ -3798,7 +3798,17 @@ export async function syncProductToML(modeloId) {
                         // Extraer color: mapear ML value_id → nombre ERP
                         const colorAttr = v.attribute_combinations?.find(a => a.id === 'COLOR');
                         const mlColorId = colorAttr?.value_id?.toString() || '';
-                        const erpColor = itemColor || ML_COLOR_ID_TO_ERP[mlColorId] || Object.keys(priceByColor)[0] || '';
+                        // Si el item tiene color asignado en la BD usarlo directo,
+                        // si no buscar entre todos los colores ERP que comparten ese value_id
+                        // cuál realmente existe en este modelo
+                        let erpColor = itemColor;
+                        if (!erpColor) {
+                            const candidates = ML_COLOR_ID_TO_ERP_LIST[mlColorId] || [];
+                            erpColor = candidates.find(c => stockByColorTalle[`${c}-${talleNum}`] !== undefined)
+                                || candidates[0]
+                                || Object.keys(priceByColor)[0]
+                                || '';
+                        }
                         const erpKey = `${erpColor}-${talleNum}`;
                         const qty = stockByColorTalle[erpKey] ?? v.available_quantity;
                         const varPrice = priceByColor[erpColor] || precio;
@@ -3944,10 +3954,11 @@ const ML_COLOR_MAP = {
     'ROSA':      { colorId: '283155',  colorName: 'Rosa',    mainColorId: '2450292' },
 };
 
-// Mapa inverso: ML color value_id → primer color ERP que lo usa
-// Necesario para que syncProductToML pueda buscar el stock correcto en el ERP
-const ML_COLOR_ID_TO_ERP = Object.entries(ML_COLOR_MAP).reduce((acc, [erpColor, { colorId }]) => {
-    if (!acc[colorId]) acc[colorId] = erpColor; // toma el primero (ej: 2450291 → CHOCOLATE, no MARRON)
+// Mapa inverso: ML color value_id → lista de colores ERP que lo usan
+// Ej: '2450291' → ['CHOCOLATE', 'MARRON'], '52001' → ['CAMEL', 'BEIGE', 'VISON', 'SUELA']
+const ML_COLOR_ID_TO_ERP_LIST = Object.entries(ML_COLOR_MAP).reduce((acc, [erpColor, { colorId }]) => {
+    if (!acc[colorId]) acc[colorId] = [];
+    acc[colorId].push(erpColor);
     return acc;
 }, {});
 
