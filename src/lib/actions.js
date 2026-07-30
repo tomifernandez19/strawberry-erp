@@ -2262,15 +2262,19 @@ export async function recordOnlineOrder(orderData) {
 
     console.log(`[Webhook] Gateway: ${gwRaw}, installments: ${installments}, method: ${payMethod}`);
 
-    // GoCuotas inflates TiendaNube's `total` with consumer-side interest; use subtotal instead
-    const isGoCuotasGw = gwRaw.includes('gocuotas');
-    const totalVenta = isGoCuotasGw && subtotal > 0 ? subtotal : rawTotal;
+    // Pago Nube and GoCuotas inflate TiendaNube's `total` with consumer-side surcharges.
+    // subtotal = product price only (no installment interest, no shipping) — always use it.
+    const totalVenta = subtotal > 0 ? subtotal : rawTotal;
 
     // Fee rates include IVA (21%). netoRatio = 1 - fee_with_IVA
     let netoRatio = 0.85; // safe fallback
     let accreditationDays = 14;
 
-    if (gwRaw.includes('pagofacil') || gwRaw.includes('pagoNube') || gwRaw === 'nuvempago') {
+    // TiendaNube sends gateway as lowercase with hyphens, e.g. 'pago-nube', 'mercadopago'
+    const isPagoNube = gwRaw.includes('pago-nube') || gwRaw.includes('pagonube') ||
+                       gwRaw.includes('pagofacil') || gwRaw === 'nuvempago';
+
+    if (isPagoNube) {
         // Pago Nube
         accreditationDays = 14;
         if (gwRaw.includes('transferencia') || gwRaw.includes('bank') || gwRaw.includes('transfer')) {
@@ -2286,8 +2290,6 @@ export async function recordOnlineOrder(orderData) {
             netoRatio = 1 - (0.0349 * 1.21);             // 3.49% + IVA (débito/billetera/crédito 1 cuota)
         }
     } else if (gwRaw.includes('gocuotas')) {
-        // GoCuotas adds a consumer surcharge, so TiendaNube's `total` reflects what the customer
-        // paid to GoCuotas (product price + their interest). We use `subtotal` (product price only).
         netoRatio = 1 - (0.091 * 1.21);
         accreditationDays = 32;
     } else if (gwRaw.includes('mercadopago') || gwRaw.includes('mercado_pago')) {
