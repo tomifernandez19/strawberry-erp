@@ -3898,3 +3898,171 @@ export async function recordMLOrder(order) {
 
     console.log(`[ML] Order ${order.id} recorded, venta ${venta.id}`);
 }
+
+// Mapping de colores del ERP a valores de MercadoLibre
+const ML_COLOR_MAP = {
+    'NEGRO':     { colorId: '2450295', colorName: 'Negro',   mainColorId: '2450295' },
+    'CHOCOLATE': { colorId: '2450291', colorName: 'Marron',  mainColorId: '2450291' },
+    'MARRON':    { colorId: '2450291', colorName: 'Marron',  mainColorId: '2450291' },
+    'CAMEL':     { colorId: '52001',   colorName: 'Beige',   mainColorId: '2450281' },
+    'BEIGE':     { colorId: '52001',   colorName: 'Beige',   mainColorId: '2450281' },
+    'BLANCO':    { colorId: '2450290', colorName: 'Blanco',  mainColorId: '2450290' },
+    'GRIS':      { colorId: '52000',   colorName: 'Gris',    mainColorId: '2450286' },
+    'ROJO':      { colorId: '52002',   colorName: 'Rojo',    mainColorId: '2450293' },
+    'AZUL':      { colorId: '52004',   colorName: 'Azul',    mainColorId: '2450284' },
+    'VERDE':     { colorId: '52003',   colorName: 'Verde',   mainColorId: '2450289' },
+    'ROSA':      { colorId: '283155',  colorName: 'Rosa',    mainColorId: '2450292' },
+};
+
+// Mapping de talles AR a SIZE_GRID_ROW_ID en la guía 259983
+const ML_SIZE_GRID_MAP = {
+    '35': { sizeValue: '35 AR', gridRowId: '259983:4' },
+    '36': { sizeValue: '36 AR', gridRowId: '259983:6' },
+    '37': { sizeValue: '37 AR', gridRowId: '259983:8' },
+    '38': { sizeValue: '38 AR', gridRowId: '259983:11' },
+    '39': { sizeValue: '39 AR', gridRowId: '259983:13' },
+    '40': { sizeValue: '40 AR', gridRowId: '259983:15' },
+};
+
+/**
+ * Publica un modelo del ERP en MercadoLibre automáticamente.
+ * Toma fotos de TiendaNube, variantes+stock del ERP, y crea la publicación.
+ */
+export async function publishModeloToML(modeloId) {
+    const { mlFetch } = await import('@/lib/mercadolibre');
+    const supabase = createClient();
+
+    // 1. Verificar que no esté ya publicado
+    const { data: existing } = await supabase
+        .from('mercadolibre_items')
+        .select('ml_item_id')
+        .eq('modelo_id', modeloId)
+        .maybeSingle();
+    if (existing) return { success: false, message: `Ya existe una publicación vinculada: ${existing.ml_item_id}` };
+
+    // 2. Obtener datos del modelo
+    const { data: modelo } = await supabase
+        .from('modelos')
+        .select('descripcion, tiendanube_id')
+        .eq('id', modeloId)
+        .single();
+    if (!modelo) return { success: false, message: 'Modelo no encontrado' };
+
+    // 3. Obtener variantes con stock por talle desde TiendaNube
+    let tnVariants = [];
+    let tnImages = [];
+    if (modelo.tiendanube_id) {
+        const storeId = process.env.TIENDANUBE_STORE_ID;
+        const token = process.env.TIENDANUBE_ACCESS_TOKEN;
+        const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${modelo.tiendanube_id}`, {
+            headers: { 'Authentication': `bearer ${token}`, 'User-Agent': 'StrawberryERP/1.0' }
+        });
+        if (res.ok) {
+            const tnProduct = await res.json();
+            tnVariants = tnProduct.variants || [];
+            tnImages = (tnProduct.images || []).slice(0, 6).map(img => img.src);
+        }
+    }
+
+    if (!tnImages.length) return { success: false, message: 'No se encontraron fotos en TiendaNube. Sincronizá el producto primero.' };
+
+    // 4. Obtener precio del ERP
+    const { data: variantes } = await supabase
+        .from('variantes')
+        .select('color, precio_lista')
+        .eq('modelo_id', modeloId);
+    if (!variantes?.length) return { success: false, message: 'No hay variantes en el ERP' };
+    const precio = parseFloat(variantes[0].precio_lista) || 0;
+
+    // 5. Subir fotos a ML
+    const picIds = [];
+    for (const url of tnImages) {
+        try {
+            const pic = await mlFetch('/pictures', {
+                method: 'POST',
+                body: JSON.stringify({ source: url }),
+                useQueryToken: true
+            });
+            if (pic.id) picIds.push(pic.id);
+        } catch (e) {
+            console.error('[publishModeloToML] foto error:', e.message);
+        }
+    }
+    if (!picIds.length) return { success: false, message: 'No se pudieron subir las fotos a ML' };
+
+    // 6. Construir variaciones agrupadas por color
+    // Agrupar fotos por color (primera mitad para primer color, etc.)
+    const coloresList = [...new Set(tnVariants.map(v => {
+        const vals = v.values?.map(x => x.es?.toUpperCase()) || [];
+        return vals.find(x => ML_COLOR_MAP[x]) || vals[0];
+    }).filter(Boolean))];
+
+    const picsPerColor = Math.max(1, Math.floor(picIds.length / Math.max(coloresList.length, 1)));
+    const colorPics = {};
+    coloresList.forEach((color, i) => {
+        const start = i * picsPerColor;
+        colorPics[color] = picIds.slice(start, start + picsPerColor).length
+            ? picIds.slice(start, start + picsPerColor)
+            : [picIds[0]];
+    });
+
+    const variations = [];
+    for (const tnV of tnVariants) {
+        const vals = tnV.values?.map(x => x.es?.toUpperCase()) || [];
+        const colorKey = vals.find(x => ML_COLOR_MAP[x]);
+        const talleKey = vals.find(x => ML_SIZE_GRID_MAP[x]);
+
+        if (!colorKey || !talleKey) continue;
+
+        const mlColor = ML_COLOR_MAP[colorKey];
+        const mlSize = ML_SIZE_GRID_MAP[talleKey];
+        const pics = colorPics[colorKey] || [picIds[0]];
+
+        variations.push({
+            attribute_combinations: [
+                { id: 'COLOR', value_id: mlColor.colorId, value_name: mlColor.colorName },
+                { id: 'SIZE', value_name: mlSize.sizeValue }
+            ],
+            price: precio,
+            available_quantity: tnV.stock || 0,
+            picture_ids: pics,
+            attributes: [
+                { id: 'MAIN_COLOR', value_id: mlColor.mainColorId },
+                { id: 'SIZE_GRID_ROW_ID', value_name: mlSize.gridRowId }
+            ]
+        });
+    }
+
+    if (!variations.length) return { success: false, message: 'No se pudieron mapear las variantes. Verificá que los colores y talles sean compatibles con ML.' };
+
+    // 7. Crear el item en ML
+    const itemBody = {
+        title: `Bota Mujer LE ${modelo.descripcion}`,
+        category_id: 'MLA414251',
+        currency_id: 'ARS',
+        condition: 'new',
+        listing_type_id: 'gold_special',
+        pictures: picIds.map(id => ({ id })),
+        attributes: [
+            { id: 'BRAND', value_name: 'LE' },
+            { id: 'MODEL', value_name: modelo.descripcion },
+            { id: 'GENDER', value_id: '339665' },
+            { id: 'EMPTY_GTIN_REASON', value_id: '17055160' },
+            { id: 'SIZE_GRID_ID', value_name: '259983' }
+        ],
+        shipping: { mode: 'not_specified' },
+        description: { plain_text: `Modelo ${modelo.descripcion} de la marca LE. ${coloresList.join(', ')}. Talles 35 al 40.` },
+        variations
+    };
+
+    const created = await mlFetch('/items', { method: 'POST', body: JSON.stringify(itemBody) });
+    if (!created.id) {
+        const causes = (created.cause || []).map(c => c.message).join('; ');
+        return { success: false, message: `Error ML: ${created.message || created.error}. ${causes}` };
+    }
+
+    // 8. Guardar vínculo en la BD
+    await supabase.from('mercadolibre_items').insert({ modelo_id: modeloId, ml_item_id: created.id });
+
+    return { success: true, ml_item_id: created.id, permalink: created.permalink, status: created.status };
+}

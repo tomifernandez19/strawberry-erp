@@ -40,6 +40,8 @@ export default function GestionPage() {
     const [mlNewColor, setMlNewColor] = useState('')
     const [mlMsg, setMlMsg] = useState(null)
     const [mlSyncing, setMlSyncing] = useState(false)
+    const [mlPublishModeloId, setMlPublishModeloId] = useState('')
+    const [mlPublishing, setMlPublishing] = useState(false)
 
     // Task counters
     const [pendingQR, setPendingQR] = useState(0)
@@ -168,6 +170,26 @@ export default function GestionPage() {
         if (!confirm('¿Desvincular esta publicación de ML?')) return
         await supabase.from('mercadolibre_items').delete().eq('id', id)
         fetchMlData()
+    }
+
+    async function handleMlPublish() {
+        if (!mlPublishModeloId) return
+        setMlPublishing(true)
+        setMlMsg(null)
+        const res = await fetch('/api/ml/publish-product', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modeloId: mlPublishModeloId }),
+        })
+        const data = await res.json()
+        setMlPublishing(false)
+        if (data.success) {
+            setMlPublishModeloId('')
+            setMlMsg({ ok: true, text: `✅ Publicado en ML: ${data.ml_item_id}${data.permalink ? ` — ${data.permalink}` : ''}` })
+            fetchMlData()
+        } else {
+            setMlMsg({ ok: false, text: `❌ Error al publicar: ${data.message}` })
+        }
     }
 
     async function handleMlSyncAll() {
@@ -907,6 +929,32 @@ export default function GestionPage() {
                             {mlMsg && (
                                 <p style={{ marginTop: '10px', fontSize: '0.8rem', color: mlMsg.ok ? 'var(--accent)' : '#ef4444' }}>{mlMsg.text}</p>
                             )}
+                        </div>
+
+                        {/* Publicar en ML */}
+                        <div className="card">
+                            <p style={{ fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '8px' }}>🚀 Publicar modelo en MercadoLibre</p>
+                            <p style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '12px' }}>Sube automáticamente todas las variantes de color y talle del modelo, con fotos y precio de lista.</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <select
+                                    className="input-field"
+                                    value={mlPublishModeloId}
+                                    onChange={e => setMlPublishModeloId(e.target.value)}
+                                >
+                                    <option value="">— Seleccionar modelo —</option>
+                                    {mlModelos.map(m => (
+                                        <option key={m.id} value={m.id}>{m.descripcion}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    className="btn-primary"
+                                    style={{ background: '#ffc400', color: 'black' }}
+                                    disabled={!mlPublishModeloId || mlPublishing || !mlConnected}
+                                    onClick={handleMlPublish}
+                                >
+                                    {mlPublishing ? 'Publicando...' : '📤 Publicar en ML'}
+                                </button>
+                            </div>
                         </div>
 
                         {/* Vinculación de productos */}

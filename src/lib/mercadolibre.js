@@ -88,12 +88,17 @@ export async function getValidAccessToken() {
 
 export async function mlFetch(path, options = {}) {
     const token = await getValidAccessToken();
-    const res = await fetch(`https://api.mercadolibre.com${path}`, {
-        ...options,
+    // Some endpoints (e.g. /pictures) require the token as a query param
+    const url = options.useQueryToken
+        ? `https://api.mercadolibre.com${path}?access_token=${token}`
+        : `https://api.mercadolibre.com${path}`;
+    const { useQueryToken, ...fetchOptions } = options;
+    const res = await fetch(url, {
+        ...fetchOptions,
         headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
-            ...(options.headers || {}),
+            ...(fetchOptions.headers || {}),
         },
     });
     if (!res.ok) {
