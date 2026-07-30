@@ -3759,36 +3759,55 @@ export async function syncProductToML(modeloId) {
 
     if (!mlItems?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
 
-    // Get variants with stock count, grouped by color
+    // Get variants with stock count, grouped by color+talle
     const { data: variantes } = await supabase
         .from('variantes')
-        .select('id, precio_lista, color, unidades(estado)')
+        .select('id, precio_lista, color, talle, unidades(estado)')
         .eq('modelo_id', modeloId);
 
     if (!variantes?.length) return { success: false, message: 'No hay variantes' };
 
-    // Build price and stock per color
-    const byColor = {};
+    // Build stock per color+talle and price per color
+    const stockByColorTalle = {}; // "NEGRO-37" -> 3
+    const priceByColor = {};
     for (const v of variantes) {
         const c = (v.color || '').toUpperCase();
-        if (!byColor[c]) byColor[c] = { price: 0, stock: 0 };
-        byColor[c].price = parseFloat(v.precio_lista) || byColor[c].price;
-        byColor[c].stock += (v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0);
+        const t = (v.talle || '').toUpperCase();
+        const key = `${c}-${t}`;
+        stockByColorTalle[key] = v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0;
+        priceByColor[c] = parseFloat(v.precio_lista) || priceByColor[c] || 0;
     }
-    // Fallback: max price / total stock for items without color assigned
-    const maxPrice = Math.max(...Object.values(byColor).map(b => b.price));
-    const totalStock = Object.values(byColor).reduce((s, b) => s + b.stock, 0);
+    const maxPrice = Math.max(...Object.values(priceByColor));
+    const totalStock = Object.values(stockByColorTalle).reduce((s, n) => s + n, 0);
 
     const results = [];
     for (const mlItem of mlItems) {
         try {
             const itemColor = (mlItem.color || '').toUpperCase();
-            const colorData = byColor[itemColor] || { price: maxPrice, stock: totalStock };
+            const precio = priceByColor[itemColor] || maxPrice;
 
             const current = await mlFetch(`/items/${mlItem.ml_item_id}?attributes=variations,available_quantity`);
-            const body = current.variations?.length
-                ? { variations: current.variations.map(v => ({ id: v.id, price: colorData.price, available_quantity: v.available_quantity })) }
-                : { price: colorData.price, available_quantity: colorData.stock };
+
+            let body;
+            if (current.variations?.length) {
+                body = {
+                    variations: current.variations.map(v => {
+                        // Detectar el talle de esta variación por su atributo SIZE
+                        const sizeAttr = v.attribute_combinations?.find(a => a.id === 'SIZE');
+                        // El valor puede ser "37 AR" → extraer número
+                        const talleNum = sizeAttr?.value_name?.replace(/\s*AR$/i, '').trim() || '';
+                        const colorKey = itemColor || Object.keys(priceByColor)[0] || '';
+                        const erpKey = `${colorKey}-${talleNum}`;
+                        const qty = stockByColorTalle[erpKey] ?? v.available_quantity;
+                        return { id: v.id, price: precio, available_quantity: qty };
+                    })
+                };
+            } else {
+                const itemStock = itemColor
+                    ? Object.entries(stockByColorTalle).filter(([k]) => k.startsWith(itemColor + '-')).reduce((s, [, n]) => s + n, 0)
+                    : totalStock;
+                body = { price: precio, available_quantity: itemStock };
+            }
 
             await mlFetch(`/items/${mlItem.ml_item_id}`, { method: 'PUT', body: JSON.stringify(body) });
             results.push({ ml_item_id: mlItem.ml_item_id, success: true });
