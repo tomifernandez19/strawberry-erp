@@ -3759,22 +3759,37 @@ export async function syncProductToML(modeloId) {
 
     if (!mlItems?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
 
-    // Get variants with stock count, grouped by color+talle
+    // Obtener descripcion del modelo para buscar también otras temporadas del mismo modelo
+    const { data: modeloData } = await supabase
+        .from('modelos')
+        .select('descripcion')
+        .eq('id', modeloId)
+        .single();
+
+    // Buscar todos los modelos con la misma descripción (distintas temporadas)
+    const { data: modelosIds } = await supabase
+        .from('modelos')
+        .select('id')
+        .eq('descripcion', modeloData?.descripcion || '');
+    const allModeloIds = (modelosIds || []).map(m => m.id);
+
+    // Get variants with stock count, grouped by color+talle (de todas las temporadas)
     const { data: variantes } = await supabase
         .from('variantes')
         .select('id, precio_lista, color, talle, unidades(estado)')
-        .eq('modelo_id', modeloId);
+        .in('modelo_id', allModeloIds);
 
     if (!variantes?.length) return { success: false, message: 'No hay variantes' };
 
-    // Build stock per color+talle and price per color
+    // Build stock per color+talle and price per color (sumando todas las temporadas)
     const stockByColorTalle = {}; // "NEGRO-37" -> 3
     const priceByColor = {};
     for (const v of variantes) {
         const c = (v.color || '').toUpperCase();
         const t = (v.talle || '').toUpperCase();
         const key = `${c}-${t}`;
-        stockByColorTalle[key] = v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0;
+        const qty = v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0;
+        stockByColorTalle[key] = (stockByColorTalle[key] || 0) + qty;
         priceByColor[c] = parseFloat(v.precio_lista) || priceByColor[c] || 0;
     }
     const maxPrice = Math.max(...Object.values(priceByColor));
