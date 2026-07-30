@@ -25,6 +25,7 @@ export default function HomePage() {
     const [gastoDescripcion, setGastoDescripcion] = useState('')
     const [gastoLoading, setGastoLoading] = useState(false)
     const [gastoMsg, setGastoMsg] = useState(null)
+    const [preciosMixtos, setPreciosMixtos] = useState([])
 
     useEffect(() => {
         if (!user) return
@@ -77,6 +78,23 @@ export default function HomePage() {
             if (isAdmin) {
                 const fallas = await getFallasPendientes()
                 setPendingFallas(fallas || [])
+
+                // Task 8: Modelos con distintos precios entre colores
+                const { data: variantesPrecios } = await supabase
+                    .from('variantes')
+                    .select('modelo_id, color, precio_lista, modelos(nombre)')
+                    .not('precio_lista', 'is', null)
+                const mixtos = []
+                const byModelo = {}
+                for (const v of (variantesPrecios || [])) {
+                    const key = v.modelo_id
+                    if (!byModelo[key]) byModelo[key] = { nombre: v.modelos?.nombre, precios: new Set() }
+                    byModelo[key].precios.add(v.precio_lista)
+                }
+                for (const [id, data] of Object.entries(byModelo)) {
+                    if (data.precios.size > 1) mixtos.push({ modelo_id: id, nombre: data.nombre, precios: [...data.precios].sort((a,b)=>a-b) })
+                }
+                setPreciosMixtos(mixtos)
             }
         }
 
@@ -271,6 +289,27 @@ export default function HomePage() {
                             </p>
                         </div>
                         <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ef4444' }}>{pendingFallas.length}</span>
+                    </section>
+                </Link>
+            )}
+
+            {/* Precios mixtos entre colores del mismo modelo */}
+            {isAdmin && preciosMixtos.length > 0 && (
+                <Link href="/stock" style={{ textDecoration: 'none' }}>
+                    <section className="card mt-md" style={{
+                        border: '1px solid rgba(234,179,8,0.4)',
+                        background: 'rgba(234,179,8,0.05)',
+                        padding: '12px 20px'
+                    }}>
+                        <p style={{ fontWeight: 'bold', margin: 0, color: '#eab308' }}>⚠️ Precios distintos entre colores</p>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: '4px 0 6px' }}>
+                            Revisá si algún color quedó desactualizado
+                        </p>
+                        {preciosMixtos.map(m => (
+                            <p key={m.modelo_id} style={{ fontSize: '0.82rem', margin: '2px 0' }}>
+                                <strong>{m.nombre}</strong>: {m.precios.map(p => `$${p.toLocaleString('es-AR')}`).join(' / ')}
+                            </p>
+                        ))}
                     </section>
                 </Link>
             )}

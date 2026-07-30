@@ -1715,13 +1715,26 @@ export async function updatePrice(variantId, newPriceLista) {
 
     const { error } = await supabase
         .from('variantes')
-        .update({
-            precio_efectivo: newPriceEfectivo,
-            precio_lista: newPriceLista
-        })
+        .update({ precio_efectivo: newPriceEfectivo, precio_lista: newPriceLista })
         .eq('id', variantId);
 
     if (error) throw error;
+
+    // Sync to TiendaNube and ML after price update
+    const { data: variante } = await supabase
+        .from('variantes')
+        .select('modelo_id')
+        .eq('id', variantId)
+        .single();
+
+    if (variante?.modelo_id) {
+        const modeloId = variante.modelo_id;
+        // TiendaNube: full sync (updates price + stock for all variants)
+        syncProductToTiendanube(modeloId).catch(e => console.error('[Price sync TN]', e.message));
+        // ML: sync price for all linked items
+        syncProductToML(modeloId).catch(e => console.error('[Price sync ML]', e.message));
+    }
+
     return true;
 }
 
@@ -3732,42 +3745,49 @@ export async function syncProductToML(modeloId) {
     const { mlFetch } = await import('@/lib/mercadolibre');
     const supabase = createClient();
 
-    // Get ML item id for this model
-    const { data: mlItem } = await supabase
+    // Get all ML items linked to this model (can be multiple, one per color)
+    const { data: mlItems } = await supabase
         .from('mercadolibre_items')
         .select('ml_item_id')
-        .eq('modelo_id', modeloId)
-        .maybeSingle();
+        .eq('modelo_id', modeloId);
 
-    if (!mlItem) return { success: false, message: 'No hay publicación de ML vinculada a este modelo' };
+    if (!mlItems?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
 
     // Get variants with stock count
     const { data: variantes } = await supabase
         .from('variantes')
-        .select('id, precio_lista, unidades(estado)')
+        .select('id, precio_lista, color, unidades(estado)')
         .eq('modelo_id', modeloId);
 
     if (!variantes?.length) return { success: false, message: 'No hay variantes' };
 
-    // Use the first variant price as the item price
-    const price = parseFloat(variantes[0].precio_lista) || 0;
+    // Use precio_lista (precio de lista, sin IVA incluido) as ML price
+    // If all variants have the same price use that; otherwise use the max
+    const prices = variantes.map(v => parseFloat(v.precio_lista) || 0).filter(p => p > 0);
+    const price = prices.length ? Math.max(...prices) : 0;
     const totalStock = variantes.reduce((sum, v) => {
         return sum + (v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0);
     }, 0);
 
-    try {
-        await mlFetch(`/items/${mlItem.ml_item_id}`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                price,
-                available_quantity: totalStock,
-            }),
-        });
-        return { success: true };
-    } catch (e) {
-        console.error(`[syncProductToML] Failed for ${mlItem.ml_item_id}:`, e.message);
-        return { success: false, message: e.message };
+    const results = []
+    for (const mlItem of mlItems) {
+        try {
+            // Get current item to preserve variation structure
+            const current = await mlFetch(`/items/${mlItem.ml_item_id}?attributes=variations,price,available_quantity`);
+            const body = current.variations?.length
+                ? { variations: current.variations.map(v => ({ id: v.id, price, available_quantity: v.available_quantity })) }
+                : { price, available_quantity: totalStock };
+
+            await mlFetch(`/items/${mlItem.ml_item_id}`, { method: 'PUT', body: JSON.stringify(body) });
+            results.push({ ml_item_id: mlItem.ml_item_id, success: true });
+        } catch (e) {
+            console.error(`[syncProductToML] Failed for ${mlItem.ml_item_id}:`, e.message);
+            results.push({ ml_item_id: mlItem.ml_item_id, success: false, message: e.message });
+        }
     }
+
+    const allOk = results.every(r => r.success);
+    return { success: allOk, results };
 }
 
 /**
