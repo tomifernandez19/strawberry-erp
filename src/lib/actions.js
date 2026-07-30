@@ -3748,12 +3748,12 @@ export async function syncProductToML(modeloId) {
     // Get all ML items linked to this model (can be multiple, one per color)
     const { data: mlItems } = await supabase
         .from('mercadolibre_items')
-        .select('ml_item_id')
+        .select('ml_item_id, color')
         .eq('modelo_id', modeloId);
 
     if (!mlItems?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
 
-    // Get variants with stock count
+    // Get variants with stock count, grouped by color
     const { data: variantes } = await supabase
         .from('variantes')
         .select('id, precio_lista, color, unidades(estado)')
@@ -3761,22 +3761,28 @@ export async function syncProductToML(modeloId) {
 
     if (!variantes?.length) return { success: false, message: 'No hay variantes' };
 
-    // Use precio_lista (precio de lista, sin IVA incluido) as ML price
-    // If all variants have the same price use that; otherwise use the max
-    const prices = variantes.map(v => parseFloat(v.precio_lista) || 0).filter(p => p > 0);
-    const price = prices.length ? Math.max(...prices) : 0;
-    const totalStock = variantes.reduce((sum, v) => {
-        return sum + (v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0);
-    }, 0);
+    // Build price and stock per color
+    const byColor = {};
+    for (const v of variantes) {
+        const c = (v.color || '').toUpperCase();
+        if (!byColor[c]) byColor[c] = { price: 0, stock: 0 };
+        byColor[c].price = parseFloat(v.precio_lista) || byColor[c].price;
+        byColor[c].stock += (v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0);
+    }
+    // Fallback: max price / total stock for items without color assigned
+    const maxPrice = Math.max(...Object.values(byColor).map(b => b.price));
+    const totalStock = Object.values(byColor).reduce((s, b) => s + b.stock, 0);
 
-    const results = []
+    const results = [];
     for (const mlItem of mlItems) {
         try {
-            // Get current item to preserve variation structure
-            const current = await mlFetch(`/items/${mlItem.ml_item_id}?attributes=variations,price,available_quantity`);
+            const itemColor = (mlItem.color || '').toUpperCase();
+            const colorData = byColor[itemColor] || { price: maxPrice, stock: totalStock };
+
+            const current = await mlFetch(`/items/${mlItem.ml_item_id}?attributes=variations,available_quantity`);
             const body = current.variations?.length
-                ? { variations: current.variations.map(v => ({ id: v.id, price, available_quantity: v.available_quantity })) }
-                : { price, available_quantity: totalStock };
+                ? { variations: current.variations.map(v => ({ id: v.id, price: colorData.price, available_quantity: v.available_quantity })) }
+                : { price: colorData.price, available_quantity: colorData.stock };
 
             await mlFetch(`/items/${mlItem.ml_item_id}`, { method: 'PUT', body: JSON.stringify(body) });
             results.push({ ml_item_id: mlItem.ml_item_id, success: true });

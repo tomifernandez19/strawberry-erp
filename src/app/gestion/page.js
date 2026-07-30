@@ -37,6 +37,7 @@ export default function GestionPage() {
     const [mlModelos, setMlModelos] = useState([]) // all modelos for mapping
     const [mlNewItemId, setMlNewItemId] = useState('')
     const [mlNewModeloId, setMlNewModeloId] = useState('')
+    const [mlNewColor, setMlNewColor] = useState('')
     const [mlMsg, setMlMsg] = useState(null)
     const [mlSyncing, setMlSyncing] = useState(false)
 
@@ -130,7 +131,7 @@ export default function GestionPage() {
         // Load existing mappings
         const { data: items } = await supabase
             .from('mercadolibre_items')
-            .select('id, modelo_id, ml_item_id, modelos(descripcion)')
+            .select('id, modelo_id, ml_item_id, color, modelos(descripcion)')
         setMlItems(items || [])
         // Load all modelos for the selector
         const { data: modelos } = await supabase.from('modelos').select('id, descripcion').order('descripcion')
@@ -150,12 +151,14 @@ export default function GestionPage() {
         const { error } = await supabase.from('mercadolibre_items').upsert({
             modelo_id: mlNewModeloId,
             ml_item_id: mlId,
+            color: mlNewColor.trim().toUpperCase() || null,
         }, { onConflict: 'ml_item_id' })
         if (error) {
             setMlMsg({ ok: false, text: 'Error al vincular: ' + error.message })
         } else {
             setMlNewItemId('')
             setMlNewModeloId('')
+            setMlNewColor('')
             setMlMsg({ ok: true, text: `Producto vinculado a ${mlId}.` })
             fetchMlData()
         }
@@ -928,6 +931,13 @@ export default function GestionPage() {
                                     value={mlNewItemId}
                                     onChange={e => setMlNewItemId(e.target.value.toUpperCase())}
                                 />
+                                <input
+                                    type="text"
+                                    className="input-field"
+                                    placeholder="Color de este item (ej: NEGRO, CHOCOLATE) — opcional si el modelo tiene un solo color"
+                                    value={mlNewColor}
+                                    onChange={e => setMlNewColor(e.target.value.toUpperCase())}
+                                />
                                 <button
                                     className="btn-primary"
                                     style={{ background: '#ffc400', color: 'black' }}
@@ -957,7 +967,7 @@ export default function GestionPage() {
                                     {mlItems.map(item => (
                                         <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'var(--secondary)', borderRadius: '8px' }}>
                                             <div>
-                                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold', margin: 0 }}>{item.modelos?.descripcion}</p>
+                                                <p style={{ fontSize: '0.85rem', fontWeight: 'bold', margin: 0 }}>{item.modelos?.descripcion}{item.color ? ` — ${item.color}` : ''}</p>
                                                 <p style={{ fontSize: '0.7rem', opacity: 0.6, margin: '2px 0 0' }}>{item.ml_item_id}</p>
                                             </div>
                                             <button
