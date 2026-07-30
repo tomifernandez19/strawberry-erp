@@ -3907,6 +3907,7 @@ const ML_COLOR_MAP = {
     'CAMEL':     { colorId: '52001',   colorName: 'Beige',   mainColorId: '2450281' },
     'BEIGE':     { colorId: '52001',   colorName: 'Beige',   mainColorId: '2450281' },
     'VISON':     { colorId: '52001',   colorName: 'Beige',   mainColorId: '2450281' },
+    'SUELA':     { colorId: '52001',   colorName: 'Beige',   mainColorId: '2450281' },
     'BLANCO':    { colorId: '2450290', colorName: 'Blanco',  mainColorId: '2450290' },
     'GRIS':      { colorId: '52000',   colorName: 'Gris',    mainColorId: '2450286' },
     'ROJO':      { colorId: '52002',   colorName: 'Rojo',    mainColorId: '2450293' },
