@@ -3852,7 +3852,7 @@ export async function syncProductToML(modeloId) {
             const itemColor = (mlItem.color || '').toUpperCase();
             const precio = priceByColor[itemColor] || maxPrice;
 
-            const current = await mlFetch(`/items/${mlItem.ml_item_id}?attributes=variations,available_quantity`);
+            const current = await mlFetch(`/items/${mlItem.ml_item_id}`);
 
             let body;
             if (current.variations?.length) {
@@ -3884,6 +3884,7 @@ export async function syncProductToML(modeloId) {
                         }
 
                         const varPrice = priceByColor[erpColor] || precio;
+                        console.log(`[ML sync] var ${v.id}: color=${erpColor} talle=${talleNum} qty=${qty}`);
                         return { id: v.id, price: varPrice, available_quantity: qty };
                     })
                 };
