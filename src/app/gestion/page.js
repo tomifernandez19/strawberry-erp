@@ -173,6 +173,19 @@ export default function GestionPage() {
         fetchMlData()
     }
 
+    async function handleMlSyncOne(modeloId, mlItemId) {
+        setMlSyncingVariations(modeloId)
+        setMlMsg(null)
+        const res = await fetch('/api/ml/sync-product', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modeloId }),
+        })
+        const data = await res.json()
+        setMlSyncingVariations(null)
+        setMlMsg({ ok: data.success, text: data.success ? `✅ Stock actualizado en ${mlItemId}` : `❌ Error: ${data.message}` })
+    }
+
     async function handleMlSyncVariations(modeloId) {
         setMlSyncingVariations(modeloId)
         setMlMsg(null)
@@ -1033,6 +1046,14 @@ export default function GestionPage() {
                                                 <p style={{ fontSize: '0.7rem', opacity: 0.6, margin: '2px 0 0' }}>{item.ml_item_id}</p>
                                             </div>
                                             <div style={{ display: 'flex', gap: '6px' }}>
+                                                <button
+                                                    className="btn-secondary"
+                                                    style={{ fontSize: '0.7rem', padding: '4px 10px' }}
+                                                    disabled={mlSyncingVariations === item.modelo_id || !mlConnected}
+                                                    onClick={() => handleMlSyncOne(item.modelo_id, item.ml_item_id)}
+                                                >
+                                                    {mlSyncingVariations === item.modelo_id ? '...' : '🔄 Stock'}
+                                                </button>
                                                 <button
                                                     className="btn-secondary"
                                                     style={{ fontSize: '0.7rem', padding: '4px 10px' }}
