@@ -3792,14 +3792,17 @@ export async function syncProductToML(modeloId) {
             if (current.variations?.length) {
                 body = {
                     variations: current.variations.map(v => {
-                        // Detectar el talle de esta variación por su atributo SIZE
+                        // Extraer talle: "37 AR" → "37"
                         const sizeAttr = v.attribute_combinations?.find(a => a.id === 'SIZE');
-                        // El valor puede ser "37 AR" → extraer número
                         const talleNum = sizeAttr?.value_name?.replace(/\s*AR$/i, '').trim() || '';
-                        const colorKey = itemColor || Object.keys(priceByColor)[0] || '';
-                        const erpKey = `${colorKey}-${talleNum}`;
+                        // Extraer color: mapear ML value_id → nombre ERP
+                        const colorAttr = v.attribute_combinations?.find(a => a.id === 'COLOR');
+                        const mlColorId = colorAttr?.value_id?.toString() || '';
+                        const erpColor = itemColor || ML_COLOR_ID_TO_ERP[mlColorId] || Object.keys(priceByColor)[0] || '';
+                        const erpKey = `${erpColor}-${talleNum}`;
                         const qty = stockByColorTalle[erpKey] ?? v.available_quantity;
-                        return { id: v.id, price: precio, available_quantity: qty };
+                        const varPrice = priceByColor[erpColor] || precio;
+                        return { id: v.id, price: varPrice, available_quantity: qty };
                     })
                 };
             } else {
@@ -3940,6 +3943,13 @@ const ML_COLOR_MAP = {
     'VERDE':     { colorId: '52003',   colorName: 'Verde',   mainColorId: '2450289' },
     'ROSA':      { colorId: '283155',  colorName: 'Rosa',    mainColorId: '2450292' },
 };
+
+// Mapa inverso: ML color value_id → primer color ERP que lo usa
+// Necesario para que syncProductToML pueda buscar el stock correcto en el ERP
+const ML_COLOR_ID_TO_ERP = Object.entries(ML_COLOR_MAP).reduce((acc, [erpColor, { colorId }]) => {
+    if (!acc[colorId]) acc[colorId] = erpColor; // toma el primero (ej: 2450291 → CHOCOLATE, no MARRON)
+    return acc;
+}, {});
 
 // Mapping de talles AR a SIZE_GRID_ROW_ID en la guía 259983
 const ML_SIZE_GRID_MAP = {
