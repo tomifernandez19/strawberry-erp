@@ -53,9 +53,20 @@ export default function ManualSelector({ onSelect, loading: externalLoading, exc
         </div>
     )
 
-    const filteredModels = specs.filter(m =>
-        m.name.toLowerCase().includes(modelSearch.toLowerCase())
-    )
+    const searchLower = modelSearch.toLowerCase()
+    const filteredModels = specs.filter(m => {
+        const nameLower = m.name.toLowerCase()
+        // Exact match first, then startsWith, then includes — to rank LARA before CLARA
+        return nameLower.includes(searchLower)
+    }).sort((a, b) => {
+        const aName = a.name.toLowerCase()
+        const bName = b.name.toLowerCase()
+        const aStarts = aName.startsWith(searchLower)
+        const bStarts = bName.startsWith(searchLower)
+        if (aStarts && !bStarts) return -1
+        if (!aStarts && bStarts) return 1
+        return aName.localeCompare(bName)
+    })
 
     const currentModel = specs.find(m => m.name === selection.model)
     const availableColors = currentModel ? currentModel.colors : []

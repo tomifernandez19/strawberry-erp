@@ -1799,7 +1799,23 @@ export async function findUnitBySpecs(modelDescription, color, talle, excludeQrs
 
         // Priority 2: Match model by Name if SKU search failed
         if (variants.length === 0) {
-            // Find all models where the description contains the base name
+            // Exact match first to avoid "LARA" matching "CLARA"
+            const { data: exactVariants } = await supabase
+                .from('variantes')
+                .select(`
+                    id, color,
+                    modelos!inner(id, descripcion, codigo_proveedor)
+                `)
+                .ilike('modelos.descripcion', baseModelName);
+
+            if (exactVariants && exactVariants.length > 0) {
+                variants = exactVariants;
+                console.log(`[Matching] Found ${variants.length} variants by exact name: ${baseModelName}`);
+            }
+        }
+
+        // Priority 3: Fallback to partial match (for TiendaNube names like "JUSTI (NEGRO, 35)")
+        if (variants.length === 0) {
             const { data: nameVariants } = await supabase
                 .from('variantes')
                 .select(`
