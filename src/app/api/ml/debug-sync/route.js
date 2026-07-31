@@ -2,22 +2,6 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { mlFetch } from '@/lib/mercadolibre';
 
-const ML_COLOR_MAP = {
-    'NEGRO':     { colorId: '2450295' },
-    'CHOCOLATE': { colorId: '2450291' },
-    'MARRON':    { colorId: '2450291' },
-    'CAMEL':     { colorId: '52001' },
-    'BEIGE':     { colorId: '52001' },
-    'VISON':     { colorId: '52001' },
-    'SUELA':     { colorId: '52001' },
-};
-
-const ML_COLOR_ID_TO_ERP_LIST = Object.entries(ML_COLOR_MAP).reduce((acc, [erpColor, { colorId }]) => {
-    if (!acc[colorId]) acc[colorId] = [];
-    acc[colorId].push(erpColor);
-    return acc;
-}, {});
-
 export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const modeloId = searchParams.get('modeloId');
@@ -25,57 +9,64 @@ export async function GET(req) {
 
     const supabase = createClient();
 
+    const { data: modelo } = await supabase
+        .from('modelos')
+        .select('descripcion')
+        .eq('id', modeloId)
+        .single();
+
+    const { data: modelosIds } = await supabase
+        .from('modelos')
+        .select('id')
+        .eq('descripcion', modelo?.descripcion || '');
+    const allModeloIds = (modelosIds || []).map(m => m.id);
+
     const { data: mlItems } = await supabase
         .from('mercadolibre_items')
         .select('ml_item_id, color')
-        .eq('modelo_id', modeloId);
+        .in('modelo_id', allModeloIds);
 
     const { data: variantes } = await supabase
         .from('variantes')
-        .select('id, precio_lista, color, talle, unidades(estado)')
-        .eq('modelo_id', modeloId);
+        .select('id, precio_lista, color')
+        .in('modelo_id', allModeloIds);
+
+    const { data: unidadesDisponibles } = await supabase
+        .from('unidades')
+        .select('talle_especifico, variantes(color)')
+        .in('variante_id', (variantes || []).map(v => v.id))
+        .eq('estado', 'DISPONIBLE');
 
     const stockByColorTalle = {};
-    const priceByColor = {};
-    for (const v of variantes || []) {
-        const c = (v.color || '').toUpperCase();
-        const t = (v.talle || '').toUpperCase();
-        const key = `${c}-${t}`;
-        stockByColorTalle[key] = v.unidades?.filter(u => u.estado === 'DISPONIBLE').length || 0;
-        priceByColor[c] = parseFloat(v.precio_lista) || priceByColor[c] || 0;
+    const stockTotalByColor = {};
+    for (const u of unidadesDisponibles || []) {
+        const c = (u.variantes?.color || '').toUpperCase();
+        const t = (u.talle_especifico || '').toString().trim();
+        stockByColorTalle[`${c}-${t}`] = (stockByColorTalle[`${c}-${t}`] || 0) + 1;
+        stockTotalByColor[c] = (stockTotalByColor[c] || 0) + 1;
     }
 
     const debug = [];
     for (const mlItem of mlItems || []) {
-        const itemColor = (mlItem.color || '').toUpperCase();
-        const current = await mlFetch(`/items/${mlItem.ml_item_id}?attributes=variations,available_quantity`);
-
-        const variationDebug = (current.variations || []).map(v => {
-            const sizeAttr = v.attribute_combinations?.find(a => a.id === 'SIZE');
-            const colorAttr = v.attribute_combinations?.find(a => a.id === 'COLOR');
-            const talleNum = sizeAttr?.value_name?.replace(/\s*AR$/i, '').trim() || '';
-            const mlColorId = colorAttr?.value_id?.toString() || '';
-            let erpColor = itemColor;
-            if (!erpColor) {
-                const candidates = ML_COLOR_ID_TO_ERP_LIST[mlColorId] || [];
-                erpColor = candidates.find(c => stockByColorTalle[`${c}-${talleNum}`] !== undefined)
-                    || candidates[0] || '';
-            }
-            const erpKey = `${erpColor}-${talleNum}`;
-            return {
-                ml_variation_id: v.id,
-                ml_color_id: mlColorId,
-                ml_color_name: colorAttr?.value_name,
-                ml_size: sizeAttr?.value_name,
-                ml_current_qty: v.available_quantity,
-                resolved_erp_color: erpColor,
-                erp_key: erpKey,
-                erp_stock: stockByColorTalle[erpKey] ?? 'NOT FOUND',
-            };
+        const full = await mlFetch(`/items/${mlItem.ml_item_id}`);
+        debug.push({
+            ml_item_id: mlItem.ml_item_id,
+            status: full.status,
+            item_color_in_db: mlItem.color,
+            total_variations: full.variations?.length,
+            variations: (full.variations || []).map(v => ({
+                id: v.id,
+                available_quantity: v.available_quantity,
+                attribute_combinations: v.attribute_combinations,
+            })),
         });
-
-        debug.push({ ml_item_id: mlItem.ml_item_id, item_color: itemColor, variations: variationDebug });
     }
 
-    return NextResponse.json({ stockByColorTalle, priceByColor, mlItems, debug });
+    return NextResponse.json({
+        modelo: modelo?.descripcion,
+        stockByColorTalle,
+        stockTotalByColor,
+        mlItems,
+        debug,
+    });
 }
