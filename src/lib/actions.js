@@ -3783,73 +3783,37 @@ export async function syncProductToML(modeloId) {
 
     if (!mlItems?.length) return { success: false, message: 'No hay publicaciones de ML vinculadas a este modelo' };
 
-    // Obtener variantes con precio y talle del ERP
+    // Obtener precios por color
     const { data: variantes } = await supabase
         .from('variantes')
-        .select('id, precio_lista, color, talle')
+        .select('id, precio_lista, color')
         .in('modelo_id', allModeloIds);
 
     if (!variantes?.length) return { success: false, message: 'No hay variantes' };
 
     const priceByColor = {};
-    const stockByColorTalle = {}; // "NEGRO-37" -> 3 (para modelos con talles AR en ERP)
-    const stockTotalByColor = {};
-
-    // Para modelos con talles individuales en ERP (no CURVA), usar talle_especifico de unidades
-    const esCurva = variantes.some(v => (v.talle || '').toUpperCase() === 'CURVA');
-
     for (const v of variantes) {
         const c = (v.color || '').toUpperCase();
         priceByColor[c] = parseFloat(v.precio_lista) || priceByColor[c] || 0;
     }
     const maxPrice = Math.max(...Object.values(priceByColor));
 
-    if (!esCurva) {
-        const { data: unidadesDisponibles } = await supabase
-            .from('unidades')
-            .select('talle_especifico, variantes(color)')
-            .in('variante_id', variantes.map(v => v.id))
-            .eq('estado', 'DISPONIBLE');
+    // Stock real por color+talle desde unidades.talle_especifico
+    // Normaliza el talle al formato AR usando ERP_TALLE_TO_AR
+    const { data: unidadesDisponibles } = await supabase
+        .from('unidades')
+        .select('talle_especifico, variantes(color)')
+        .in('variante_id', variantes.map(v => v.id))
+        .eq('estado', 'DISPONIBLE');
 
-        for (const u of unidadesDisponibles || []) {
-            const c = (u.variantes?.color || '').toUpperCase();
-            const t = (u.talle_especifico || '').toUpperCase();
-            stockByColorTalle[`${c}-${t}`] = (stockByColorTalle[`${c}-${t}`] || 0) + 1;
-            stockTotalByColor[c] = (stockTotalByColor[c] || 0) + 1;
-        }
-    } else {
-        // Para modelos CURVA: stock total por color del ERP (para precio y fallback)
-        const { data: unidadesDisponibles } = await supabase
-            .from('unidades')
-            .select('variantes(color)')
-            .in('variante_id', variantes.map(v => v.id))
-            .eq('estado', 'DISPONIBLE');
-        for (const u of unidadesDisponibles || []) {
-            const c = (u.variantes?.color || '').toUpperCase();
-            stockTotalByColor[c] = (stockTotalByColor[c] || 0) + 1;
-        }
-    }
-
-    // Para modelos CURVA: cargar variants de TiendaNube que ya tiene los talles en formato AR
-    // (TiendaNube fue sincronizado justo antes que este sync)
-    let tnVariantsList = [];
-    if (esCurva) {
-        const { data: modelosData } = await supabase
-            .from('modelos')
-            .select('tiendanube_id')
-            .in('id', allModeloIds)
-            .not('tiendanube_id', 'is', null);
-        for (const m of modelosData || []) {
-            try {
-                const res = await fetch(
-                    `https://api.tiendanube.com/v1/${process.env.TIENDANUBE_STORE_ID}/products/${m.tiendanube_id}`,
-                    { headers: { 'Authentication': `bearer ${process.env.TIENDANUBE_ACCESS_TOKEN}`, 'User-Agent': 'StrawberryERP/1.0' } }
-                );
-                if (!res.ok) continue;
-                const tnProduct = await res.json();
-                tnVariantsList = tnVariantsList.concat(tnProduct.variants || []);
-            } catch (e) { /* ignorar */ }
-        }
+    const stockByColorTalle = {}; // "NEGRO-38" -> 2
+    const stockTotalByColor = {};
+    for (const u of unidadesDisponibles || []) {
+        const c = (u.variantes?.color || '').toUpperCase();
+        const talleRaw = (u.talle_especifico || '').toString().trim();
+        const talleAR = ERP_TALLE_TO_AR[talleRaw] || talleRaw;
+        stockByColorTalle[`${c}-${talleAR}`] = (stockByColorTalle[`${c}-${talleAR}`] || 0) + 1;
+        stockTotalByColor[c] = (stockTotalByColor[c] || 0) + 1;
     }
 
     const results = [];
@@ -3877,22 +3841,7 @@ export async function syncProductToML(modeloId) {
                                 || candidates[0] || Object.keys(priceByColor)[0] || '';
                         }
                         const varPrice = priceByColor[erpColor] || precio;
-
-                        let qty;
-                        if (esCurva) {
-                            // Matcheo directo contra TiendaNube: buscar variant con mismo
-                            // ML colorId y mismo número de talle
-                            const tnMatch = tnVariantsList.find(tnV => {
-                                const vals = tnV.values?.map(x => (x.es || '').toUpperCase()) || [];
-                                const tnColorKey = vals.find(x => ML_COLOR_MAP[x]);
-                                const tnMlColorId = tnColorKey ? ML_COLOR_MAP[tnColorKey]?.colorId : null;
-                                const tnTalle = vals.find(x => x !== tnColorKey)?.replace(/\s*AR$/i, '').trim() || '';
-                                return tnMlColorId === mlColorId && tnTalle === talleNum;
-                            });
-                            qty = tnMatch != null ? (tnMatch.stock ?? 0) : 0;
-                        } else {
-                            qty = stockByColorTalle[`${erpColor}-${talleNum}`] ?? 0;
-                        }
+                        const qty = stockByColorTalle[`${erpColor}-${talleNum}`] ?? 0;
 
                         return { id: v.id, price: varPrice, available_quantity: qty };
                     })
@@ -4020,6 +3969,12 @@ export async function recordMLOrder(order) {
 }
 
 // Mapping de colores del ERP a valores de MercadoLibre
+// Mapeo talle ERP → talle AR (para unidades con talle_especifico en sistema corto)
+const ERP_TALLE_TO_AR = {
+    '0': '40', '5': '35', '6': '36', '7': '37', '8': '38', '9': '39',
+    '35': '35', '36': '36', '37': '37', '38': '38', '39': '39', '40': '40',
+};
+
 const ML_COLOR_MAP = {
     'NEGRO':     { colorId: '2450295', colorName: 'Negro',   mainColorId: '2450295' },
     'CHOCOLATE': { colorId: '2450291', colorName: 'Marron',  mainColorId: '2450291' },
