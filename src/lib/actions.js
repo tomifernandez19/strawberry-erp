@@ -3992,12 +3992,18 @@ const ML_COLOR_MAP = {
 };
 
 // Mapa inverso: ML color value_id → lista de colores ERP que lo usan
-// Ej: '2450291' → ['CHOCOLATE', 'MARRON'], '52001' → ['CAMEL', 'BEIGE', 'VISON', 'SUELA']
+// Incluye IDs alternativos que ML puede devolver según cómo fue creado el ítem
 const ML_COLOR_ID_TO_ERP_LIST = Object.entries(ML_COLOR_MAP).reduce((acc, [erpColor, { colorId }]) => {
     if (!acc[colorId]) acc[colorId] = [];
     acc[colorId].push(erpColor);
     return acc;
-}, {});
+}, {
+    // IDs alternativos que ML devuelve en ítems creados manualmente o normalizados por ML
+    '52049': ['NEGRO'],
+    '52005': ['CHOCOLATE', 'MARRON'],
+    '52048': ['BLANCO'],
+    '52000': ['GRIS'],
+});
 
 // Mapping de talles AR a SIZE_GRID_ROW_ID en la guía 259983
 const ML_SIZE_GRID_MAP = {
