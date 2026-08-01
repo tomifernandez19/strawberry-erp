@@ -240,6 +240,7 @@ export default function CajaPage() {
                                     <option value="EXPENSAS">Expensas</option>
                                     <option value="MONOTRIBUTO">Monotributo</option>
                                     <option value="PAGO_CAROLINA">Pago a Carolina</option>
+                                    <option value="PAGO_VENDEDOR">Pago a Vendedor</option>
                                     <option value="PAGO_PROVEEDOR">Pago a proveedor</option>
                                     <option value="RETIRO_PERSONAL">retiro personal/sueldo</option>
                                     <option value="PUBLICIDAD">Publicidad</option>
