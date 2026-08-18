@@ -1279,9 +1279,12 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
 
         // --- ACCOUNT BALANCES (ALWAYS PERPETUAL) ---
         if (efe > 0) accounts.CAJA_LOCAL += efe;
-        
-        // Match SQL reconciliation query: COALESCE(monto_neto, (total - monto_efectivo))
-        const other = rawNeto != null ? parseFloat(rawNeto) : (total - efe);
+
+        // Para DIVIDIR_PAGOS: el efectivo ya sumó a CAJA_LOCAL; la segunda cuenta recibe monto_otro (bruto).
+        // Para otros medios: usar monto_neto si está disponible, sino (total - efectivo).
+        const other = s.medio_pago === 'DIVIDIR_PAGOS'
+            ? (parseFloat(s.monto_otro) || 0)
+            : (rawNeto != null ? parseFloat(rawNeto) : (total - efe));
         
         if (other > 0 || efe > 0) {
             let target = s.cuenta_destino;
