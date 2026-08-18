@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 import QRScanner from '@/components/QRScanner'
-import ManualSelector from '@/components/ManualSelector'
 import { getUnitForSale, recordSale } from '@/lib/actions'
 
 export default function VenderPage() {
@@ -235,8 +234,6 @@ export default function VenderPage() {
             )}
 
             <div className="grid">
-                <ManualSelector onSelect={addItem} loading={loading} excludeQrs={items.map(it => it.codigo_qr)} buttonLabel="Agregar al Carrito" />
-
                 <QRScanner onScanSuccess={addItem} label="Escanear producto" />
 
                 <div className="card mt-md" style={{ textAlign: 'center' }}>
