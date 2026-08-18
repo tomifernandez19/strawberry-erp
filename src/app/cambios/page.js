@@ -6,12 +6,12 @@ import Link from 'next/link'
 
 export default function CambiosPage() {
     const [oldUnit, setOldUnit] = useState(null)
-    const [newUnit, setNewUnit] = useState(null)
+    const [newUnits, setNewUnits] = useState([]) // array of units
+    const [scanningNew, setScanningNew] = useState(false) // show scanner for next new unit
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
 
-    // Payment states for difference
     const [medioPago, setMedioPago] = useState('EFECTIVO')
     const [montoEfectivo, setMontoEfectivo] = useState('')
     const [montoOtro, setMontoOtro] = useState('')
@@ -19,10 +19,13 @@ export default function CambiosPage() {
     const [customerName, setCustomerName] = useState('')
     const [customerPhone, setCustomerPhone] = useState('')
     const [customerEmail, setCustomerEmail] = useState('')
+    const [manualDifference, setManualDifference] = useState('')
+    const [manualQR, setManualQR] = useState('')
 
     const resetState = () => {
         setOldUnit(null)
-        setNewUnit(null)
+        setNewUnits([])
+        setScanningNew(false)
         setError('')
         setLoading(false)
         setSuccess(false)
@@ -32,21 +35,20 @@ export default function CambiosPage() {
         setCustomerName('')
         setCustomerPhone('')
         setCustomerEmail('')
+        setManualDifference('')
+        setManualQR('')
     }
 
     const handleScanOld = async (qr) => {
         const match = (qr || '').match(/ST-\d{6}/i)
         const cleanQr = match ? match[0].toUpperCase() : qr.toUpperCase().trim()
         if (!cleanQr) return
-
         setLoading(true)
+        setError('')
         try {
             const res = await getUnitForSale(cleanQr, 'SOLD')
-            if (res.success) {
-                setOldUnit(res.data)
-            } else {
-                setError(res.message)
-            }
+            if (res.success) setOldUnit(res.data)
+            else setError(res.message)
         } catch (err) {
             setError(err.message)
         } finally {
@@ -58,12 +60,18 @@ export default function CambiosPage() {
         const match = (qr || '').match(/ST-\d{6}/i)
         const cleanQr = match ? match[0].toUpperCase() : qr.toUpperCase().trim()
         if (!cleanQr) return
-
+        // Check for duplicate
+        if (newUnits.some(u => u.codigo_qr === cleanQr)) {
+            setError('Este producto ya fue agregado.')
+            return
+        }
         setLoading(true)
+        setError('')
         try {
             const res = await getUnitForSale(cleanQr)
             if (res.success) {
-                setNewUnit(res.data)
+                setNewUnits(prev => [...prev, res.data])
+                setScanningNew(false)
             } else {
                 setError(res.message)
             }
@@ -74,21 +82,45 @@ export default function CambiosPage() {
         }
     }
 
-    const [manualDifference, setManualDifference] = useState('')
+    const removeNewUnit = (idx) => {
+        setNewUnits(prev => prev.filter((_, i) => i !== idx))
+    }
+
+    const returnValue = oldUnit?.ventas?.monto_neto != null
+        ? Math.floor(oldUnit.ventas.monto_neto / 1000) * 1000
+        : (oldUnit?.ventas?.total || 0)
+
+    const totalNewPrice = newUnits.reduce((s, u) => s + (u.variantes?.precio_lista || 0), 0)
+    const calculatedDiff = totalNewPrice - returnValue
 
     useEffect(() => {
-        if (oldUnit && newUnit) {
-            const returnValue = oldUnit.ventas?.monto_neto != null 
-                ? Math.floor(oldUnit.ventas.monto_neto / 1000) * 1000 
-                : (oldUnit.ventas?.total || 0)
-            const diff = (newUnit.variantes.precio_lista || 0) - returnValue
+        if (oldUnit && newUnits.length > 0) {
+            const diff = calculatedDiff
             setManualDifference(diff > 0 ? diff : 0)
         } else {
             setManualDifference('')
         }
-    }, [oldUnit, newUnit])
+    }, [oldUnit, newUnits.length, totalNewPrice])
+
+    const currentDiff = parseFloat(manualDifference) || 0
+    const precioEfectivoDiff = Math.ceil((currentDiff * (100 / 121)) / 1000) * 1000
+
+    const handleManualSubmitOld = (e) => {
+        e.preventDefault()
+        if (!manualQR) return
+        handleScanOld(manualQR)
+        setManualQR('')
+    }
+
+    const handleManualSubmitNew = (e) => {
+        e.preventDefault()
+        if (!manualQR) return
+        handleScanNew(manualQR)
+        setManualQR('')
+    }
 
     const handleConfirmExchange = async () => {
+        if (!oldUnit || newUnits.length === 0) return
         setLoading(true)
         try {
             const diffNum = parseFloat(manualDifference) || 0
@@ -98,48 +130,22 @@ export default function CambiosPage() {
                     monto_otro: parseFloat(montoOtro),
                     otro_medio_pago: otroMedioPago
                 } : {}),
-                customerData: {
-                    nombre: customerName,
-                    telefono: customerPhone,
-                    email: customerEmail
-                }
+                customerData: { nombre: customerName, telefono: customerPhone, email: customerEmail }
             }
-
             const res = await recordProductExchange(
                 oldUnit.id,
-                newUnit.codigo_qr,
+                newUnits.map(u => u.codigo_qr),
                 diffNum,
                 medioPago,
                 options
             )
-
-            if (res.success) {
-                setSuccess(true)
-            } else {
-                setError(res.message)
-            }
+            if (res.success) setSuccess(true)
+            else setError(res.message)
         } catch (err) {
             setError(err.message)
         } finally {
             setLoading(false)
         }
-    }
-
-    const returnValue = oldUnit?.ventas?.monto_neto != null 
-        ? Math.floor(oldUnit.ventas.monto_neto / 1000) * 1000 
-        : (oldUnit?.ventas?.total || 0)
-    const difference = (newUnit?.variantes.precio_lista || 0) - returnValue
-    const currentDiff = parseFloat(manualDifference) || 0
-    const precioEfectivoDiff = Math.ceil((currentDiff * (100 / 121)) / 1000) * 1000
-
-    const [manualQR, setManualQR] = useState('')
-
-    const handleManualSubmit = (e, type) => {
-        e.preventDefault()
-        if (!manualQR) return
-        if (type === 'old') handleScanOld(manualQR)
-        else handleScanNew(manualQR)
-        setManualQR('')
     }
 
     if (success) {
@@ -148,9 +154,12 @@ export default function CambiosPage() {
                 <div style={{ fontSize: '4rem' }}>🔄✅</div>
                 <h2>Cambio Realizado</h2>
                 <div className="card mt-lg">
-                    <p style={{ opacity: 0.6 }}>Nuevo par entregado:</p>
-                    <h4 style={{ margin: '10px 0' }}>{newUnit.variantes.modelos.descripcion}</h4>
-                    <p>{newUnit.variantes.color} • Talle {newUnit.talle_especifico}</p>
+                    <p style={{ opacity: 0.6 }}>Productos entregados:</p>
+                    {newUnits.map((u, i) => (
+                        <p key={i} style={{ margin: '4px 0', fontWeight: 'bold' }}>
+                            {u.variantes.modelos.descripcion} — {u.variantes.color} Talle {u.talle_especifico}
+                        </p>
+                    ))}
                 </div>
                 <Link href="/" className="btn-primary mt-lg" style={{ height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Volver al Inicio</Link>
             </div>
@@ -170,22 +179,13 @@ export default function CambiosPage() {
             {!oldUnit ? (
                 <div className="grid">
                     <QRScanner onScanSuccess={handleScanOld} label="1. Escanee el producto que DEVUELVEN" />
-
                     <div className="card mt-md" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--card-border)' }}>
                         <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '10px' }}>¿No funciona la cámara? Ingreso manual:</p>
-                        <form onSubmit={(e) => handleManualSubmit(e, 'old')} style={{ display: 'flex', gap: '10px' }}>
-                            <input
-                                type="text"
-                                className="input-field"
-                                placeholder="ST-000000"
-                                value={manualQR}
-                                onChange={e => setManualQR(e.target.value.toUpperCase())}
-                                style={{ margin: 0 }}
-                            />
+                        <form onSubmit={handleManualSubmitOld} style={{ display: 'flex', gap: '10px' }}>
+                            <input type="text" className="input-field" placeholder="ST-000000" value={manualQR} onChange={e => setManualQR(e.target.value.toUpperCase())} style={{ margin: 0 }} />
                             <button type="submit" className="btn-primary" style={{ padding: '0 20px' }}>OK</button>
                         </form>
                     </div>
-
                     <Link href="/" className="btn-secondary mt-lg text-center" style={{ padding: '12px' }}>Cancelar y Volver</Link>
                 </div>
             ) : (
@@ -194,52 +194,74 @@ export default function CambiosPage() {
                         <div>
                             <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>PRODUCTO DEVUELTO:</p>
                             <h4 style={{ margin: 0 }}>{oldUnit.variantes.modelos.descripcion}</h4>
-                            <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Talle {oldUnit.talle_especifico} • Crédito Devolución: <strong>${returnValue.toLocaleString()}</strong></p>
+                            <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                                Talle {oldUnit.talle_especifico} • Crédito: <strong>${returnValue.toLocaleString()}</strong>
+                            </p>
                         </div>
                         <button className="btn-secondary" onClick={() => setOldUnit(null)} style={{ padding: '8px 12px', fontSize: '0.7rem' }}>🔄 Cambiar</button>
                     </div>
                 </div>
             )}
 
-            {/* STEP 2: SCAN NEW PRODUCT */}
-            {oldUnit && !newUnit && (
+            {/* STEP 2: NEW PRODUCTS */}
+            {oldUnit && (
                 <div className="grid mt-md">
-                    <QRScanner onScanSuccess={handleScanNew} label="2. Escanee el producto que se LLEVAN" />
+                    <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                        Productos nuevos ({newUnits.length})
+                    </p>
 
-                    <div className="card mt-md" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--card-border)' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '10px' }}>Ingreso manual del nuevo producto:</p>
-                        <form onSubmit={(e) => handleManualSubmit(e, 'new')} style={{ display: 'flex', gap: '10px' }}>
-                            <input
-                                type="text"
-                                className="input-field"
-                                placeholder="ST-000000"
-                                value={manualQR}
-                                onChange={e => setManualQR(e.target.value.toUpperCase())}
-                                style={{ margin: 0 }}
-                            />
-                            <button type="submit" className="btn-primary" style={{ padding: '0 20px' }}>OK</button>
-                        </form>
-                    </div>
+                    {newUnits.map((u, i) => (
+                        <div key={u.id} className="card" style={{ border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.05)', padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.6, margin: 0 }}>PRODUCTO {i + 1}:</p>
+                                    <p style={{ margin: '2px 0', fontWeight: 'bold' }}>{u.variantes.modelos.descripcion}</p>
+                                    <p style={{ fontSize: '0.8rem', opacity: 0.8, margin: 0 }}>
+                                        {u.variantes.color} • Talle {u.talle_especifico} • <strong>${u.variantes.precio_lista?.toLocaleString()}</strong>
+                                    </p>
+                                </div>
+                                <button onClick={() => removeNewUnit(i)} style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.75rem' }}>✕ Quitar</button>
+                            </div>
+                        </div>
+                    ))}
 
-                    <button className="btn-secondary mt-lg" onClick={resetState} style={{ padding: '12px' }}>Cancelar Cambio</button>
+                    {/* Scanner for next new product */}
+                    {scanningNew ? (
+                        <div className="card mt-sm" style={{ border: '1px dashed rgba(99,102,241,0.4)' }}>
+                            <QRScanner onScanSuccess={handleScanNew} label={`Escanear producto ${newUnits.length + 1}`} />
+                            <div className="mt-md">
+                                <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '8px' }}>Ingreso manual:</p>
+                                <form onSubmit={handleManualSubmitNew} style={{ display: 'flex', gap: '10px' }}>
+                                    <input type="text" className="input-field" placeholder="ST-000000" value={manualQR} onChange={e => setManualQR(e.target.value.toUpperCase())} style={{ margin: 0 }} />
+                                    <button type="submit" className="btn-primary" style={{ padding: '0 20px' }}>OK</button>
+                                </form>
+                            </div>
+                            <button className="btn-secondary mt-sm" onClick={() => { setScanningNew(false); setError('') }} style={{ width: '100%', padding: '10px' }}>Cancelar</button>
+                        </div>
+                    ) : (
+                        <button
+                            className="btn-secondary mt-sm"
+                            onClick={() => { setScanningNew(true); setError('') }}
+                            style={{ padding: '14px', border: '2px dashed rgba(99,102,241,0.4)', color: 'rgba(99,102,241,0.9)', background: 'rgba(99,102,241,0.05)' }}
+                        >
+                            ➕ {newUnits.length === 0 ? 'Escanear producto nuevo' : 'Agregar otro producto'}
+                        </button>
+                    )}
                 </div>
             )}
 
-            {/* STEP 3: SHOW DIFFERENCE AND PAYMENT */}
-            {oldUnit && newUnit && (
+            {/* STEP 3: DIFFERENCE AND PAYMENT */}
+            {oldUnit && newUnits.length > 0 && !scanningNew && (
                 <div className="grid mt-md">
-                    <div className="card" style={{ border: '1px solid var(--accent)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>PRODUCTO NUEVO:</p>
-                                <h4 style={{ margin: 0 }}>{newUnit.variantes.modelos.descripcion}</h4>
-                                <p style={{ fontSize: '0.8rem', opacity: 0.8 }}>Talle {newUnit.talle_especifico} • Precio Lista: <strong>${newUnit.variantes.precio_lista.toLocaleString()}</strong></p>
-                            </div>
-                            <button className="btn-secondary" onClick={() => setNewUnit(null)} style={{ padding: '8px 12px', fontSize: '0.7rem' }}>🔄 Cambiar</button>
+                    {newUnits.length > 1 && (
+                        <div className="card" style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 16px', fontSize: '0.85rem' }}>
+                            <span style={{ opacity: 0.6 }}>Total productos nuevos: </span>
+                            <strong>${totalNewPrice.toLocaleString()}</strong>
+                            <span style={{ opacity: 0.4, marginLeft: '8px' }}>— Crédito: ${returnValue.toLocaleString()}</span>
                         </div>
-                    </div>
+                    )}
 
-                    <div className="card mt-md text-center" style={{ background: currentDiff > 0 ? 'rgba(234, 179, 8, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>
+                    <div className="card mt-sm text-center" style={{ background: currentDiff > 0 ? 'rgba(234, 179, 8, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>
                         <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '5px' }}>DIFERENCIA A COBRAR (EDITABLE):</p>
                         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>$</span>
@@ -248,20 +270,11 @@ export default function CambiosPage() {
                                 className="input-field"
                                 value={manualDifference}
                                 onChange={(e) => setManualDifference(e.target.value)}
-                                style={{
-                                    maxWidth: '150px',
-                                    textAlign: 'center',
-                                    fontSize: '1.5rem',
-                                    fontWeight: 'bold',
-                                    margin: 0,
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: currentDiff > 0 ? '#eab308' : 'var(--accent)'
-                                }}
+                                style={{ maxWidth: '150px', textAlign: 'center', fontSize: '1.5rem', fontWeight: 'bold', margin: 0, border: 'none', background: 'transparent', color: currentDiff > 0 ? '#eab308' : 'var(--accent)' }}
                             />
                         </div>
-                        {difference !== currentDiff && (
-                            <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '5px' }}>Calculado originalmente: ${difference.toLocaleString()}</p>
+                        {calculatedDiff !== currentDiff && (
+                            <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '5px' }}>Calculado: ${calculatedDiff.toLocaleString()}</p>
                         )}
                         {currentDiff <= 0 && <p style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '5px' }}>Sin cargo (Cambio directo)</p>}
                     </div>
@@ -296,14 +309,14 @@ export default function CambiosPage() {
                                             className="input-field"
                                             value={montoEfectivo}
                                             onChange={(e) => {
-                                                const val = e.target.value;
-                                                setMontoEfectivo(val);
+                                                const val = e.target.value
+                                                setMontoEfectivo(val)
                                                 if (val && !isNaN(val)) {
-                                                    const portion = parseFloat(val) / precioEfectivoDiff;
-                                                    const remaining = Math.round(currentDiff * (1 - portion));
-                                                    setMontoOtro(remaining > 0 ? remaining : 0);
+                                                    const portion = parseFloat(val) / precioEfectivoDiff
+                                                    const remaining = Math.round(currentDiff * (1 - portion))
+                                                    setMontoOtro(remaining > 0 ? remaining : 0)
                                                 } else {
-                                                    setMontoOtro('');
+                                                    setMontoOtro('')
                                                 }
                                             }}
                                         />
@@ -329,31 +342,10 @@ export default function CambiosPage() {
                     <div className="mt-lg" style={{ borderTop: '1px solid var(--card-border)', paddingTop: '15px' }}>
                         <p style={{ fontSize: '0.75rem', opacity: 0.6, marginBottom: '10px' }}>DATOS DEL CLIENTE (OPCIONAL):</p>
                         <div className="grid" style={{ gap: '10px' }}>
-                            <input
-                                type="text"
-                                placeholder="Nombre completo"
-                                className="input-field"
-                                value={customerName}
-                                onChange={(e) => setCustomerName(e.target.value)}
-                                style={{ fontSize: '0.85rem' }}
-                            />
+                            <input type="text" placeholder="Nombre completo" className="input-field" value={customerName} onChange={(e) => setCustomerName(e.target.value)} style={{ fontSize: '0.85rem' }} />
                             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                <input
-                                    type="tel"
-                                    placeholder="Teléfono"
-                                    className="input-field"
-                                    value={customerPhone}
-                                    onChange={(e) => setCustomerPhone(e.target.value)}
-                                    style={{ fontSize: '0.85rem' }}
-                                />
-                                <input
-                                    type="email"
-                                    placeholder="Email"
-                                    className="input-field"
-                                    value={customerEmail}
-                                    onChange={(e) => setCustomerEmail(e.target.value)}
-                                    style={{ fontSize: '0.85rem' }}
-                                />
+                                <input type="tel" placeholder="Teléfono" className="input-field" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} style={{ fontSize: '0.85rem' }} />
+                                <input type="email" placeholder="Email" className="input-field" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} style={{ fontSize: '0.85rem' }} />
                             </div>
                         </div>
                     </div>
@@ -362,9 +354,7 @@ export default function CambiosPage() {
                         <button className="btn-primary" style={{ flex: 2, height: '60px' }} onClick={handleConfirmExchange} disabled={loading}>
                             {loading ? 'Procesando...' : 'Confirmar Cambio ✅'}
                         </button>
-                        <button className="btn-secondary" style={{ flex: 1 }} onClick={resetState}>
-                            Cancelar
-                        </button>
+                        <button className="btn-secondary" style={{ flex: 1 }} onClick={resetState}>Cancelar</button>
                     </div>
                 </div>
             )}

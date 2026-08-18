@@ -349,15 +349,16 @@ export default function HomePage() {
                     <span style={{ fontSize: '0.9rem' }}>Nueva Venta</span>
                 </Link>
 
+                <Link href="/cambios" className="btn-secondary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>🔄</span>
+                    <span style={{ fontSize: '0.9rem' }}>Cambios</span>
+                </Link>
+
                 {isAdmin && (
                     <>
                         <Link href="/compras/nueva" className="btn-secondary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                             <span style={{ fontSize: '1.2rem' }}>📦</span>
                             <span style={{ fontSize: '0.9rem' }}>Alta Stock</span>
-                        </Link>
-                        <Link href="/cambios" className="btn-secondary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontSize: '1.2rem' }}>🔄</span>
-                            <span style={{ fontSize: '0.9rem' }}>Cambios</span>
                         </Link>
                         <Link href="/gestion" className="btn-secondary" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
                             <span style={{ fontSize: '1.2rem' }}>⚙️</span>

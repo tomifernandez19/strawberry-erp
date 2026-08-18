@@ -2962,15 +2962,21 @@ export async function getUnitForExchange(qrCode) {
 /**
  * Records a product exchange, returning one to stock and selling another.
  */
-export async function recordProductExchange(oldUnitId, newUnitQR, difference, medio_pago, options = {}) {
+export async function recordProductExchange(oldUnitId, newUnitQRs, difference, medio_pago, options = {}) {
     const supabase = createClient();
     const { monto_efectivo = 0, monto_otro = 0, otro_medio_pago = null, customerData = {} } = options;
 
+    // Normalize to array for backwards compatibility
+    const qrArray = Array.isArray(newUnitQRs) ? newUnitQRs : [newUnitQRs];
+
     try {
-        // 1. Process new unit sale first (to ensure availability)
-        const result = await getUnitForSale(newUnitQR);
-        if (!result.success) throw new Error(result.message);
-        const newUnit = result.data;
+        // 1. Process new units (to ensure availability)
+        const newUnits = [];
+        for (const qr of qrArray) {
+            const result = await getUnitForSale(qr);
+            if (!result.success) throw new Error(result.message);
+            newUnits.push(result.data);
+        }
 
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -3014,17 +3020,19 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
             ventaId = venta.id;
         }
 
-        // 3. Update new unit status to SOLD and inherit old sale_id and fecha_venta
+        // 3. Update new units status to SOLD and inherit old sale_id and fecha_venta
         const { data: oldUnitData } = await supabase.from('unidades').select('venta_id, fecha_venta').eq('id', oldUnitId).single();
         const finalVentaId = oldUnitData?.venta_id;
         const originalFechaVenta = oldUnitData?.fecha_venta;
 
-        const { error: newErr } = await supabase.from('unidades').update({
-            estado: 'VENDIDO',
-            venta_id: finalVentaId,
-            fecha_venta: originalFechaVenta || new Date().toISOString()
-        }).eq('id', newUnit.id);
-        if (newErr) throw newErr;
+        for (const newUnit of newUnits) {
+            const { error: newErr } = await supabase.from('unidades').update({
+                estado: 'VENDIDO',
+                venta_id: finalVentaId,
+                fecha_venta: originalFechaVenta || new Date().toISOString()
+            }).eq('id', newUnit.id);
+            if (newErr) throw newErr;
+        }
 
         // 4. Return old unit to stock (DISPONIBLE)
         const { error: oldErr } = await supabase.from('unidades').update({
@@ -3034,7 +3042,7 @@ export async function recordProductExchange(oldUnitId, newUnitQR, difference, me
         }).eq('id', oldUnitId);
         if (oldErr) throw oldErr;
 
-        return { success: true };
+        return { success: true, newUnits };
     } catch (err) {
         return { success: false, message: 'No se pudo completar el cambio: ' + err.message };
     }
