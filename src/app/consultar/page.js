@@ -88,6 +88,7 @@ export default function ConsultarPage() {
                             <h2 style={{ color: 'var(--primary)', margin: '10px 0' }}>{scannedData.model.descripcion}</h2>
                             <p style={{ fontSize: '1.2rem', opacity: 0.8 }}>Color: <strong>{scannedData.variant.color}</strong></p>
                             <p style={{ fontSize: '1rem', opacity: 0.6 }}>Unidad: Talle {scannedData.unit.talle_especifico}</p>
+                            <p style={{ fontSize: '0.85rem', opacity: 0.5, fontFamily: 'monospace', letterSpacing: '1px' }}>{scannedData.unit.codigo_qr}</p>
 
                             <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px dashed rgba(255,255,255,0.1)' }}>
                                 <p style={{ fontSize: '0.8rem', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '1px' }}>Ubicación en Depósito:</p>
