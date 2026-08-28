@@ -234,18 +234,29 @@ export default function CajaPage() {
                             <div className="mt-md">
                                 <label style={labelStyle}>Categoría de Gasto:</label>
                                 <select value={formData.categoria} onChange={e => setFormData({ ...formData, categoria: e.target.value })} style={inputStyle}>
-                                    <option value="GASTOS_GENERALES">Gastos Generales</option>
-                                    <option value="ALQUILER">Alquiler</option>
-                                    <option value="SERVICIOS">Servicios (luz, agua, rentas)</option>
-                                    <option value="EXPENSAS">Expensas</option>
-                                    <option value="MONOTRIBUTO">Monotributo</option>
-                                    <option value="PAGO_CAROLINA">Pago a Carolina</option>
-                                    <option value="PAGO_VENDEDOR">Pago a Vendedor</option>
-                                    <option value="PAGO_PROVEEDOR">Pago a proveedor</option>
-                                    <option value="RETIRO_PERSONAL">retiro personal/sueldo</option>
-                                    <option value="PUBLICIDAD">Publicidad</option>
-                                    <option value="TIENDANUBE">tiendanube</option>
-                                    <option value="OTRO_GASTO">Otro gasto</option>
+                                    <optgroup label="── Gastos Fijos ──">
+                                        <option value="ALQUILER">Alquiler</option>
+                                        <option value="EXPENSAS">Expensas</option>
+                                        <option value="MONOTRIBUTO">Monotributo</option>
+                                        <option value="SERVICIOS">Servicios (luz, agua, rentas)</option>
+                                        <option value="TIENDANUBE">Tiendanube</option>
+                                        <option value="PAGO_CAROLINA">Pago a Carolina</option>
+                                        <option value="PAGO_VENDEDOR">Pago a Vendedor</option>
+                                    </optgroup>
+                                    <optgroup label="── Gastos Variables ──">
+                                        <option value="PACKAGING">Packaging (bolsas, film)</option>
+                                        <option value="LIMPIEZA">Limpieza (productos, vidrios)</option>
+                                        <option value="MANTENIMIENTO">Mantenimiento del local</option>
+                                        <option value="PAPELERIA">Papelería y cartelería</option>
+                                        <option value="PUBLICIDAD">Publicidad</option>
+                                        <option value="FLETES">Fletes</option>
+                                    </optgroup>
+                                    <optgroup label="── Otros ──">
+                                        <option value="PAGO_PROVEEDOR">Pago a proveedor</option>
+                                        <option value="RETIRO_PERSONAL">Retiro personal / sueldo</option>
+                                        <option value="INVERSION_ACTIVO">Inversión / Activo fijo</option>
+                                        <option value="OTRO_GASTO">Otro gasto</option>
+                                    </optgroup>
                                 </select>
                             </div>
                         </>
