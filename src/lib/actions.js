@@ -254,7 +254,7 @@ export async function assignQRToUnit(unitId, qrCode) {
         // 3. AUTO-SYNC: Update Tiendanube and ML now that we have one more item available
         const { data: unit } = await supabase.from('unidades').select('variantes(modelo_id)').eq('id', unitId).single();
         if (unit?.variantes?.modelo_id) {
-            await syncProductToTiendanube(unit.variantes.modelo_id);
+            syncProductToTiendanube(unit.variantes.modelo_id).catch(e => console.error('[assignQR TN sync]', e.message));
             syncProductToML(unit.variantes.modelo_id).catch(e => console.error('[assignQR ML sync]', e.message));
         }
 
@@ -447,18 +447,8 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
         const modelIds = [...new Set(units.map(u => u.variantes?.modelo_id))].filter(Boolean);
         console.log(`[recordSale] Initiating sync for ${modelIds.length} models...`);
         for (const mId of modelIds) {
-            const syncRes = await syncProductToTiendanube(mId);
-            if (!syncRes.success) {
-                console.error(`[recordSale] TN sync failed for model ${mId}:`, syncRes.message);
-            } else {
-                console.log(`[recordSale] TN sync successful for model ${mId}`);
-            }
-            const mlRes = await syncProductToML(mId);
-            if (!mlRes.success) {
-                console.error(`[recordSale] ML sync failed for model ${mId}:`, mlRes.message);
-            } else {
-                console.log(`[recordSale] ML sync successful for model ${mId}`);
-            }
+            syncProductToTiendanube(mId).catch(e => console.error(`[recordSale] TN sync failed for model ${mId}:`, e.message));
+            syncProductToML(mId).catch(e => console.error(`[recordSale] ML sync failed for model ${mId}:`, e.message));
         }
     } catch (e) {
         console.error("[recordSale] AutoSync execution failed:", e);
@@ -1588,7 +1578,7 @@ export async function deleteSale(saleId) {
         try {
             const modelIds = [...new Set(unitsToSync?.map(u => u.variantes?.modelo_id))].filter(Boolean);
             for (const mId of modelIds) {
-                await syncProductToTiendanube(mId);
+                syncProductToTiendanube(mId).catch(e => console.error('[deleteSale TN sync]', e.message));
                 syncProductToML(mId).catch(e => console.error('[deleteSale ML sync]', e.message));
             }
         } catch (e) {
@@ -1677,7 +1667,7 @@ export async function deleteUnit(unitId) {
 
         // Sync
         if (unit?.variantes?.modelo_id) {
-            await syncProductToTiendanube(unit.variantes.modelo_id);
+            syncProductToTiendanube(unit.variantes.modelo_id).catch(e => console.error('[deleteUnit TN sync]', e.message));
             syncProductToML(unit.variantes.modelo_id).catch(e => console.error('[deleteUnit ML sync]', e.message));
         }
 
@@ -1708,7 +1698,7 @@ export async function updateVariant(variantId, updates) {
         if (error) throw error;
 
         if (variant?.modelo_id) {
-            await syncProductToTiendanube(variant.modelo_id);
+            syncProductToTiendanube(variant.modelo_id).catch(e => console.error('[updateVariant TN sync]', e.message));
         }
 
         return { success: true };
@@ -2522,7 +2512,7 @@ export async function cancelOnlineOrder(tiendanubeOrderId) {
                 console.log(`[Webhook] Manually released unit ${order.unidad_reservada_id} to DISPONIBLE`);
                 // Trigger auto-sync if we have model ID
                 if (unitInfo?.variantes?.modelo_id) {
-                    await syncProductToTiendanube(unitInfo.variantes.modelo_id);
+                    syncProductToTiendanube(unitInfo.variantes.modelo_id).catch(e => console.error('[cancelOrder TN sync]', e.message));
                     syncProductToML(unitInfo.variantes.modelo_id).catch(e => console.error('[cancelOrder ML sync]', e.message));
                 }
             }
@@ -3644,7 +3634,7 @@ export async function cancelarSena(ventaId) {
     // Sync TiendaNube stock for each model
     const modelIds = [...new Set((venta.unidades || []).map(u => u.variantes?.modelo_id).filter(Boolean))];
     for (const mId of modelIds) {
-        await syncProductToTiendanube(mId).catch(e => console.error(`[cancelarSena] TN sync failed for model ${mId}:`, e));
+        syncProductToTiendanube(mId).catch(e => console.error(`[cancelarSena] TN sync failed for model ${mId}:`, e));
         syncProductToML(mId).catch(e => console.error(`[cancelarSena] ML sync failed for model ${mId}:`, e));
     }
 
@@ -3680,7 +3670,7 @@ export async function registrarFalla(qrCode, notas = '') {
     // Sync stock decrease
     const modeloId = unit.variantes?.modelo_id;
     if (modeloId) {
-        await syncProductToTiendanube(modeloId);
+        syncProductToTiendanube(modeloId).catch(e => console.error('[registrarFalla TN sync]', e.message));
         syncProductToML(modeloId).catch(e => console.error('[registrarFalla ML sync]', e.message));
     }
 
@@ -3760,7 +3750,7 @@ export async function resolverFalla(fallaId, tipo, { monto = null, qrReemplazo =
 
             // Sync stock
             if (originalUnit.variantes?.modelo_id) {
-                await syncProductToTiendanube(originalUnit.variantes.modelo_id);
+                syncProductToTiendanube(originalUnit.variantes.modelo_id).catch(e => console.error('[resolverFalla TN sync]', e.message));
                 syncProductToML(originalUnit.variantes.modelo_id).catch(e => console.error('[resolverFalla ML sync]', e.message));
             }
         }
