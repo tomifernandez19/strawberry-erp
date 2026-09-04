@@ -17,7 +17,7 @@ export default function CajaPage() {
         persona: '',
         cuenta: 'CAJA_LOCAL',
         haciaCuenta: 'SOFI_MP',
-        categoria: 'GASTOS_GENERALES',
+        categoria: 'ALQUILER',
         origenDinero: 'NEGOCIO', // 'NEGOCIO' or 'BOLSILLO' (for GASTO)
         tipoAjuste: 'INGRESO' // For AJUSTE (Intereses / Cargo)
     })
@@ -118,7 +118,7 @@ export default function CajaPage() {
             setFormData({
                 monto: '', motivo: '', persona: '',
                 cuenta: 'CAJA_LOCAL', haciaCuenta: 'SOFI_MP',
-                categoria: 'GASTOS_GENERALES', origenDinero: 'NEGOCIO',
+                categoria: 'ALQUILER', origenDinero: 'NEGOCIO',
                 tipoAjuste: 'INGRESO'
             })
             await loadData()
