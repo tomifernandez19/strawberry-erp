@@ -252,6 +252,7 @@ export default function CajaPage() {
                                         <option value="FLETES">Fletes</option>
                                     </optgroup>
                                     <optgroup label="── Otros ──">
+                                        <option value="DEVOLUCION_CLIENTE">Devolución a cliente</option>
                                         <option value="PAGO_PROVEEDOR">Pago a proveedor</option>
                                         <option value="RETIRO_PERSONAL">Retiro personal / sueldo</option>
                                         <option value="INVERSION_ACTIVO">Inversión / Activo fijo</option>
