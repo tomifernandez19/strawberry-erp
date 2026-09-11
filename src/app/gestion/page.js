@@ -31,6 +31,11 @@ export default function GestionPage() {
     const [editVentaData, setEditVentaData] = useState({})
     const [editVentaLoading, setEditVentaLoading] = useState(false)
 
+    // Completar seña modal
+    const [completarModal, setCompletarModal] = useState(null) // { sena }
+    const [completarMedioPago, setCompletarMedioPago] = useState('EFECTIVO')
+    const [completarLoading, setCompletarLoading] = useState(false)
+
     // MercadoLibre
     const [mlConnected, setMlConnected] = useState(false)
     const [mlItems, setMlItems] = useState([]) // { modelo_id, ml_item_id, modelos:{descripcion} }
@@ -624,17 +629,8 @@ export default function GestionPage() {
                                                     className="btn-primary"
                                                     style={{ fontSize: '0.75rem', padding: '6px 12px', background: '#eab308', color: 'black' }}
                                                     onClick={() => {
-                                                        if (confirm('¿Deseas completar esta seña ahora? El saldo se cobrará en EFECTIVO.')) {
-                                                            const due = sena.total - (Number(sena.monto_efectivo) + Number(sena.monto_otro));
-                                                            completeSena(sena.id, {
-                                                                monto_efectivo: due,
-                                                                medio_pago: 'EFECTIVO',
-                                                                cuenta_destino: 'CAJA_LOCAL'
-                                                            }).then(() => {
-                                                                fetchSenas();
-                                                                fetchCounters();
-                                                            });
-                                                        }
+                                                        setCompletarModal({ sena });
+                                                        setCompletarMedioPago('EFECTIVO');
                                                     }}
                                                 >
                                                     Cobrar saldo
@@ -1268,6 +1264,76 @@ export default function GestionPage() {
             )}
 
             <div style={{ height: '80px' }}></div>
+
+            {/* Modal: Cobrar saldo de seña */}
+            {completarModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '420px', padding: '24px' }}>
+                        <h3 style={{ margin: '0 0 4px' }}>💰 Cobrar Saldo de Seña</h3>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '20px' }}>
+                            👤 {completarModal.sena.nombre_cliente || 'Sin nombre'}
+                        </p>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem' }}>
+                            <span style={{ opacity: 0.6 }}>Total de la compra:</span>
+                            <span style={{ fontWeight: 'bold' }}>$ {completarModal.sena.total.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem' }}>
+                            <span style={{ opacity: 0.6 }}>Seña ya cobrada:</span>
+                            <span style={{ color: '#10b981', fontWeight: 'bold' }}>- $ {(Number(completarModal.sena.monto_efectivo) + Number(completarModal.sena.monto_otro)).toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', padding: '10px', background: 'rgba(234,179,8,0.08)', borderRadius: '8px', border: '1px solid rgba(234,179,8,0.3)', fontSize: '1rem' }}>
+                            <span style={{ fontWeight: 'bold', color: '#eab308' }}>Saldo a cobrar:</span>
+                            <span style={{ fontWeight: 'bold', color: '#eab308', fontSize: '1.2rem' }}>$ {(completarModal.sena.total - (Number(completarModal.sena.monto_efectivo) + Number(completarModal.sena.monto_otro))).toLocaleString()}</span>
+                        </div>
+
+                        <label style={{ fontSize: '0.85rem', opacity: 0.8, display: 'block', marginBottom: '8px' }}>Medio de pago del saldo:</label>
+                        <select
+                            value={completarMedioPago}
+                            onChange={e => setCompletarMedioPago(e.target.value)}
+                            className="input-field"
+                            style={{ marginBottom: '20px' }}
+                        >
+                            <option value="EFECTIVO">Efectivo 💵</option>
+                            <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
+                            <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
+                            <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
+                            <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
+                            <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
+                            <option value="GOCUOTAS_TOMI">GoCuotas (Tomi) 🟣</option>
+                        </select>
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setCompletarModal(null)}>Cancelar</button>
+                            <button
+                                className="btn-primary"
+                                style={{ flex: 1, background: '#eab308', borderColor: '#eab308', color: 'black' }}
+                                disabled={completarLoading}
+                                onClick={async () => {
+                                    setCompletarLoading(true);
+                                    const due = completarModal.sena.total - (Number(completarModal.sena.monto_efectivo) + Number(completarModal.sena.monto_otro));
+                                    const cuentaDestino = ['EFECTIVO'].includes(completarMedioPago) ? 'CAJA_LOCAL'
+                                        : ['TRANSFERENCIA_TOMI'].includes(completarMedioPago) ? 'TOMI'
+                                        : ['TRANSFERENCIA_LUCAS'].includes(completarMedioPago) ? 'LUCAS'
+                                        : 'SOFI_MP';
+                                    await completeSena(completarModal.sena.id, {
+                                        monto_efectivo: ['EFECTIVO'].includes(completarMedioPago) ? due : 0,
+                                        monto_otro: !['EFECTIVO'].includes(completarMedioPago) ? due : 0,
+                                        medio_pago: completarMedioPago,
+                                        cuenta_destino: cuentaDestino
+                                    });
+                                    setCompletarLoading(false);
+                                    setCompletarModal(null);
+                                    fetchSenas();
+                                    fetchCounters();
+                                }}
+                            >
+                                {completarLoading ? 'Procesando...' : 'Confirmar Cobro ✅'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
