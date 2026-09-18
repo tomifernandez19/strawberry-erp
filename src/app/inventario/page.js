@@ -57,7 +57,7 @@ export default function InventarioPage() {
                     if (!acc[key]) {
                         acc[key] = {
                             id: key,
-                            modelo: unit.variantes.modelos || { descripcion: "Sin nombre", marca: "S/M" },
+                            modelo: unit.variantes.modelos ? { ...unit.variantes.modelos, tiendanube_id: unit.variantes.modelos.tiendanube_items?.[0]?.tiendanube_id || null } : { descripcion: "Sin nombre", marca: "S/M" },
                             color: unit.variantes.color || 'S/D',
                             imagen_url: unit.variantes.imagen_url,
                             precio_efectivo: unit.variantes.precio_efectivo,
@@ -82,7 +82,7 @@ export default function InventarioPage() {
                         const vMeta = soldOutMetas[vId];
                         grouped[vId] = {
                             id: vId,
-                            modelo: vMeta.modelos || { descripcion: "Sin nombre", marca: "S/M" },
+                            modelo: vMeta.modelos ? { ...vMeta.modelos, tiendanube_id: vMeta.modelos.tiendanube_items?.[0]?.tiendanube_id || null } : { descripcion: "Sin nombre", marca: "S/M" },
                             color: vMeta.color || 'S/D',
                             imagen_url: vMeta.imagen_url,
                             precio_efectivo: vMeta.precio_efectivo,

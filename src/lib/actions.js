@@ -2219,10 +2219,10 @@ export async function syncImageToTiendanube(modeloId, imageUrl) {
     const headers = { 'Authentication': `bearer ${token}`, 'Content-Type': 'application/json' };
 
     try {
-        const { data: modelo } = await supabase.from('modelos').select('tiendanube_id').eq('id', modeloId).single();
-        if (!modelo?.tiendanube_id) return { success: false, message: "El producto aún no está sincronizado con TN." };
+        const { data: tnLink } = await supabase.from('tiendanube_items').select('tiendanube_id').eq('modelo_id', modeloId).maybeSingle();
+        if (!tnLink?.tiendanube_id) return { success: false, message: "El producto aún no está sincronizado con TN." };
 
-        const response = await fetch(`${baseUrl}/products/${modelo.tiendanube_id}/images`, {
+        const response = await fetch(`${baseUrl}/products/${tnLink.tiendanube_id}/images`, {
             method: 'POST',
             headers,
             body: JSON.stringify({ src: imageUrl })
@@ -2757,7 +2757,7 @@ export async function getAvailableStockDetailed() {
         .from('unidades')
         .select(`
             id, talle_especifico, ubicacion,
-            variantes (id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_id))
+            variantes (id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_items(tiendanube_id)))
         `)
         .eq('estado', 'DISPONIBLE');
 
@@ -2768,7 +2768,7 @@ export async function getAvailableStockDetailed() {
         .from('unidades')
         .select(`
             variante_id,
-            variantes (id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_id))
+            variantes (id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_items(tiendanube_id)))
         `)
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE'])
         .gte('fecha_venta', thirtyDaysAgo.toISOString());
@@ -2804,7 +2804,8 @@ export async function getSyncReport() {
     const { data: models, error } = await supabase
         .from('modelos')
         .select(`
-            id, descripcion, marca, tiendanube_id,
+            id, descripcion, marca,
+            tiendanube_items(tiendanube_id),
             variantes (
                 id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente,
                 unidades (id, estado, talle_especifico)
@@ -2829,7 +2830,7 @@ export async function getSyncReport() {
 
             results.push({
                 id: v.id,
-                modelo: { id: m.id, descripcion: m.descripcion, marca: m.marca, tiendanube_id: m.tiendanube_id },
+                modelo: { id: m.id, descripcion: m.descripcion, marca: m.marca, tiendanube_id: m.tiendanube_items?.[0]?.tiendanube_id || null },
                 color: v.color,
                 imagen_url: v.imagen_url,
                 precio_efectivo: v.precio_efectivo,
@@ -3796,7 +3797,7 @@ export async function syncProductToML(modeloId) {
     // Obtener descripcion del modelo para buscar también otras temporadas del mismo modelo
     const { data: modeloData } = await supabase
         .from('modelos')
-        .select('descripcion, tiendanube_id')
+        .select('descripcion')
         .eq('id', modeloId)
         .single();
 
@@ -4067,18 +4068,19 @@ export async function publishModeloToML(modeloId) {
     // 2. Obtener datos del modelo
     const { data: modelo } = await supabase
         .from('modelos')
-        .select('descripcion, tiendanube_id')
+        .select('descripcion, tiendanube_items(tiendanube_id)')
         .eq('id', modeloId)
         .single();
     if (!modelo) return { success: false, message: 'Modelo no encontrado' };
+    const modeloTnId = modelo.tiendanube_items?.[0]?.tiendanube_id || null;
 
     // 3. Obtener variantes con stock por talle desde TiendaNube
     let tnVariants = [];
     let tnImages = [];
-    if (modelo.tiendanube_id) {
+    if (modeloTnId) {
         const storeId = process.env.TIENDANUBE_STORE_ID;
         const token = process.env.TIENDANUBE_ACCESS_TOKEN;
-        const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${modelo.tiendanube_id}`, {
+        const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${modeloTnId}`, {
             headers: { 'Authentication': `bearer ${token}`, 'User-Agent': 'StrawberryERP/1.0' }
         });
         if (res.ok) {
@@ -4206,17 +4208,18 @@ export async function syncVariationsToML(modeloId) {
     // 2. Obtener variantes de TiendaNube (fuente de verdad de stock)
     const { data: modelo } = await supabase
         .from('modelos')
-        .select('descripcion, tiendanube_id')
+        .select('descripcion, tiendanube_items(tiendanube_id)')
         .eq('id', modeloId)
         .single();
     if (!modelo) return { success: false, message: 'Modelo no encontrado' };
+    const modeloTnId = modelo.tiendanube_items?.[0]?.tiendanube_id || null;
 
     let tnVariants = [];
     let tnImages = [];
-    if (modelo.tiendanube_id) {
+    if (modeloTnId) {
         const storeId = process.env.TIENDANUBE_STORE_ID;
         const token = process.env.TIENDANUBE_ACCESS_TOKEN;
-        const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${modelo.tiendanube_id}`, {
+        const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${modeloTnId}`, {
             headers: { 'Authentication': `bearer ${token}`, 'User-Agent': 'StrawberryERP/1.0' }
         });
         if (res.ok) {
