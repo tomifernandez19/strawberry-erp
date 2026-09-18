@@ -2025,7 +2025,15 @@ export async function syncProductToTiendanube(modeloId) {
         if (mErr || !siblingModels || siblingModels.length === 0) return { success: false, message: "No se encontraron modelos para sincronizar" };
 
         // Pick basic metadata from ANY model (first one usually has the TN ID if already synced)
-        const modelo = siblingModels.find(m => m.tiendanube_id) || siblingModels[0];
+        const modelo = siblingModels[0];
+
+        // Look up TN ID via tiendanube_items table (explicit links, like ML)
+        const siblingIds = siblingModels.map(m => m.id);
+        const { data: tnLink } = await supabase
+            .from('tiendanube_items')
+            .select('tiendanube_id, modelo_id')
+            .in('modelo_id', siblingIds)
+            .maybeSingle();
 
         // 2. Consolidate stock across all sibling models
         const tnVariants = [];
@@ -2092,7 +2100,7 @@ export async function syncProductToTiendanube(modeloId) {
         }
 
         // 1. Verificar si el producto ya existe en Tiendanube
-        let tnProductId = modelo.tiendanube_id;
+        let tnProductId = tnLink?.tiendanube_id || null;
         let existingProduct = null;
 
         if (tnProductId) {
@@ -2101,13 +2109,17 @@ export async function syncProductToTiendanube(modeloId) {
         }
 
         if (!existingProduct) {
-            // Intentar buscar por nombre
+            // Intentar buscar por nombre en TN
             const searchRes = await fetch(`${baseUrl}/products?q=${encodeURIComponent(modelo.descripcion)}`, { headers });
             const searchData = await searchRes.json();
             existingProduct = Array.isArray(searchData) ? searchData.find(p => p.name.es === modelo.descripcion) : null;
             if (existingProduct) {
                 tnProductId = existingProduct.id;
-                await supabase.from('modelos').update({ tiendanube_id: String(tnProductId) }).eq('id', modelo.id);
+                // Guardar link en tiendanube_items (upsert por tiendanube_id)
+                await supabase.from('tiendanube_items').upsert(
+                    { modelo_id: modelo.id, tiendanube_id: String(tnProductId) },
+                    { onConflict: 'tiendanube_id' }
+                );
             }
         }
 
@@ -2133,7 +2145,11 @@ export async function syncProductToTiendanube(modeloId) {
             }
 
             const newProd = await response.json();
-            await supabase.from('modelos').update({ tiendanube_id: String(newProd.id) }).eq('id', modelo.id);
+            // Guardar link en tiendanube_items
+            await supabase.from('tiendanube_items').upsert(
+                { modelo_id: modeloId, tiendanube_id: String(newProd.id) },
+                { onConflict: 'tiendanube_id' }
+            );
             return { success: true, message: "Producto creado con stock y precios con éxito" };
         } else {
             // MODO ACTUALIZACIÓN (PUT)
