@@ -1,36 +1,26 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { syncProductToTiendanube } from '@/lib/actions';
 
-const TO_RENAME = [
-    { id: 338013478, name: 'TAIPEI ECOCUERO' },
-    { id: 343276278, name: 'TORONTO ECOCUERO' },
-    { id: 368209391, name: 'URSULA ECOCUERO' },
+const MODEL_IDS = [
+    'b480384f-096e-4f63-a806-49df43ebb28e', // TAIPEI ECOCUERO (nueva temporada)
+    '9891ab15-1877-4ff4-bc71-10c9b358cc13', // TORONTO ECOCUERO (nueva temporada)
+    '33a6e18e-2053-4105-ba6d-141424dbf15f', // VARSOVIA GZA (429 pendiente)
+    '13d87812-5f9b-4a1d-953c-981ca95339f7', // VERACRUZ (429 pendiente)
 ];
 
-const TO_DELETE = [368338628, 368338669, 368338682, 368209392, 368338703];
-
 export async function GET() {
-    const storeId = process.env.TIENDANUBE_STORE_ID;
-    const token = process.env.TIENDANUBE_ACCESS_TOKEN;
-    const headers = { 'Authentication': `bearer ${token}`, 'Content-Type': 'application/json', 'User-Agent': 'StrawberryERP/1.0' };
-
-    const results = { renamed: [], deleted: [] };
-
-    for (const { id, name } of TO_RENAME) {
-        const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${id}`, {
-            method: 'PUT', headers,
-            body: JSON.stringify({ name: { es: name } })
-        });
-        results.renamed.push({ id, name, ok: res.ok, status: res.status });
+    const results = [];
+    for (const modelId of MODEL_IDS) {
+        try {
+            const res = await syncProductToTiendanube(modelId);
+            results.push({ modelId, success: res.success, msg: res.message });
+        } catch (e) {
+            results.push({ modelId, success: false, msg: e.message });
+        }
     }
-
-    for (const id of TO_DELETE) {
-        const res = await fetch(`https://api.tiendanube.com/v1/${storeId}/products/${id}`, {
-            method: 'DELETE', headers
-        });
-        results.deleted.push({ id, ok: res.ok, status: res.status });
-    }
-
-    return NextResponse.json(results);
+    const ok = results.filter(r => r.success).length;
+    const fail = results.filter(r => !r.success).length;
+    return NextResponse.json({ ok, fail, results });
 }
