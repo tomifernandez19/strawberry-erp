@@ -15,7 +15,7 @@ export default function NuevaCompraPage() {
         supplier_type: 'PROVEEDOR'
     })
     const [items, setItems] = useState([
-        { variante_id: '', cantidad: 6, costo_unitario: 0, descripcion: '', color: '', codigo_proveedor: '', curva: '35-39(37)' }
+        { variante_id: '', cantidad: 6, costo_unitario: 0, descripcion: '', color: '', codigo_proveedor: '', curva: '35-39(37)', mismo_producto: null }
     ])
     const [loading, setLoading] = useState(false)
 
@@ -173,7 +173,7 @@ export default function NuevaCompraPage() {
     }
 
     const addItem = () => {
-        setItems([...items, { variante_id: '', cantidad: 6, costo_unitario: 0, curva: '35-39(37)', localImage: null, descripcion: '', color: '', codigo_proveedor: '' }])
+        setItems([...items, { variante_id: '', cantidad: 6, costo_unitario: 0, curva: '35-39(37)', localImage: null, descripcion: '', color: '', codigo_proveedor: '', mismo_producto: null, _codigoExistente: null }])
     }
 
     const removeItem = (index) => {
@@ -192,7 +192,7 @@ export default function NuevaCompraPage() {
         newItems[index][field] = value
 
         // Smart Autocomplete Logic
-        if (field === 'descripcion' || field === 'color') {
+        if (field === 'descripcion' || field === 'color' || field === 'codigo_proveedor') {
             const desc = newItems[index].descripcion?.toUpperCase();
             const color = newItems[index].color?.toUpperCase();
 
@@ -206,6 +206,22 @@ export default function NuevaCompraPage() {
                 if (color && autoData.lookup[desc].colors[color]) {
                     newItems[index].costo_unitario = autoData.lookup[desc].colors[color];
                 }
+
+                // Si el código es distinto al guardado, preguntar si es nueva temporada
+                const codigoExistente = autoData.lookup[desc].codigo;
+                const codigoActual = newItems[index].codigo_proveedor;
+                if (codigoActual && codigoExistente && codigoActual !== codigoExistente) {
+                    newItems[index]._codigoExistente = codigoExistente;
+                    if (newItems[index].mismo_producto === null) {
+                        newItems[index].mismo_producto = null; // mostrar aviso
+                    }
+                } else {
+                    newItems[index]._codigoExistente = null;
+                    newItems[index].mismo_producto = null;
+                }
+            } else {
+                newItems[index]._codigoExistente = null;
+                newItems[index].mismo_producto = null;
             }
         }
 
@@ -430,6 +446,24 @@ export default function NuevaCompraPage() {
                             options={autoData.descriptions}
                             onChange={val => updateItem(index, 'descripcion', val)}
                         />
+
+                        {item._codigoExistente && (
+                            <div style={{ fontSize: '0.8rem', padding: '6px 8px', background: 'rgba(255,200,0,0.08)', borderRadius: 'var(--radius)', border: '1px solid rgba(255,200,0,0.3)' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={item.mismo_producto === true}
+                                        onChange={e => updateItem(index, 'mismo_producto', e.target.checked)}
+                                    />
+                                    <span>Nueva temporada del mismo producto (código anterior: <strong>{item._codigoExistente}</strong>)</span>
+                                </label>
+                                {item.mismo_producto === false && (
+                                    <p style={{ margin: '4px 0 0 24px', color: 'orange', opacity: 0.9 }}>
+                                        Si es un producto distinto, cambiá el nombre para evitar que se unifiquen en TiendaNube.
+                                    </p>
+                                )}
+                            </div>
+                        )}
 
                         <SearchableInput
                             placeholder="Color"
