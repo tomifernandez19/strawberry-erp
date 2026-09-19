@@ -11,6 +11,8 @@ export function AuthProvider({ children }) {
     const router = useRouter()
     const pathname = usePathname()
 
+    const ADMIN_ONLY_ROUTES = ['/compras', '/reportes', '/gestion']
+
     useEffect(() => {
         const checkUser = async () => {
             const u = await getCurrentUser()
@@ -19,9 +21,16 @@ export function AuthProvider({ children }) {
 
             if (!u && pathname !== '/login') {
                 router.push('/login')
+                return
             }
             if (u && pathname === '/login') {
                 router.push('/')
+                return
+            }
+            // Redirigir vendedores si intentan acceder a rutas de admin
+            if (u && u.role !== 'PROPIETARIA') {
+                const isRestricted = ADMIN_ONLY_ROUTES.some(r => pathname.startsWith(r))
+                if (isRestricted) router.push('/')
             }
         }
         checkUser()
