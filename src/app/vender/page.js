@@ -233,6 +233,9 @@ export default function VenderPage() {
         )
     }
 
+    const VA_SUCURSAL_ID = 'bccb08c9-1262-4019-9c60-f63fc03ab0c3'
+    const isVillaAllende = sucursalId === VA_SUCURSAL_ID
+
     return (
         <div className="grid mt-lg">
             <header className="text-center">
@@ -422,9 +425,9 @@ export default function VenderPage() {
                                 <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
                                 <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
                                 <option value="TRANSFERENCIA_PROVEEDOR">Transferencia Proveedor 🚚</option>
-                                <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
-                                <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
-                                <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
+                                <option value="TARJETA_DEBITO">{isVillaAllende ? 'Tarjeta Débito (Lucas) 💳' : 'Tarjeta Débito (Sofi) 💳'}</option>
+                                <option value="TARJETA_CREDITO">{isVillaAllende ? 'Tarjeta Crédito (Lucas) 💳' : 'Tarjeta Crédito (Sofi) 💳'}</option>
+                                <option value="QR_LISTA">{isVillaAllende ? 'QR / Otros (Lucas) 🔘' : 'QR Pago / Otros (Sofi) 🔘'}</option>
                                 <option value="GOCUOTAS_TOMI">GoCuotas (Tomi) 🟣</option>
                                 <option value="DIVIDIR_PAGOS">Dividir Pago (Efe + Otro) ⚖️</option>
                             </select>
@@ -438,7 +441,7 @@ export default function VenderPage() {
                         {['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA', 'GOCUOTAS_TOMI'].includes(medioPago) && (
                             <div className="card mt-md grid" style={{ gap: '10px', background: medioPago === 'GOCUOTAS_TOMI' ? 'rgba(139, 92, 246, 0.05)' : 'rgba(59, 130, 246, 0.05)', border: medioPago === 'GOCUOTAS_TOMI' ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(59, 130, 246, 0.2)' }}>
                                 <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--accent)', margin: 0 }}>
-                                    {medioPago === 'GOCUOTAS_TOMI' ? 'Detalle de Cobro GoCuotas (Tomi):' : 'Detalle de Cobro (Sofi):'}
+                                    {medioPago === 'GOCUOTAS_TOMI' ? 'Detalle de Cobro GoCuotas (Tomi):' : isVillaAllende ? 'Detalle de Cobro (Lucas):' : 'Detalle de Cobro (Sofi):'}
                                 </p>
                                 {medioPago === 'GOCUOTAS_TOMI' && (
                                     <p style={{ fontSize: '0.7rem', opacity: 0.6, margin: 0 }}>Comisión GoCuotas: 9.1% — Acreditación en 22 días</p>
@@ -502,9 +505,9 @@ export default function VenderPage() {
                                     >
                                         <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
                                         <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
-                                        <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
-                                        <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
-                                        <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
+                                        <option value="TARJETA_DEBITO">{isVillaAllende ? 'Tarjeta Débito (Lucas) 💳' : 'Tarjeta Débito (Sofi) 💳'}</option>
+                                        <option value="TARJETA_CREDITO">{isVillaAllende ? 'Tarjeta Crédito (Lucas) 💳' : 'Tarjeta Crédito (Sofi) 💳'}</option>
+                                        <option value="QR_LISTA">{isVillaAllende ? 'QR / Otros (Lucas) 🔘' : 'QR Pago / Otros (Sofi) 🔘'}</option>
                                         <option value="TRANSFERENCIA_PROVEEDOR">Transferencia Proveedor 🚚</option>
                                     </select>
                                 </div>

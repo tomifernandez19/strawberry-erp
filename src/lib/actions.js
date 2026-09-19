@@ -403,12 +403,16 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     // For Split Payments, the 'other' part goes to the specific account
     const effectiveMP = medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : medio_pago;
 
+    const VA_SUCURSAL_ID = 'bccb08c9-1262-4019-9c60-f63fc03ab0c3';
+    const isVillaAllende = resolvedSucursalId === VA_SUCURSAL_ID;
+
     if (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(effectiveMP)) targetAccount = 'CAJA_LOCAL';
     if (effectiveMP === 'TRANSFERENCIA_LUCAS') targetAccount = 'LUCAS';
     if (effectiveMP === 'TRANSFERENCIA_TOMI') targetAccount = 'TOMI';
     if (effectiveMP === 'TRANSFERENCIA_PROVEEDOR') targetAccount = 'PROVEEDOR';
     if (effectiveMP === 'GOCUOTAS_TOMI') targetAccount = 'TOMI';
-    // If it's something like 'TARJETA' or 'QR', it remains 'SOFI_MP'
+    // En Villa Allende el posnet/QR va a Lucas en vez de Sofi
+    if (isVillaAllende && ['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR_LISTA', 'QR'].includes(effectiveMP)) targetAccount = 'LUCAS';
 
     let fechaAcreditacion = new Date();
     if (dias_acreditacion > 0) {
