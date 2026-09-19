@@ -960,26 +960,41 @@ export async function getDailySummary(onlyUserId = null) {
         return { count: 0, total: 0, neto: 0, cash: 0, items: [] };
     }
 
-    // 3. GLOBAL CASH CALCULATION (Perpetual balance)
-    const { data: totalSalesCash, error: sErr } = await supabase
-        .from('ventas')
-        .select('monto_efectivo, medio_pago');
+    // 3. CASH CALCULATION (Perpetual balance, scoped by role/sucursal)
+    const currentUserForCash = await getCurrentUser();
+    const isAdminUser = currentUserForCash?.isAdmin;
+    const userSucursalId = currentUserForCash?.sucursal_id;
 
-    const { data: totalManualCash, error: mAllErr } = await supabase
-        .from('movimientos_caja')
-        .select('monto')
-        .eq('cuenta', 'CAJA_LOCAL');
+    const calcCashForSucursal = async (sucursal_id = null) => {
+        let salesQuery = supabase.from('ventas').select('monto_efectivo, medio_pago');
+        let manualQuery = supabase.from('movimientos_caja').select('monto').eq('cuenta', 'CAJA_LOCAL');
+        if (sucursal_id) {
+            salesQuery = salesQuery.eq('sucursal_id', sucursal_id);
+            manualQuery = manualQuery.eq('sucursal_id', sucursal_id);
+        }
+        const [{ data: salesData }, { data: manualData }] = await Promise.all([salesQuery, manualQuery]);
+        const fromSales = (salesData || []).reduce((acc, s) => {
+            if (['TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(s.medio_pago)) return acc;
+            return acc + (parseFloat(s.monto_efectivo) || 0);
+        }, 0);
+        const fromManual = (manualData || []).reduce((acc, m) => acc + (parseFloat(m.monto) || 0), 0);
+        return fromSales + fromManual;
+    };
 
-    if (sErr || mAllErr) {
-        console.error("Error fetching global cash:", sErr || mAllErr);
+    let globalCashInHand = 0;
+    let cashBySucursal = null;
+
+    if (isAdminUser) {
+        const SUCURSALES = [
+            { id: '3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb', nombre: 'Trejo' },
+            { id: 'bccb08c9-1262-4019-9c60-f63fc03ab0c3', nombre: 'Villa Allende' },
+        ];
+        const cashValues = await Promise.all(SUCURSALES.map(s => calcCashForSucursal(s.id)));
+        cashBySucursal = SUCURSALES.map((s, i) => ({ ...s, cash: cashValues[i] }));
+        globalCashInHand = cashValues.reduce((a, b) => a + b, 0);
+    } else {
+        globalCashInHand = await calcCashForSucursal(userSucursalId || null);
     }
-
-    const cashFromSales = (totalSalesCash || []).reduce((acc, s) => {
-        if (['TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(s.medio_pago)) return acc;
-        return acc + (parseFloat(s.monto_efectivo) || 0)
-    }, 0);
-    const cashFromManual = (totalManualCash || []).reduce((acc, m) => acc + (parseFloat(m.monto) || 0), 0);
-    const globalCashInHand = cashFromSales + cashFromManual;
 
     const saleBaseTotals = {};
     unitsSold.forEach(unit => {
@@ -1095,6 +1110,7 @@ export async function getDailySummary(onlyUserId = null) {
         total: totalAmount,
         neto: totalNeto,
         cash: globalCashInHand,
+        cashBySucursal,
         items: displayItems
     };
 }

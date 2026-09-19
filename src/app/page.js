@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/context/AuthContext'
 
 export default function HomePage() {
     const { isAdmin, user } = useAuth()
-    const [summary, setSummary] = useState({ count: 0, total: 0, neto: 0, cash: 0, items: [] })
+    const [summary, setSummary] = useState({ count: 0, total: 0, neto: 0, cash: 0, cashBySucursal: null, items: [] })
     const [pendingQR, setPendingQR] = useState(0)
     const [pendingDispatches, setPendingDispatches] = useState(0)
     const [pendingLocation, setPendingLocation] = useState(0)
@@ -407,35 +407,67 @@ export default function HomePage() {
             )}
 
             <div className="grid">
-                <div className={`grid grid-cols-2 grid-mobile-stack`} style={{ gap: '15px', marginTop: '15px' }}>
-                    <section
-                        className="card"
-                        style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', cursor: 'pointer', marginBottom: 0, padding: '15px' }}
-                        onClick={() => fetchCashDetail('LOCAL')}
-                    >
-                        <h4 style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--accent)' }}>Caja en Local</h4>
-                        <div style={{ marginTop: '5px' }}>
-                            <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)' }}>
-                                $ {summary.cash.toLocaleString()}
-                            </p>
-                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>📊 Detalle</p>
+                {isAdmin && summary.cashBySucursal ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '15px' }}>
+                        <div className={`grid grid-cols-2 grid-mobile-stack`} style={{ gap: '15px' }}>
+                            {summary.cashBySucursal.map(s => (
+                                <section
+                                    key={s.id}
+                                    className="card"
+                                    style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', cursor: 'pointer', marginBottom: 0, padding: '15px' }}
+                                    onClick={() => fetchCashDetail('LOCAL')}
+                                >
+                                    <h4 style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--accent)' }}>Caja {s.nombre}</h4>
+                                    <div style={{ marginTop: '5px' }}>
+                                        <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)' }}>
+                                            $ {s.cash.toLocaleString()}
+                                        </p>
+                                        <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>📊 Detalle</p>
+                                    </div>
+                                </section>
+                            ))}
                         </div>
-                    </section>
-
-                    <Link href={isAdmin ? "/reportes" : "#"} style={{ textDecoration: 'none', color: 'inherit', cursor: isAdmin ? 'pointer' : 'default' }}>
-                        <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', marginBottom: 0, padding: '15px' }}>
-                            <h4 style={{ fontSize: '0.7rem', opacity: 0.8 }}>Ingreso Neto Hoy</h4>
+                        <Link href="/reportes" style={{ textDecoration: 'none', color: 'inherit' }}>
+                            <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', marginBottom: 0, padding: '15px' }}>
+                                <h4 style={{ fontSize: '0.7rem', opacity: 0.8 }}>Ingreso Neto Hoy</h4>
+                                <div style={{ marginTop: '5px' }}>
+                                    <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'white' }}>
+                                        $ {summary.neto.toLocaleString()}
+                                    </p>
+                                    <p style={{ fontSize: '0.6rem', opacity: 0.4 }}>Lista: $ {summary.total.toLocaleString()}</p>
+                                </div>
+                            </section>
+                        </Link>
+                    </div>
+                ) : (
+                    <div className={`grid grid-cols-2 grid-mobile-stack`} style={{ gap: '15px', marginTop: '15px' }}>
+                        <section
+                            className="card"
+                            style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', cursor: 'pointer', marginBottom: 0, padding: '15px' }}
+                            onClick={() => fetchCashDetail('LOCAL')}
+                        >
+                            <h4 style={{ fontSize: '0.7rem', opacity: 0.8, color: 'var(--accent)' }}>Caja en Local</h4>
                             <div style={{ marginTop: '5px' }}>
-                                <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'white' }}>
-                                    $ {summary.neto.toLocaleString()}
+                                <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent)' }}>
+                                    $ {summary.cash.toLocaleString()}
                                 </p>
-                                <p style={{ fontSize: '0.6rem', opacity: 0.4 }}>Lista: $ {summary.total.toLocaleString()}</p>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>📊 Detalle</p>
                             </div>
                         </section>
-                    </Link>
-                </div>
 
-                {/* Section 2: Bottom Pending removed as requested by user - only show if count > 0 */}
+                        <Link href="#" style={{ textDecoration: 'none', color: 'inherit' }}>
+                            <section className="card" style={{ border: '1px solid rgba(255,255,255,0.1)', marginBottom: 0, padding: '15px' }}>
+                                <h4 style={{ fontSize: '0.7rem', opacity: 0.8 }}>Ingreso Neto Hoy</h4>
+                                <div style={{ marginTop: '5px' }}>
+                                    <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'white' }}>
+                                        $ {summary.neto.toLocaleString()}
+                                    </p>
+                                    <p style={{ fontSize: '0.6rem', opacity: 0.4 }}>Lista: $ {summary.total.toLocaleString()}</p>
+                                </div>
+                            </section>
+                        </Link>
+                    </div>
+                )}
             </div>
 
             {/* Gastos de caja - solo vendedor */}
