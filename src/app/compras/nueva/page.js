@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { createPurchase, uploadProductImage, getLastRemito, getStockAutocompleteData } from '@/lib/actions'
+import { createPurchase, uploadProductImage, getLastRemito, getStockAutocompleteData, getCurrentUser } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 import Tesseract from 'tesseract.js';
 
@@ -18,6 +18,8 @@ export default function NuevaCompraPage() {
         { variante_id: '', cantidad: 6, costo_unitario: 0, descripcion: '', color: '', codigo_proveedor: '', curva: '35-39(37)', mismo_producto: null }
     ])
     const [loading, setLoading] = useState(false)
+    const [currentUser, setCurrentUser] = useState(null)
+    const [sucursalId, setSucursalId] = useState(null)
 
     const [autoData, setAutoData] = useState({ descriptions: [], colors: [], lookup: {} })
 
@@ -26,12 +28,15 @@ export default function NuevaCompraPage() {
     }, [])
 
     async function loadInitialStats() {
-        const [lastRem, suggestions] = await Promise.all([
+        const [lastRem, suggestions, user] = await Promise.all([
             getLastRemito(),
-            getStockAutocompleteData()
+            getStockAutocompleteData(),
+            getCurrentUser()
         ])
         setFormData(prev => ({ ...prev, nro_remito: lastRem }))
         setAutoData(suggestions)
+        setCurrentUser(user)
+        if (!user?.isAdmin) setSucursalId(user?.sucursal_id || null)
     }
 
     const handleOCR = async (e) => {
@@ -288,7 +293,8 @@ export default function NuevaCompraPage() {
             const resComp = await createPurchase({
                 nro_remito: formData.nro_remito,
                 items: formattedItems,
-                supplier_type: formData.supplier_type
+                supplier_type: formData.supplier_type,
+                sucursal_id: sucursalId
             })
             if (resComp.success) {
                 router.push('/asignar')
@@ -337,6 +343,22 @@ export default function NuevaCompraPage() {
                         <option value="CAROLINA">Mercadería de Carolina (👵 Deuda Stock)</option>
                         <option value="PROVEEDOR">Compra a Proveedor (🏢 Deuda Nueva)</option>
                     </select>
+
+                    {currentUser?.isAdmin && (
+                        <>
+                            <label style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '10px' }}>Sucursal destino:</label>
+                            <select
+                                value={sucursalId || ''}
+                                onChange={e => setSucursalId(e.target.value || null)}
+                                style={{ ...inputStyle, borderColor: sucursalId ? undefined : 'rgba(239,68,68,0.5)' }}
+                                required
+                            >
+                                <option value="">— Seleccionar sucursal —</option>
+                                <option value="3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb">Trejo</option>
+                                <option value="bccb08c9-1262-4019-9c60-f63fc03ab0c3">Villa Allende</option>
+                            </select>
+                        </>
+                    )}
 
                     <label style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '10px' }}>Datos del Remito:</label>
                     <input

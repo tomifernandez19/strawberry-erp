@@ -33,7 +33,7 @@ async function getLatestPricing(supabase, description, color) {
  * Creates a new purchase, creates models/variants if they don't exist,
  * and generates the units ready for QR assignment.
  */
-export async function createPurchase({ nro_remito, items, supplier_type = 'CAROLINA' }) {
+export async function createPurchase({ nro_remito, items, supplier_type = 'CAROLINA', sucursal_id = null }) {
     const supabase = createClient();
     try {
         console.log("Creating Purchase with items:", items?.length, "Type:", supplier_type);
@@ -150,7 +150,8 @@ export async function createPurchase({ nro_remito, items, supplier_type = 'CAROL
                 variante_id,
                 compra_id: compra.id,
                 estado: 'PENDIENTE_QR',
-                talle_especifico: talle
+                talle_especifico: talle,
+                ...(sucursal_id ? { sucursal_id } : {})
             }))
 
             const { error: unitsError } = await supabase.from('unidades').insert(unitsToCreate)
