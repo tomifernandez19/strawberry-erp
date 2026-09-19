@@ -944,7 +944,7 @@ export async function getDailySummary(onlyUserId = null, sucursal_id_filter = nu
     const todayIso = getTodayArgentinaStart();
 
     // Fetch units sold today (VENDIDO or VENDIDO_ONLINE)
-    const { data: unitsSold, error: uError } = await supabase
+    let unitsSoldQuery = supabase
         .from('unidades')
         .select(`
             id, fecha_venta, talle_especifico, codigo_qr,
@@ -954,6 +954,12 @@ export async function getDailySummary(onlyUserId = null, sucursal_id_filter = nu
         .in('estado', ['VENDIDO', 'VENDIDO_ONLINE', 'RESERVADO_ONLINE'])
         .gte('fecha_venta', todayIso)
         .order('fecha_venta', { ascending: false });
+
+    if (sucursal_id_filter) {
+        unitsSoldQuery = unitsSoldQuery.eq('sucursal_id', sucursal_id_filter);
+    }
+
+    const { data: unitsSold, error: uError } = await unitsSoldQuery;
 
     // Fetch manual movements today
     const { data: movements, error: mError } = await supabase
@@ -1112,10 +1118,12 @@ export async function getDailySummary(onlyUserId = null, sucursal_id_filter = nu
         });
     });
 
-    // Totals and items list can be PERSONALIZED
-    const displayItems = onlyUserId
-        ? allItems.filter(i => i.vendedor === onlyUserId)
-        : allItems;
+    // Totals and items list: filter by sucursal for vendedores, show all for admins
+    const displayItems = sucursal_id_filter
+        ? allItems  // already filtered at query level by sucursal_id
+        : onlyUserId
+            ? allItems.filter(i => i.vendedor === onlyUserId)
+            : allItems;
 
     const totalAmount = displayItems.reduce((acc, item) => acc + item.precio, 0);
     const totalNeto = displayItems.reduce((acc, item) => acc + (item.neto || item.precio), 0);
