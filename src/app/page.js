@@ -31,7 +31,7 @@ export default function HomePage() {
         if (!user) return
 
         async function loadData() {
-            const s = await getDailySummary(isAdmin ? null : user.id)
+            const s = await getDailySummary(isAdmin ? null : user.id, isAdmin ? null : (user.sucursal_id || null))
             setSummary(s)
 
             // Pending dispatches: visible to everyone
@@ -628,7 +628,7 @@ export default function HomePage() {
                 senas={pendingSenas}
                 onComplete={async (id, data) => {
                     await completeSena(id, data);
-                    const s = await getDailySummary(isAdmin ? null : user.id);
+                    const s = await getDailySummary(isAdmin ? null : user.id, isAdmin ? null : (user.sucursal_id || null));
                     setSummary(s);
                     const senas = await getPendingSenasList();
                     setPendingSenas(senas || []);

@@ -939,7 +939,7 @@ export async function getCashMovements() {
     return data;
 }
 
-export async function getDailySummary(onlyUserId = null) {
+export async function getDailySummary(onlyUserId = null, sucursal_id_filter = null) {
     const supabase = createClient();
     const todayIso = getTodayArgentinaStart();
 
@@ -974,9 +974,7 @@ export async function getDailySummary(onlyUserId = null) {
     }
 
     // 3. CASH CALCULATION (Perpetual balance, scoped by role/sucursal)
-    const currentUserForCash = await getCurrentUser();
-    const isAdminUser = currentUserForCash?.isAdmin;
-    const userSucursalId = currentUserForCash?.sucursal_id;
+    // sucursal_id_filter: null = admin (show all / by sucursal), string = vendedor (show only that sucursal)
 
     const calcCashForSucursal = async (sucursal_id = null) => {
         let salesQuery = supabase.from('ventas').select('monto_efectivo, medio_pago');
@@ -997,7 +995,11 @@ export async function getDailySummary(onlyUserId = null) {
     let globalCashInHand = 0;
     let cashBySucursal = null;
 
-    if (isAdminUser) {
+    if (sucursal_id_filter) {
+        // Vendedor: show only their sucursal's cash
+        globalCashInHand = await calcCashForSucursal(sucursal_id_filter);
+    } else if (!onlyUserId) {
+        // Admin: show both sucursales separately
         const SUCURSALES = [
             { id: '3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb', nombre: 'Trejo' },
             { id: 'bccb08c9-1262-4019-9c60-f63fc03ab0c3', nombre: 'Villa Allende' },
@@ -1006,7 +1008,7 @@ export async function getDailySummary(onlyUserId = null) {
         cashBySucursal = SUCURSALES.map((s, i) => ({ ...s, cash: cashValues[i] }));
         globalCashInHand = cashValues.reduce((a, b) => a + b, 0);
     } else {
-        globalCashInHand = await calcCashForSucursal(userSucursalId || null);
+        globalCashInHand = await calcCashForSucursal(null);
     }
 
     const saleBaseTotals = {};
