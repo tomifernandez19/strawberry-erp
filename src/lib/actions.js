@@ -508,7 +508,7 @@ export async function getProductDetailsByQR(qrCode) {
             // Step B: Get all available units for those variants
             const { data: units } = await supabase
                 .from('unidades')
-                .select('talle_especifico')
+                .select('talle_especifico, sucursal_id')
                 .in('variante_id', variantIds)
                 .eq('estado', 'DISPONIBLE');
 
@@ -516,19 +516,27 @@ export async function getProductDetailsByQR(qrCode) {
         }
     }
 
-    // Count stock by size
-    const stockBySize = siblingUnits.reduce((acc, curr) => {
-        const talle = curr.talle_especifico;
-        acc[talle] = (acc[talle] || 0) + 1;
-        return acc;
-    }, {});
+    const SUCURSAL_NAMES = {
+        '3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb': 'Trejo',
+        'bccb08c9-1262-4019-9c60-f63fc03ab0c3': 'V.Allende',
+    };
+
+    // Count stock by size, broken down by sucursal
+    const stockMap = {};
+    siblingUnits.forEach(u => {
+        const talle = u.talle_especifico;
+        if (!stockMap[talle]) stockMap[talle] = { total: 0 };
+        stockMap[talle].total += 1;
+        const nombre = SUCURSAL_NAMES[u.sucursal_id] || 'Otro';
+        stockMap[talle][nombre] = (stockMap[talle][nombre] || 0) + 1;
+    });
 
     return {
         unit: unidad,
         model: latestVariant.modelos,
         variant: latestVariant,
-        stockBySize: Object.entries(stockBySize)
-            .map(([talle, qty]) => ({ talle, qty }))
+        stockBySize: Object.entries(stockMap)
+            .map(([talle, data]) => ({ talle, ...data }))
             .sort((a, b) => String(a.talle).localeCompare(String(b.talle), undefined, { numeric: true }))
     }
 }

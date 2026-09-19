@@ -117,18 +117,28 @@ export default function ConsultarPage() {
                             <h4 style={{ marginBottom: '10px', borderBottom: '1px solid var(--card-border)', paddingBottom: '5px' }}>Stock Disponible (Mismo modelo/color):</h4>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
                                 {scannedData.stockBySize.length > 0 ? (
-                                    scannedData.stockBySize.sort((a, b) => a.talle - b.talle).map(item => (
+                                    scannedData.stockBySize.map(item => (
                                         <div key={item.talle} style={{
-                                            padding: '10px 15px',
+                                            padding: '10px 12px',
                                             background: 'var(--secondary)',
                                             borderRadius: '12px',
                                             border: '1px solid var(--card-border)',
                                             textAlign: 'center',
-                                            minWidth: '70px'
+                                            minWidth: '75px'
                                         }}>
                                             <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Talle</p>
                                             <p style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{item.talle}</p>
-                                            <p style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>{item.qty} u.</p>
+                                            <p style={{ fontSize: '0.85rem', color: 'var(--accent)', fontWeight: 'bold' }}>{item.total} u.</p>
+                                            {(item['Trejo'] || item['V.Allende']) && (
+                                                <div style={{ marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '4px' }}>
+                                                    {item['Trejo'] != null && (
+                                                        <p style={{ fontSize: '0.6rem', opacity: 0.6 }}>Trejo: {item['Trejo']}</p>
+                                                    )}
+                                                    {item['V.Allende'] != null && (
+                                                        <p style={{ fontSize: '0.6rem', opacity: 0.6 }}>V.All: {item['V.Allende']}</p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     ))
                                 ) : (
