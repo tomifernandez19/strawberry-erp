@@ -3632,18 +3632,25 @@ export async function fixProveedorPrices() {
  */
 export async function getPendingSenasList() {
     const supabase = createClient();
-    const { data, error } = await supabase
+
+    const currentUser = await getCurrentUser();
+    let query = supabase
         .from('ventas')
         .select(`
             *,
             unidades (
-                id, talle_especifico, codigo_qr, 
+                id, talle_especifico, codigo_qr,
                 variantes (color, modelos (descripcion))
             )
         `)
         .eq('tipo', 'SENA')
         .order('fecha', { ascending: false });
 
+    if (!currentUser?.isAdmin && currentUser?.sucursal_id) {
+        query = query.eq('sucursal_id', currentUser.sucursal_id);
+    }
+
+    const { data, error } = await query;
     if (error) {
         console.error("[getPendingSenasList] Error:", error);
         return [];
