@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import QRScanner from '@/components/QRScanner'
-import { getUnitForSale, recordSale } from '@/lib/actions'
+import { getUnitForSale, recordSale, getCurrentUser } from '@/lib/actions'
 
 export default function VenderPage() {
     const [items, setItems] = useState([])
@@ -22,6 +22,9 @@ export default function VenderPage() {
     const [otroMedioPago, setOtroMedioPago] = useState('TARJETA_DEBITO')
     const [montoNeto, setMontoNeto] = useState('')
     const [diasAcreditacion, setDiasAcreditacion] = useState(18)
+
+    const [currentUser, setCurrentUser] = useState(null)
+    const [sucursalId, setSucursalId] = useState(null)
 
     const totals = () => {
         let totalLista = 0
@@ -49,6 +52,15 @@ export default function VenderPage() {
     }
 
     const { totalLista, totalEfectivo, totalMayorista, baseTotal, finalTotal, currentPct } = totals()
+
+    useEffect(() => {
+        getCurrentUser().then(user => {
+            if (!user) return;
+            setCurrentUser(user);
+            // Vendedor: sucursal fija; Admin: puede elegir, default la suya
+            setSucursalId(user.sucursal_id);
+        });
+    }, [])
 
     // Auto-defaults for accreditation days and net amount
     useEffect(() => {
@@ -147,7 +159,8 @@ export default function VenderPage() {
                     ? (parseFloat(montoEfectivo) || 0) + (parseFloat(montoNeto) || parseFloat(montoOtro) || 0)
                     : (parseFloat(montoNeto) || null),
                 dias_acreditacion: parseInt(diasAcreditacion) || 0,
-                isSena
+                isSena,
+                sucursal_id: sucursalId,
             }
 
             if (isSena) {
@@ -226,6 +239,21 @@ export default function VenderPage() {
                 <h1>Nueva Venta</h1>
                 <p style={{ opacity: 0.7 }}>Agregue productos para iniciar la venta</p>
             </header>
+
+            {currentUser?.isAdmin && (
+                <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: '0.85rem', opacity: 0.7, whiteSpace: 'nowrap' }}>Sucursal:</span>
+                    <select
+                        value={sucursalId || ''}
+                        onChange={e => setSucursalId(e.target.value || null)}
+                        style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: '0.9rem' }}
+                    >
+                        <option value="">— Seleccionar —</option>
+                        <option value="3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb">Trejo</option>
+                        <option value="bccb08c9-1262-4019-9c60-f63fc03ab0c3">Villa Allende</option>
+                    </select>
+                </div>
+            )}
 
             {error && (
                 <div className="card" style={{ borderColor: 'var(--error)', backgroundColor: 'rgba(239, 68, 68, 0.1)', textAlign: 'center', padding: '15px' }}>
