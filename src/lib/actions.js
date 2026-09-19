@@ -969,10 +969,14 @@ export async function getDailySummary(onlyUserId = null, sucursal_id_filter = nu
 
     // Fetch orphaned sales today (sales not linked to any unit sold today)
     // This includes 'DIFERENCIA_CAMBIO' and other manual adjustments
-    const { data: salesToday, error: sError } = await supabase
+    let salesTodayQuery = supabase
         .from('ventas')
         .select('*, profiles(nombre)')
         .gte('created_at', todayIso);
+    if (sucursal_id_filter) {
+        salesTodayQuery = salesTodayQuery.eq('sucursal_id', sucursal_id_filter);
+    }
+    const { data: salesToday, error: sError } = await salesTodayQuery;
 
     if (uError || mError || sError) {
         console.error("Error fetching summary:", uError || mError || sError);
