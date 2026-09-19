@@ -338,7 +338,8 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
         monto_descuento_fijo = 0,
         monto_neto = null,
         dias_acreditacion = 0,
-        isSena = false
+        isSena = false,
+        sucursal_id = null,
     } = options;
 
     if (!Array.isArray(qrCodes) || qrCodes.length === 0) throw new Error("No hay productos seleccionados");
@@ -388,6 +389,13 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     // 3. Create the sale record
     const { data: { user } } = await supabase.auth.getUser();
 
+    // Resolve sucursal: use passed value or fallback to user's profile
+    let resolvedSucursalId = sucursal_id;
+    if (!resolvedSucursalId && user) {
+        const { data: prof } = await supabase.from('profiles').select('sucursal_id').eq('id', user.id).maybeSingle();
+        resolvedSucursalId = prof?.sucursal_id || null;
+    }
+
     // Calculate targeted account and metadata
     let targetAccount = 'SOFI_MP'; // Default for cards/QR
     
@@ -423,7 +431,8 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             monto_neto: monto_neto || null,
             fecha_acreditacion: getArgentinaIso(fechaAcreditacion),
             cuenta_destino: targetAccount,
-            tipo: isSena ? 'SENA' : 'VENTA_LOCAL'
+            tipo: isSena ? 'SENA' : 'VENTA_LOCAL',
+            sucursal_id: resolvedSucursalId,
         }])
         .select()
         .single()
@@ -816,9 +825,15 @@ export async function getCustomRangeStats(startDate, endDate) {
 /**
  * Records a financial movement (Expensas, Payments, Salary, etc.)
  */
-export async function recordCashMovement({ monto, tipo, motivo, persona, cuenta = 'CAJA_LOCAL', categoria = 'GASTOS_GENERALES' }) {
+export async function recordCashMovement({ monto, tipo, motivo, persona, cuenta = 'CAJA_LOCAL', categoria = 'GASTOS_GENERALES', sucursal_id = null }) {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
+
+    let resolvedSucursalId = sucursal_id;
+    if (!resolvedSucursalId && user) {
+        const { data: prof } = await supabase.from('profiles').select('sucursal_id').eq('id', user.id).maybeSingle();
+        resolvedSucursalId = prof?.sucursal_id || null;
+    }
 
     const { data, error } = await supabase
         .from('movimientos_caja')
@@ -829,7 +844,8 @@ export async function recordCashMovement({ monto, tipo, motivo, persona, cuenta 
             persona,
             cuenta,
             categoria,
-            user_id: user?.id
+            user_id: user?.id,
+            sucursal_id: resolvedSucursalId,
         }])
         .select()
         .single();
@@ -1087,11 +1103,22 @@ export async function getDailySummary(onlyUserId = null) {
  * Fetches recent cash movements (Manual + Sales) for detail view.
  * @param {string} accountId - Optional account filter (e.g., 'CAJA_LOCAL')
  */
-export async function getRecentUnifiedCaja(accountId = null) {
+export async function getRecentUnifiedCaja(accountId = null, sucursal_id = null) {
     const supabase = createClient();
+
+    // Resolve sucursal from user profile if not passed
+    let resolvedSucursalId = sucursal_id;
+    if (!resolvedSucursalId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const { data: prof } = await supabase.from('profiles').select('sucursal_id, role').eq('id', user.id).maybeSingle();
+            if (prof?.role !== 'PROPIETARIA') resolvedSucursalId = prof?.sucursal_id || null;
+        }
+    }
 
     let query = supabase.from('movimientos_caja').select('*');
     if (accountId) query = query.eq('cuenta', accountId);
+    if (resolvedSucursalId) query = query.eq('sucursal_id', resolvedSucursalId);
 
     const { data: manual } = await query
         .order('created_at', { ascending: false })
@@ -1101,13 +1128,15 @@ export async function getRecentUnifiedCaja(accountId = null) {
     // Only include sales if we are looking at all accounts OR specifically CAJA_LOCAL
     let sales = [];
     if (!accountId || accountId === 'CAJA_LOCAL') {
-        const { data: salesData } = await supabase
+        let salesQuery = supabase
             .from('ventas')
             .select('id, created_at, total, monto_efectivo, medio_pago')
             .in('medio_pago', ['EFECTIVO', 'MAYORISTA_EFECTIVO', 'DIVIDIR_PAGOS'])
             .gt('monto_efectivo', 0)
             .order('created_at', { ascending: false })
             .limit(15);
+        if (resolvedSucursalId) salesQuery = salesQuery.eq('sucursal_id', resolvedSucursalId);
+        const { data: salesData } = await salesQuery;
         sales = salesData || [];
     }
 
@@ -1913,11 +1942,18 @@ export async function getCurrentUser() {
 
     const { data: profile } = await supabase
         .from('profiles')
-        .select('role, nombre')
+        .select('role, nombre, sucursal_id, sucursales(nombre)')
         .eq('id', user.id)
         .maybeSingle();
 
-    return { ...user, role: profile?.role || 'VENDEDOR', nombre: profile?.nombre };
+    return {
+        ...user,
+        role: profile?.role || 'VENDEDOR',
+        nombre: profile?.nombre,
+        sucursal_id: profile?.sucursal_id || null,
+        sucursal_nombre: profile?.sucursales?.nombre || null,
+        isAdmin: profile?.role === 'PROPIETARIA',
+    };
 }
 
 
@@ -2749,17 +2785,29 @@ export async function completeDispatch(pedidoId, qrCodes, customPrice = null) {
  * This server action is used to avoid RLS limitations for non-admin users
  * in the inventory summary view.
  */
-export async function getAvailableStockDetailed() {
+export async function getAvailableStockDetailed(sucursal_id = null) {
     const supabase = createClient();
 
+    // Resolve sucursal: vendedores only see their own, admins see all by default
+    let resolvedSucursalId = sucursal_id;
+    if (!resolvedSucursalId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const { data: prof } = await supabase.from('profiles').select('sucursal_id, role').eq('id', user.id).maybeSingle();
+            if (prof?.role !== 'PROPIETARIA') resolvedSucursalId = prof?.sucursal_id || null;
+        }
+    }
+
     // 1. Fetch available stock
-    const { data: stockData, error: stockErr } = await supabase
+    let stockQuery = supabase
         .from('unidades')
         .select(`
-            id, talle_especifico, ubicacion,
+            id, talle_especifico, ubicacion, sucursal_id,
             variantes (id, color, precio_efectivo, precio_lista, imagen_url, pedido_pendiente, modelos (id, descripcion, marca, tiendanube_items(tiendanube_id)))
         `)
         .eq('estado', 'DISPONIBLE');
+    if (resolvedSucursalId) stockQuery = stockQuery.eq('sucursal_id', resolvedSucursalId);
+    const { data: stockData, error: stockErr } = await stockQuery;
 
     // 2. Fetch sales from the last 30 days WITH metadata for intelligent replenishment
     const thirtyDaysAgo = new Date();
