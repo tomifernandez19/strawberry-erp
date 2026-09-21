@@ -986,12 +986,21 @@ export async function getDailySummary(onlyUserId = null, sucursal_id_filter = nu
     // 3. CASH CALCULATION (Perpetual balance, scoped by role/sucursal)
     // sucursal_id_filter: null = admin (show all / by sucursal), string = vendedor (show only that sucursal)
 
+    const TREJO_ID = '3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb';
+
+    // For Trejo: include records with sucursal_id = Trejo OR sucursal_id IS NULL (historical data pre-migration)
+    // For Villa Allende: only records with its explicit sucursal_id
     const calcCashForSucursal = async (sucursal_id = null) => {
         let salesQuery = supabase.from('ventas').select('monto_efectivo, medio_pago');
         let manualQuery = supabase.from('movimientos_caja').select('monto').eq('cuenta', 'CAJA_LOCAL');
         if (sucursal_id) {
-            salesQuery = salesQuery.eq('sucursal_id', sucursal_id);
-            manualQuery = manualQuery.eq('sucursal_id', sucursal_id);
+            if (sucursal_id === TREJO_ID) {
+                salesQuery = salesQuery.or(`sucursal_id.eq.${sucursal_id},sucursal_id.is.null`);
+                manualQuery = manualQuery.or(`sucursal_id.eq.${sucursal_id},sucursal_id.is.null`);
+            } else {
+                salesQuery = salesQuery.eq('sucursal_id', sucursal_id);
+                manualQuery = manualQuery.eq('sucursal_id', sucursal_id);
+            }
         }
         const [{ data: salesData }, { data: manualData }] = await Promise.all([salesQuery, manualQuery]);
         const fromSales = (salesData || []).reduce((acc, s) => {
@@ -1006,12 +1015,12 @@ export async function getDailySummary(onlyUserId = null, sucursal_id_filter = nu
     let cashBySucursal = null;
 
     if (sucursal_id_filter) {
-        // Vendedor: show only their sucursal's cash
+        // Vendedor: show only their sucursal's cash (Trejo includes historical nulls)
         globalCashInHand = await calcCashForSucursal(sucursal_id_filter);
     } else if (!onlyUserId) {
         // Admin: show both sucursales separately
         const SUCURSALES = [
-            { id: '3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb', nombre: 'Trejo' },
+            { id: TREJO_ID, nombre: 'Trejo' },
             { id: 'bccb08c9-1262-4019-9c60-f63fc03ab0c3', nombre: 'Villa Allende' },
         ];
         const cashValues = await Promise.all(SUCURSALES.map(s => calcCashForSucursal(s.id)));
