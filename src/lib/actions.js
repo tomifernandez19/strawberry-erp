@@ -2954,7 +2954,7 @@ export async function getUnitByQR(qrCode) {
     try {
         const { data, error } = await supabase
             .from('unidades')
-            .select('id, ubicacion, talle_especifico, estado, variantes(*, modelos(*))')
+            .select('id, ubicacion, sucursal_id, talle_especifico, estado, variantes(*, modelos(*))')
             .eq('codigo_qr', qrCode)
             .maybeSingle();
 
@@ -2968,13 +2968,13 @@ export async function getUnitByQR(qrCode) {
 /**
  * Assigns a warehouse location (zone) to a unit.
  */
-export async function assignLocation(qrCode, location) {
+export async function assignLocation(qrCode, location, sucursal_id = undefined) {
     const supabase = createClient();
     try {
         // 1. Find the unit
         const { data: unit, error: fetchErr } = await supabase
             .from('unidades')
-            .select('id, ubicacion, talle_especifico, variantes(color, modelos(descripcion))')
+            .select('id, ubicacion, sucursal_id, talle_especifico, variantes(color, modelos(descripcion))')
             .eq('codigo_qr', qrCode)
             .maybeSingle();
 
@@ -2984,10 +2984,13 @@ export async function assignLocation(qrCode, location) {
 
         let newLocation = location.toUpperCase().trim();
 
-        // 2. Update location (REPLACE ALWAYS as locations are unique)
+        const updatePayload = { ubicacion: newLocation };
+        if (sucursal_id !== undefined) updatePayload.sucursal_id = sucursal_id;
+
+        // 2. Update location and optionally sucursal
         const { error: updateErr } = await supabase
             .from('unidades')
-            .update({ ubicacion: newLocation })
+            .update(updatePayload)
             .eq('id', unit.id);
 
         if (updateErr) throw updateErr;

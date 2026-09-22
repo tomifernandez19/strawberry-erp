@@ -8,7 +8,13 @@ export default function UbicacionPage() {
     const [scannedQR, setScannedQR] = useState('')
     const [unitInfo, setUnitInfo] = useState(null)
     const [zona, setZona] = useState('')
+    const [sucursalId, setSucursalId] = useState('')
     const [status, setStatus] = useState(null) // { success, message, details }
+
+    const SUCURSALES = [
+        { id: '3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb', nombre: 'Trejo' },
+        { id: 'bccb08c9-1262-4019-9c60-f63fc03ab0c3', nombre: 'Villa Allende' },
+    ]
     const [loading, setLoading] = useState(false)
     const [pendingItems, setPendingItems] = useState([])
     const [pendingLoading, setPendingLoading] = useState(true)
@@ -40,8 +46,10 @@ export default function UbicacionPage() {
         const res = await getUnitByQR(qr)
         if (res.success && res.unit) {
             setUnitInfo(res.unit)
+            setSucursalId(res.unit.sucursal_id || '')
         } else {
             setUnitInfo(null)
+            setSucursalId('')
         }
     }
 
@@ -62,12 +70,13 @@ export default function UbicacionPage() {
 
         setLoading(true)
         try {
-            const res = await assignLocation(scannedQR, zona)
+            const res = await assignLocation(scannedQR, zona, sucursalId || undefined)
             if (res.success) {
                 setStatus({ success: true, message: '¡Ubicación actualizada!', details: res.details })
                 setScannedQR('')
                 setUnitInfo(null)
                 setZona('')
+                setSucursalId('')
                 fetchPending() // Refresh list
             } else {
                 setStatus({ success: false, message: res.message })
@@ -119,14 +128,20 @@ export default function UbicacionPage() {
                             <h4 style={{ margin: '0', color: 'var(--accent)' }}>
                                 {unitInfo.variantes.modelos.descripcion} ({unitInfo.variantes.color}) T{unitInfo.talle_especifico}
                             </h4>
-
-                            {unitInfo.ubicacion ? (
-                                <p style={{ fontSize: '0.85rem', color: '#fbbf24', fontWeight: 'bold', marginTop: '10px' }}>
-                                    ⚠️ Actual: {unitInfo.ubicacion}
-                                </p>
-                            ) : (
-                                <p style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '10px' }}>✨ Sin ubicación</p>
-                            )}
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                {unitInfo.ubicacion ? (
+                                    <p style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 'bold', margin: 0 }}>
+                                        📍 {unitInfo.ubicacion}
+                                    </p>
+                                ) : (
+                                    <p style={{ fontSize: '0.75rem', opacity: 0.5, margin: 0 }}>Sin ubicación</p>
+                                )}
+                                {unitInfo.sucursal_id && (
+                                    <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>
+                                        🏪 {SUCURSALES.find(s => s.id === unitInfo.sucursal_id)?.nombre || 'Otra'}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -144,6 +159,23 @@ export default function UbicacionPage() {
                             style={{ marginBottom: 0 }}
                             required
                         />
+                    </div>
+
+                    <div>
+                        <label style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '5px', display: 'block' }}>
+                            Sucursal:
+                        </label>
+                        <select
+                            value={sucursalId}
+                            onChange={(e) => setSucursalId(e.target.value)}
+                            className="input-field"
+                            style={{ marginBottom: 0 }}
+                        >
+                            <option value="">— Sin asignar —</option>
+                            {SUCURSALES.map(s => (
+                                <option key={s.id} value={s.id}>{s.nombre}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <button
