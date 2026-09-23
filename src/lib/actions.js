@@ -2760,6 +2760,7 @@ export async function completeDispatch(pedidoId, qrCodes, customPrice = null) {
 
         // 3. Process all units
         let lastUnidadId = null;
+        let ventaSucursalId = null;
         for (const qrCode of qrArray) {
             const result = await getUnitForSale(qrCode, true);
             if (!result.success) {
@@ -2767,6 +2768,9 @@ export async function completeDispatch(pedidoId, qrCodes, customPrice = null) {
             }
             const unidad = result.data;
             lastUnidadId = unidad.id;
+            if (!ventaSucursalId && unidad.sucursal_id) {
+                ventaSucursalId = unidad.sucursal_id;
+            }
 
             const { error: uErr } = await supabase.from('unidades').update({
                 estado: 'VENDIDO_ONLINE',
@@ -2783,6 +2787,11 @@ export async function completeDispatch(pedidoId, qrCodes, customPrice = null) {
             if (order.unidad_reservada_id && !qrArray.includes(order.unidad_reservada_id)) {
                 // Logic for releasing could go here
             }
+        }
+
+        // 3b. Assign sucursal_id to venta based on scanned unit
+        if (ventaSucursalId) {
+            await supabase.from('ventas').update({ sucursal_id: ventaSucursalId }).eq('id', ventaId);
         }
 
         // 4. Update order status in Local DB
