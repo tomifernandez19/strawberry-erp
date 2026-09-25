@@ -548,7 +548,19 @@ export default function VenderPage() {
                             </div>
                         )}
 
-                        <div className="card mt-md" style={{ border: '1px solid rgba(59, 130, 246, 0.2)', background: 'rgba(59, 130, 246, 0.05)' }}>
+                        <div className="card mt-md" style={{
+                            border: ['TARJETA_CREDITO', 'TARJETA_DEBITO', 'QR_LISTA', 'GOCUOTAS_TOMI'].includes(medioPago)
+                                ? '2px solid #f59e0b'
+                                : '1px solid rgba(59, 130, 246, 0.2)',
+                            background: ['TARJETA_CREDITO', 'TARJETA_DEBITO', 'QR_LISTA', 'GOCUOTAS_TOMI'].includes(medioPago)
+                                ? 'rgba(245, 158, 11, 0.08)'
+                                : 'rgba(59, 130, 246, 0.05)'
+                        }}>
+                            {['TARJETA_CREDITO', 'TARJETA_DEBITO', 'QR_LISTA', 'GOCUOTAS_TOMI'].includes(medioPago) && (
+                                <p style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 'bold', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    ⚠️ Verificá que el precio total sea el correcto antes de confirmar
+                                </p>
+                            )}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                 <label style={{ fontSize: '0.8rem', fontWeight: 'bold', opacity: 0.8 }}>PRECIO TOTAL DEL PRODUCTO ($)</label>
                                 {montoDescuento > 0 && <span className="badge" style={{ backgroundColor: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>-{currentPct}% OFF</span>}
@@ -562,7 +574,12 @@ export default function VenderPage() {
                                         type="number"
                                         className="input-field"
                                         placeholder={`Base: $${baseTotal}`}
-                                        style={{ margin: 0, paddingLeft: '30px', fontWeight: 'bold', color: 'var(--accent)', fontSize: '1.2rem' }}
+                                        style={{
+                                            margin: 0, paddingLeft: '30px', fontWeight: 'bold', fontSize: '1.2rem',
+                                            color: ['TARJETA_CREDITO', 'TARJETA_DEBITO', 'QR_LISTA', 'GOCUOTAS_TOMI'].includes(medioPago) ? '#f59e0b' : 'var(--accent)',
+                                            borderColor: ['TARJETA_CREDITO', 'TARJETA_DEBITO', 'QR_LISTA', 'GOCUOTAS_TOMI'].includes(medioPago) ? '#f59e0b' : undefined,
+                                            borderWidth: ['TARJETA_CREDITO', 'TARJETA_DEBITO', 'QR_LISTA', 'GOCUOTAS_TOMI'].includes(medioPago) ? '2px' : undefined,
+                                        }}
                                         value={finalTotal}
                                         onChange={(e) => {
                                             const val = e.target.value;
