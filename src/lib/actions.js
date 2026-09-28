@@ -1292,7 +1292,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
     }
 
     const [sales, movements, configRes, soldUnitsRes, supplierSaldoRes] = await Promise.all([
-        fetchAll('ventas', 'created_at, total, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
+        fetchAll('ventas', 'created_at, total, tipo, monto_efectivo, monto_neto, fecha_acreditacion, cuenta_destino, medio_pago, facturado, user_id, otro_medio_pago, monto_otro, profiles (nombre)'),
         fetchAll('movimientos_caja', 'monto, cuenta, categoria, tipo, persona, created_at'),
         supabase.from('gastos_fijos_config').select('*').eq('activo', true),
         supabase.from('unidades').select('variantes(costo_promedio)').gte('fecha_venta', startBoundary).lt('fecha_venta', endBoundary),
@@ -1338,9 +1338,13 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const total = parseFloat(s.total) || 0;
         const efe = parseFloat(s.monto_efectivo) || 0;
         const rawNeto = s.monto_neto;
+        const isSenaRecord = s.tipo === 'SENA';
         let netoTotal = rawNeto != null ? parseFloat(rawNeto) : total;
 
-        if (s.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
+        // Para señas: el neto real es solo lo cobrado (monto_efectivo + monto_otro)
+        if (isSenaRecord) {
+            netoTotal = efe + (parseFloat(s.monto_otro) || 0);
+        } else if (s.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
             const cardGross = parseFloat(s.monto_otro) || 0;
             const currentNeto = parseFloat(rawNeto);
             if (efe > 0 && (currentNeto <= cardGross * 1.05 || currentNeto < efe)) {
@@ -1352,10 +1356,13 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         if (efe > 0) accounts.CAJA_LOCAL += efe;
 
         // Para DIVIDIR_PAGOS: el efectivo ya sumó a CAJA_LOCAL; la segunda cuenta recibe monto_otro (bruto).
+        // Para señas: usar monto_otro (lo realmente cobrado por la parte no-efectivo), no monto_neto del total.
         // Para otros medios: usar monto_neto si está disponible, sino (total - efectivo).
         const other = s.medio_pago === 'DIVIDIR_PAGOS'
             ? (parseFloat(s.monto_otro) || 0)
-            : (rawNeto != null ? parseFloat(rawNeto) : (total - efe));
+            : isSenaRecord
+                ? (parseFloat(s.monto_otro) || 0)
+                : (rawNeto != null ? parseFloat(rawNeto) : (total - efe));
         
         if (other > 0 || efe > 0) {
             let target = s.cuenta_destino;
@@ -1443,7 +1450,10 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 if (cardNet > 0) dividendTotals.sales += cardNet;
             }
         } else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') {
-            if (isThisPeriodSale) dividendTotals.supplierReserve -= netoTotal; 
+            if (isThisPeriodSale) dividendTotals.supplierReserve -= netoTotal;
+        } else if (isSenaRecord) {
+            // Señas: solo cuenta lo realmente cobrado (netoTotal ya fue ajustado arriba)
+            if (isThisPeriodSale) dividendTotals.sales += netoTotal;
         } else if (isThisPeriodSale) {
             // All other methods (Cash, Transfer, Cards) count towards ROI based on Sale Date
             dividendTotals.sales += netoTotal;
