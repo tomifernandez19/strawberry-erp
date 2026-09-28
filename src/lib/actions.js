@@ -1338,7 +1338,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const total = parseFloat(s.total) || 0;
         const efe = parseFloat(s.monto_efectivo) || 0;
         const rawNeto = s.monto_neto;
-        const isSenaRecord = s.tipo === 'SENA';
+        const isSenaRecord = s.tipo === 'SENA' || s.tipo === 'SENA_CANCELADA';
         let netoTotal = rawNeto != null ? parseFloat(rawNeto) : total;
 
         // Para señas: el neto real es solo lo cobrado (monto_efectivo + monto_otro)
@@ -3720,16 +3720,44 @@ export async function completeSena(ventaId, paymentData) {
     const newMontoEfectivo = (venta.monto_efectivo || 0) + (Number(monto_efectivo) || 0);
     const newMontoOtro = (venta.monto_otro || 0) + (Number(monto_otro) || 0);
 
+    // Calculate net amount for card/QR completion payments
+    const finalPaymentAmount = Number(monto_otro) || 0;
+    let newMontoNeto = null;
+    let newFechaAcreditacion = null;
+    if (finalPaymentAmount > 0 && medio_pago) {
+        const mp = medio_pago.toUpperCase();
+        let ratio = null;
+        let dias = 0;
+        if (mp === 'TARJETA_CREDITO') { ratio = 0.7907716; dias = 10; }
+        else if (mp === 'TARJETA_DEBITO') { ratio = 0.962008; dias = 2; }
+        else if (mp === 'QR_LISTA' || mp === 'QR') { ratio = 0.942; dias = 0; }
+        else if (mp === 'GOCUOTAS_TOMI') { ratio = 0.909; dias = 22; }
+
+        if (ratio !== null) {
+            // Net = cash seña already collected + net of card payment
+            newMontoNeto = newMontoEfectivo + (finalPaymentAmount * ratio);
+            if (dias > 0) {
+                const acc = new Date();
+                acc.setDate(acc.getDate() + dias);
+                newFechaAcreditacion = getArgentinaIso(acc);
+            }
+        }
+    }
+
+    const updatePayload = {
+        tipo: 'VENTA_LOCAL',
+        monto_efectivo: newMontoEfectivo,
+        monto_otro: newMontoOtro,
+        medio_pago: medio_pago || venta.medio_pago,
+        cuenta_destino: cuenta_destino || venta.cuenta_destino,
+        fecha: new Date().toISOString()
+    };
+    if (newMontoNeto !== null) updatePayload.monto_neto = newMontoNeto;
+    if (newFechaAcreditacion !== null) updatePayload.fecha_acreditacion = newFechaAcreditacion;
+
     const { error: updateVErr } = await supabase
         .from('ventas')
-        .update({
-            tipo: 'VENTA_LOCAL',
-            monto_efectivo: newMontoEfectivo,
-            monto_otro: newMontoOtro,
-            medio_pago: medio_pago || venta.medio_pago,
-            cuenta_destino: cuenta_destino || venta.cuenta_destino,
-            fecha: new Date().toISOString() // Marcamos la venta como realizada HOY al completarse
-        })
+        .update(updatePayload)
         .eq('id', ventaId);
 
     if (updateVErr) throw updateVErr;

@@ -1297,6 +1297,7 @@ export default function GestionPage() {
                             <option value="EFECTIVO">Efectivo 💵</option>
                             <option value="TRANSFERENCIA_TOMI">Transferencia Tomi 📱</option>
                             <option value="TRANSFERENCIA_LUCAS">Transferencia Lucas 📱</option>
+                            <option value="TRANSFERENCIA_PROVEEDOR">Transferencia Proveedor 🚚</option>
                             <option value="TARJETA_DEBITO">Tarjeta Débito (Sofi) 💳</option>
                             <option value="TARJETA_CREDITO">Tarjeta Crédito (Sofi) 💳</option>
                             <option value="QR_LISTA">QR Pago / Otros (Sofi) 🔘</option>
@@ -1312,9 +1313,11 @@ export default function GestionPage() {
                                 onClick={async () => {
                                     setCompletarLoading(true);
                                     const due = completarModal.sena.total - (Number(completarModal.sena.monto_efectivo) + Number(completarModal.sena.monto_otro));
-                                    const cuentaDestino = ['EFECTIVO'].includes(completarMedioPago) ? 'CAJA_LOCAL'
-                                        : ['TRANSFERENCIA_TOMI'].includes(completarMedioPago) ? 'TOMI'
-                                        : ['TRANSFERENCIA_LUCAS'].includes(completarMedioPago) ? 'LUCAS'
+                                    const cuentaDestino = completarMedioPago === 'EFECTIVO' ? 'CAJA_LOCAL'
+                                        : completarMedioPago === 'TRANSFERENCIA_TOMI' ? 'TOMI'
+                                        : completarMedioPago === 'TRANSFERENCIA_LUCAS' ? 'LUCAS'
+                                        : completarMedioPago === 'TRANSFERENCIA_PROVEEDOR' ? 'PROVEEDOR'
+                                        : completarMedioPago === 'GOCUOTAS_TOMI' ? 'TOMI'
                                         : 'SOFI_MP';
                                     await completeSena(completarModal.sena.id, {
                                         monto_efectivo: ['EFECTIVO'].includes(completarMedioPago) ? due : 0,
