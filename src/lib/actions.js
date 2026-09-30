@@ -2461,10 +2461,42 @@ export async function recordOnlineOrder(orderData) {
     }
 
     // Subtract shipping cost from neto (goes to carrier, not to us)
-    const montoNetoCalculated = Math.max(0, (totalVenta * netoRatio) - shippingCost);
+    let montoNetoCalculated = Math.max(0, (totalVenta * netoRatio) - shippingCost);
     const fechaAcc = new Date();
     if (accreditationDays > 0) {
         fechaAcc.setDate(fechaAcc.getDate() + accreditationDays);
+    }
+
+    // Try to get real net_amount from TiendaNube transactions API (Pago Nube reports it)
+    if (isPagoNube) {
+        try {
+            const tnStoreId = process.env.TIENDANUBE_STORE_ID;
+            const tnToken = process.env.TIENDANUBE_ACCESS_TOKEN;
+            const txRes = await fetch(
+                `https://api.tiendanube.com/v1/${tnStoreId}/orders/${tnId}/transactions`,
+                { headers: { 'Authentication': `bearer ${tnToken}`, 'Content-Type': 'application/json' } }
+            );
+            if (txRes.ok) {
+                const transactions = await txRes.json();
+                const paid = Array.isArray(transactions)
+                    ? transactions.find(t => t.status === 'paid' || t.status === 'approved')
+                    : null;
+                if (paid?.net_amount != null) {
+                    montoNetoCalculated = parseFloat(paid.net_amount);
+                    console.log(`[Webhook] Using real net_amount from TN transactions: ${montoNetoCalculated}`);
+                }
+                // Use accreditation_date if available
+                if (paid?.accreditation_date) {
+                    const realAcc = new Date(paid.accreditation_date);
+                    if (!isNaN(realAcc.getTime())) {
+                        fechaAcc.setTime(realAcc.getTime());
+                        console.log(`[Webhook] Using real accreditation_date: ${paid.accreditation_date}`);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[Webhook] Could not fetch TN transactions, using estimated neto:', e.message);
+        }
     }
 
     const { data: venta, error: vErr } = await supabase
