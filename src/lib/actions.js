@@ -2467,8 +2467,8 @@ export async function recordOnlineOrder(orderData) {
         fechaAcc.setDate(fechaAcc.getDate() + accreditationDays);
     }
 
-    // Try to get real net_amount from TiendaNube transactions API (Pago Nube reports it)
-    if (isPagoNube) {
+    // Try to get real net_amount from TiendaNube transactions API
+    if (true) {
         try {
             const tnStoreId = process.env.TIENDANUBE_STORE_ID;
             const tnToken = process.env.TIENDANUBE_ACCESS_TOKEN;
