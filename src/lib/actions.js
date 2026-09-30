@@ -1338,7 +1338,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const total = parseFloat(s.total) || 0;
         const efe = parseFloat(s.monto_efectivo) || 0;
         const rawNeto = s.monto_neto;
-        const isSenaRecord = s.tipo === 'SENA' || s.tipo === 'SENA_CANCELADA';
+        const isSenaRecord = s.tipo === 'SENA_CANCELADA';
         let netoTotal = rawNeto != null ? parseFloat(rawNeto) : total;
 
         // Para señas: el neto real es solo lo cobrado (monto_efectivo + monto_otro)
