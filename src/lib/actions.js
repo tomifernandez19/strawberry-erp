@@ -2719,25 +2719,28 @@ export async function completeDispatch(pedidoId, qrCodes, customPrice = null) {
             const medioPagoFinal = order.medio_pago || 'TIENDANUBE';
 
             let targetAccount = 'TOMI'; 
-            let accreditationDays = 0;
-            let netoRatio = 1;
+            let accreditationDays = 14;
+            let netoRatio = 0.85;
             const mpLower = medioPagoFinal.toLowerCase();
-            
-            if (mpLower.includes('credit') || mpLower.includes('credito')) {
+
+            if (mpLower.includes('gocuotas')) {
+                accreditationDays = 32;
+                netoRatio = 1 - (0.091 * 1.21);
+            } else if (mpLower.includes('pago-nube') || mpLower.includes('pagonube') || mpLower.includes('nuvempago')) {
+                accreditationDays = 14;
+                netoRatio = 1 - (0.0349 * 1.21);
+            } else if (mpLower.includes('mercado-pago') || mpLower.includes('mercadopago') || mpLower.includes('mercado_pago')) {
+                accreditationDays = 35;
+                netoRatio = 1 - ((0.0149 + 0.0156) * 1.21);
+            } else if (mpLower.includes('credit') || mpLower.includes('credito')) {
                 accreditationDays = 10;
                 netoRatio = 0.7907716;
             } else if (mpLower.includes('debit') || mpLower.includes('debito')) {
                 accreditationDays = 2;
                 netoRatio = 0.962008;
-            } else if (mpLower.includes('mercadopago') || mpLower.includes('mp') || mpLower.includes('qr') || mpLower.includes('mobbex') || mpLower.includes('payway') || mpLower.includes('getnet') || mpLower.includes('uala')) {
-                accreditationDays = 10;
-                netoRatio = 0.85; 
-            } else if (mpLower.includes('transferencia')) {
-                accreditationDays = 0;
-                netoRatio = 1;
-            } else if (mpLower === 'tiendanube') {
-                accreditationDays = 10;
-                netoRatio = 0.85;
+            } else if (mpLower.includes('transferencia') || mpLower.includes('bank')) {
+                accreditationDays = 1;
+                netoRatio = 1 - (0.015 * 1.21);
             }
 
             const montoNetoCalculated = montoVenta * netoRatio;
