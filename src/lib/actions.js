@@ -1342,8 +1342,10 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const isPendingSena = s.tipo === 'SENA';
         let netoTotal = rawNeto != null ? parseFloat(rawNeto) : total;
 
-        // Para señas: el neto real es solo lo cobrado (monto_efectivo + monto_otro)
-        if (isSenaRecord || isPendingSena) {
+        // Para señas canceladas: el neto real es solo lo cobrado (monto_efectivo + monto_otro)
+        // Para señas pendientes: netoTotal = total (dinero comprometido esperado) EXCEPTO
+        //   en dividendTotals donde se usa cobradoSena para no inflar resultados del período
+        if (isSenaRecord) {
             netoTotal = efe + (parseFloat(s.monto_otro) || 0);
         } else if (s.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
             const cardGross = parseFloat(s.monto_otro) || 0;
@@ -1361,7 +1363,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         // Para otros medios: usar monto_neto si está disponible, sino (total - efectivo).
         const other = s.medio_pago === 'DIVIDIR_PAGOS'
             ? (parseFloat(s.monto_otro) || 0)
-            : (isSenaRecord || isPendingSena)
+            : isSenaRecord
                 ? (parseFloat(s.monto_otro) || 0)
                 : (rawNeto != null ? parseFloat(rawNeto) : (total - efe));
         
@@ -1451,9 +1453,13 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 if (cardNet > 0) dividendTotals.sales += cardNet;
             }
         } else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') {
-            if (isThisPeriodSale) dividendTotals.supplierReserve -= netoTotal;
-        } else if (isSenaRecord || isPendingSena) {
-            // Señas: solo cuenta lo realmente cobrado (netoTotal ya fue ajustado arriba)
+            // Solo descontar de supplierReserve lo realmente cobrado (para señas pendientes sin pago = 0)
+            const cobradoProveedor = (isSenaRecord || isPendingSena)
+                ? efe + (parseFloat(s.monto_otro) || 0)
+                : netoTotal;
+            if (isThisPeriodSale) dividendTotals.supplierReserve -= cobradoProveedor;
+        } else if (isSenaRecord) {
+            // Señas canceladas: solo cuenta lo realmente cobrado (netoTotal ya fue ajustado arriba)
             if (isThisPeriodSale) dividendTotals.sales += netoTotal;
         } else if (isThisPeriodSale) {
             // All other methods (Cash, Transfer, Cards) count towards ROI based on Sale Date
