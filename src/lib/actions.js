@@ -1339,10 +1339,11 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const efe = parseFloat(s.monto_efectivo) || 0;
         const rawNeto = s.monto_neto;
         const isSenaRecord = s.tipo === 'SENA_CANCELADA';
+        const isPendingSena = s.tipo === 'SENA';
         let netoTotal = rawNeto != null ? parseFloat(rawNeto) : total;
 
         // Para señas: el neto real es solo lo cobrado (monto_efectivo + monto_otro)
-        if (isSenaRecord) {
+        if (isSenaRecord || isPendingSena) {
             netoTotal = efe + (parseFloat(s.monto_otro) || 0);
         } else if (s.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
             const cardGross = parseFloat(s.monto_otro) || 0;
@@ -1360,7 +1361,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         // Para otros medios: usar monto_neto si está disponible, sino (total - efectivo).
         const other = s.medio_pago === 'DIVIDIR_PAGOS'
             ? (parseFloat(s.monto_otro) || 0)
-            : isSenaRecord
+            : (isSenaRecord || isPendingSena)
                 ? (parseFloat(s.monto_otro) || 0)
                 : (rawNeto != null ? parseFloat(rawNeto) : (total - efe));
         
@@ -1451,7 +1452,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
             }
         } else if (s.medio_pago === 'TRANSFERENCIA_PROVEEDOR') {
             if (isThisPeriodSale) dividendTotals.supplierReserve -= netoTotal;
-        } else if (isSenaRecord) {
+        } else if (isSenaRecord || isPendingSena) {
             // Señas: solo cuenta lo realmente cobrado (netoTotal ya fue ajustado arriba)
             if (isThisPeriodSale) dividendTotals.sales += netoTotal;
         } else if (isThisPeriodSale) {
