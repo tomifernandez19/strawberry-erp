@@ -2337,6 +2337,71 @@ export async function syncImageToTiendanube(modeloId, imageUrl) {
     }
 }
 
+async function getMpToken(cuenta) {
+    const supabase = createClient();
+    const { data } = await supabase
+        .from('mp_tokens')
+        .select('access_token, refresh_token, expires_at')
+        .eq('cuenta', cuenta)
+        .maybeSingle();
+    if (!data?.access_token) return null;
+
+    // Refresh if expired or about to expire in 5 min
+    if (data.expires_at && new Date(data.expires_at) < new Date(Date.now() + 5 * 60 * 1000)) {
+        if (!data.refresh_token) return null;
+        try {
+            const res = await fetch('https://api.mercadopago.com/oauth/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    client_id: process.env.ML_CLIENT_ID,
+                    client_secret: process.env.ML_CLIENT_SECRET,
+                    grant_type: 'refresh_token',
+                    refresh_token: data.refresh_token,
+                })
+            });
+            const newToken = await res.json();
+            if (newToken.access_token) {
+                const expiresAt = new Date(Date.now() + (newToken.expires_in || 21600) * 1000);
+                await supabase.from('mp_tokens').update({
+                    access_token: newToken.access_token,
+                    refresh_token: newToken.refresh_token || data.refresh_token,
+                    expires_at: expiresAt.toISOString(),
+                    updated_at: new Date().toISOString(),
+                }).eq('cuenta', cuenta);
+                return newToken.access_token;
+            }
+        } catch (e) {
+            console.warn('[MP] Token refresh failed:', e.message);
+        }
+        return null;
+    }
+
+    return data.access_token;
+}
+
+async function getMpPaymentNeto(paymentId, cuenta) {
+    try {
+        const token = await getMpToken(cuenta);
+        if (!token) return null;
+        const res = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return null;
+        const payment = await res.json();
+        // net_received_amount = amount after MP fees
+        const netAmount = payment.transaction_details?.net_received_amount;
+        const accDate = payment.money_release_date || payment.date_approved;
+        return {
+            montoNeto: netAmount != null ? parseFloat(netAmount) : null,
+            fechaAcreditacion: accDate ? new Date(accDate) : null,
+        };
+    } catch (e) {
+        console.warn('[MP] Payment fetch failed:', e.message);
+        return null;
+    }
+}
+
 export async function getTiendanubeImageStatuses() {
     const storeId = process.env.TIENDANUBE_STORE_ID;
     const token = process.env.TIENDANUBE_ACCESS_TOKEN;
@@ -2404,6 +2469,7 @@ export async function recordOnlineOrder(orderData) {
         : orderData.payment_details;
     const installments = parseInt(payDetails?.installments || payDetails?.cuotas || 1) || 1;
     const payMethod = (payDetails?.method || payDetails?.tipo || '').toLowerCase();
+    const mpPaymentId = payDetails?.external_reference || payDetails?.payment_id || payDetails?.id || orderData.payment_id || null;
 
     console.log(`[Webhook] Gateway: ${gwRaw}, installments: ${installments}, method: ${payMethod}`);
 
@@ -2496,6 +2562,21 @@ export async function recordOnlineOrder(orderData) {
             }
         } catch (e) {
             console.warn('[Webhook] Could not fetch TN transactions, using estimated neto:', e.message);
+        }
+    }
+
+    // For MercadoPago payments: query MP API directly for real net_received_amount
+    const isMp = gwRaw.includes('mercadopago') || gwRaw.includes('mercado_pago') || gwRaw.includes('mercado-pago');
+    if (isMp && mpPaymentId) {
+        console.log(`[Webhook] Fetching MP payment ${mpPaymentId} for real neto...`);
+        const mpData = await getMpPaymentNeto(mpPaymentId, 'TOMI');
+        if (mpData?.montoNeto != null) {
+            montoNetoCalculated = mpData.montoNeto;
+            console.log(`[Webhook] Using real MP net_received_amount: ${montoNetoCalculated}`);
+        }
+        if (mpData?.fechaAcreditacion) {
+            fechaAcc.setTime(mpData.fechaAcreditacion.getTime());
+            console.log(`[Webhook] Using real MP money_release_date: ${mpData.fechaAcreditacion}`);
         }
     }
 

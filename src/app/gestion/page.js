@@ -150,6 +150,12 @@ export default function GestionPage() {
         const mlAuth = searchParams.get('ml_auth')
         if (mlAuth === 'success') setMlMsg({ ok: true, text: '✅ MercadoLibre conectado correctamente.' })
         if (mlAuth === 'error') setMlMsg({ ok: false, text: '❌ Error al conectar MercadoLibre. Intentá de nuevo.' })
+
+        // Check mp_connected param
+        const mpConnected = searchParams.get('mp_connected')
+        const mpError = searchParams.get('mp_error')
+        if (mpConnected) setMlMsg({ ok: true, text: '✅ MercadoPago conectado correctamente.' })
+        if (mpError) setMlMsg({ ok: false, text: `❌ Error al conectar MercadoPago: ${mpError}` })
     }
 
     async function handleMlLink() {
@@ -947,6 +953,28 @@ export default function GestionPage() {
                                     style={{ fontSize: '0.8rem', padding: '8px 14px', background: '#ffc400', color: 'black', textDecoration: 'none', whiteSpace: 'nowrap' }}
                                 >
                                     {mlConnected ? 'Reconectar' : 'Conectar'}
+                                </a>
+                            </div>
+                            {mlMsg && (
+                                <p style={{ marginTop: '10px', fontSize: '0.8rem', color: mlMsg.ok ? 'var(--accent)' : '#ef4444' }}>{mlMsg.text}</p>
+                            )}
+                        </div>
+
+                        {/* MercadoPago OAuth */}
+                        <div className="card" style={{ border: '1px solid rgba(0,158,227,0.3)', background: 'rgba(0,158,227,0.03)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <p style={{ fontWeight: 'bold', fontSize: '0.9rem', margin: 0 }}>💳 MercadoPago — Cuenta Tomi</p>
+                                    <p style={{ fontSize: '0.75rem', opacity: 0.6, margin: '4px 0 0' }}>
+                                        Permite obtener el monto neto real de ventas TiendaNube pagadas con MercadoPago.
+                                    </p>
+                                </div>
+                                <a
+                                    href="/api/mp-auth?cuenta=TOMI"
+                                    className="btn-primary"
+                                    style={{ fontSize: '0.8rem', padding: '8px 14px', background: '#009ee3', color: 'white', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                                >
+                                    Conectar
                                 </a>
                             </div>
                             {mlMsg && (
