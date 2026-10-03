@@ -106,6 +106,7 @@ export default function GestionPage() {
             .from('variantes')
             .select('*', { count: 'exact', head: true })
             .is('imagen_url', null)
+            .gt('stock', 0)
         setPendingImages(imgCount || 0)
 
         // Count pending senas

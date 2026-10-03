@@ -3440,6 +3440,7 @@ export async function getMissingImagesList() {
             .from('variantes')
             .select('*, modelos(*)')
             .is('imagen_url', null)
+            .gt('stock', 0)
             .order('id', { ascending: false });
 
         if (error) throw error;

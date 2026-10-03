@@ -67,6 +67,7 @@ export default function HomePage() {
                     .from('variantes')
                     .select('*', { count: 'exact', head: true })
                     .is('imagen_url', null)
+                    .gt('stock', 0)
                 setPendingImages(imgCount || 0)
             }
 
