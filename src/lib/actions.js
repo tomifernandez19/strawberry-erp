@@ -4633,3 +4633,14 @@ export async function syncVariationsToML(modeloId) {
         results
     };
 }
+
+export async function getProveedorHistory() {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc('get_proveedor_history');
+    if (error) {
+        // Fallback: raw query via supabase
+        console.error('[getProveedorHistory]', error);
+        return [];
+    }
+    return data || [];
+}
