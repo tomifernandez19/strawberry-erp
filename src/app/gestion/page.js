@@ -466,8 +466,8 @@ export default function GestionPage() {
 
     const calcPricesFromCost = (cost) => {
         const c = parseFloat(cost) || 0;
-        const efe = (c * 2) + 3000;
-        const rawLista = c * 2 * 1.21;
+        const efe = c * 2;
+        const rawLista = c * 2 * 1.1;
         const lista = (rawLista % 1000 >= 100)
             ? Math.ceil(rawLista / 1000) * 1000
             : Math.floor(rawLista / 1000) * 1000;
