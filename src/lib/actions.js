@@ -3436,11 +3436,17 @@ export async function uploadProductImage(variantId, base64Data) {
 export async function getMissingImagesList() {
     const supabase = createClient();
     try {
+        const { data: unidadesData } = await supabase
+            .from('unidades')
+            .select('variante_id')
+            .eq('estado', 'DISPONIBLE');
+        const variantesConStock = [...new Set((unidadesData || []).map(u => u.variante_id))];
+
         const { data, error } = await supabase
             .from('variantes')
             .select('*, modelos(*)')
             .is('imagen_url', null)
-            .gt('stock', 0)
+            .in('id', variantesConStock)
             .order('id', { ascending: false });
 
         if (error) throw error;

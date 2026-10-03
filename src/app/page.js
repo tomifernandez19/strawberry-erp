@@ -63,11 +63,16 @@ export default function HomePage() {
                 if (res.success) setInvoiceCounts(res.count)
 
                 // Task 5: Variants missing images
+                const { data: uData } = await supabase
+                    .from('unidades')
+                    .select('variante_id')
+                    .eq('estado', 'DISPONIBLE')
+                const vidsConStock = [...new Set((uData || []).map(u => u.variante_id))]
                 const { count: imgCount } = await supabase
                     .from('variantes')
                     .select('*', { count: 'exact', head: true })
                     .is('imagen_url', null)
-                    .gt('stock', 0)
+                    .in('id', vidsConStock)
                 setPendingImages(imgCount || 0)
             }
 
