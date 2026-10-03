@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getExtendedStats, getCustomRangeStats, getFinanceSummary, getCapitalContributionsReport, recordMonthClosing, getProveedorHistory } from '@/lib/actions'
+import { getExtendedStats, getCustomRangeStats, getFinanceSummary, getCapitalContributionsReport, recordMonthClosing } from '@/lib/actions'
 import Loader from '@/components/Loader'
 
 export default function ReportesPage() {
@@ -28,8 +28,6 @@ export default function ReportesPage() {
     ])
 
     const [isAnnual, setIsAnnual] = useState(false)
-    const [proveedorHistory, setProveedorHistory] = useState([])
-    const [showProveedorHistory, setShowProveedorHistory] = useState(false)
 
     useEffect(() => {
         loadData(selectedDate, isAnnual)
@@ -265,57 +263,13 @@ export default function ReportesPage() {
                                     <span>Resto Carolina</span>
                                     <span style={{ fontWeight: 'bold', color: '#ef4444' }}>$ {(Math.abs(Number(accounts.CAROLINA) || 0)).toLocaleString()}</span>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     <span>Proveedores Pendientes</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <span style={{ fontWeight: 'bold', color: Number(accounts.PROVEEDOR) <= 0 ? '#ef4444' : 'var(--accent)' }}>
-                                            {Number(accounts.PROVEEDOR) > 0 ? '✅ A favor ' : ''}
-                                            $ {Math.abs(Number(accounts.PROVEEDOR) || 0).toLocaleString()}
-                                        </span>
-                                        <button
-                                            style={{ fontSize: '0.7rem', padding: '3px 8px', background: 'rgba(255,255,255,0.08)', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', color: '#aaa' }}
-                                            onClick={async () => {
-                                                if (!showProveedorHistory) {
-                                                    const h = await getProveedorHistory();
-                                                    setProveedorHistory(h);
-                                                }
-                                                setShowProveedorHistory(v => !v);
-                                            }}
-                                        >
-                                            {showProveedorHistory ? 'Ocultar' : 'Ver histórico'}
-                                        </button>
-                                    </div>
+                                    <span style={{ fontWeight: 'bold', color: Number(accounts.PROVEEDOR) <= 0 ? '#ef4444' : 'var(--accent)' }}>
+                                        {Number(accounts.PROVEEDOR) > 0 ? '✅ A favor ' : ''}
+                                        $ {Math.abs(Number(accounts.PROVEEDOR) || 0).toLocaleString()}
+                                    </span>
                                 </div>
-                                {showProveedorHistory && proveedorHistory.length > 0 && (
-                                    <div style={{ marginTop: '12px', overflowX: 'auto' }}>
-                                        <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
-                                            <thead>
-                                                <tr style={{ color: '#888', borderBottom: '1px solid #333' }}>
-                                                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>Mes</th>
-                                                    <th style={{ textAlign: 'right', padding: '4px 8px', color: '#ef4444' }}>Compras</th>
-                                                    <th style={{ textAlign: 'right', padding: '4px 8px', color: '#10b981' }}>Pagos</th>
-                                                    <th style={{ textAlign: 'right', padding: '4px 8px' }}>Balance</th>
-                                                    <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 'bold' }}>Acumulado</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {proveedorHistory.map((row, i) => (
-                                                    <tr key={i} style={{ borderBottom: '1px solid #222' }}>
-                                                        <td style={{ padding: '5px 8px', fontWeight: 'bold' }}>{row.mes}</td>
-                                                        <td style={{ padding: '5px 8px', textAlign: 'right', color: '#ef4444' }}>$ {Math.abs(Number(row.compras)).toLocaleString()}</td>
-                                                        <td style={{ padding: '5px 8px', textAlign: 'right', color: '#10b981' }}>$ {Number(row.pagos).toLocaleString()}</td>
-                                                        <td style={{ padding: '5px 8px', textAlign: 'right', color: Number(row.balance_mes) >= 0 ? '#10b981' : '#ef4444' }}>
-                                                            {Number(row.balance_mes) >= 0 ? '+' : ''}$ {Number(row.balance_mes).toLocaleString()}
-                                                        </td>
-                                                        <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 'bold', color: Number(row.acumulado) >= 0 ? '#10b981' : '#ef4444' }}>
-                                                            $ {Number(row.acumulado).toLocaleString()}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
