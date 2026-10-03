@@ -1342,10 +1342,8 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const isPendingSena = s.tipo === 'SENA';
         let netoTotal = rawNeto != null ? parseFloat(rawNeto) : total;
 
-        // Para señas canceladas: el neto real es solo lo cobrado (monto_efectivo + monto_otro)
-        // Para señas pendientes: netoTotal = total (dinero comprometido esperado) EXCEPTO
-        //   en dividendTotals donde se usa cobradoSena para no inflar resultados del período
-        if (isSenaRecord) {
+        // Para señas (pendientes y canceladas): solo lo realmente cobrado afecta cuentas
+        if (isSenaRecord || isPendingSena) {
             netoTotal = efe + (parseFloat(s.monto_otro) || 0);
         } else if (s.medio_pago === 'DIVIDIR_PAGOS' && rawNeto != null) {
             const cardGross = parseFloat(s.monto_otro) || 0;
@@ -1363,7 +1361,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         // Para otros medios: usar monto_neto si está disponible, sino (total - efectivo).
         const other = s.medio_pago === 'DIVIDIR_PAGOS'
             ? (parseFloat(s.monto_otro) || 0)
-            : isSenaRecord
+            : (isSenaRecord || isPendingSena)
                 ? (parseFloat(s.monto_otro) || 0)
                 : (rawNeto != null ? parseFloat(rawNeto) : (total - efe));
         
@@ -1458,8 +1456,8 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 ? efe + (parseFloat(s.monto_otro) || 0)
                 : netoTotal;
             if (isThisPeriodSale) dividendTotals.supplierReserve -= cobradoProveedor;
-        } else if (isSenaRecord) {
-            // Señas canceladas: solo cuenta lo realmente cobrado (netoTotal ya fue ajustado arriba)
+        } else if (isSenaRecord || isPendingSena) {
+            // Señas: solo cuenta lo realmente cobrado (netoTotal ya ajustado arriba)
             if (isThisPeriodSale) dividendTotals.sales += netoTotal;
         } else if (isThisPeriodSale) {
             // All other methods (Cash, Transfer, Cards) count towards ROI based on Sale Date
