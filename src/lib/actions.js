@@ -1359,11 +1359,11 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         if (efe > 0) accounts.CAJA_LOCAL += efe;
 
         // Para DIVIDIR_PAGOS: el efectivo ya sumó a CAJA_LOCAL; la segunda cuenta recibe monto_otro (bruto).
-        // Para señas: usar monto_otro (lo realmente cobrado por la parte no-efectivo), no monto_neto del total.
+        // Para señas canceladas: usar monto_otro (lo realmente cobrado), no el total.
         // Para otros medios: usar monto_neto si está disponible, sino (total - efectivo).
         const other = s.medio_pago === 'DIVIDIR_PAGOS'
             ? (parseFloat(s.monto_otro) || 0)
-            : (isSenaRecord || isPendingSena)
+            : isSenaRecord
                 ? (parseFloat(s.monto_otro) || 0)
                 : (rawNeto != null ? parseFloat(rawNeto) : (total - efe));
         
