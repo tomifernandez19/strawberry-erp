@@ -436,7 +436,7 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
             monto_neto: monto_neto || null,
             fecha_acreditacion: getArgentinaIso(fechaAcreditacion),
             cuenta_destino: targetAccount,
-            tipo: isSena ? 'SENA' : 'VENTA_LOCAL',
+            tipo: isSena ? ((monto_efectivo || 0) + (monto_otro || 0) > 0 ? 'SENA' : 'RESERVA') : 'VENTA_LOCAL',
             sucursal_id: resolvedSucursalId,
         }])
         .select()
@@ -1340,6 +1340,8 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         const rawNeto = s.monto_neto;
         const isSenaRecord = s.tipo === 'SENA_CANCELADA';
         const isPendingSena = s.tipo === 'SENA';
+        const isReserva = s.tipo === 'RESERVA';
+        if (isReserva) return; // Reserva sin entrega: no afecta ninguna cuenta ni totales
         let netoTotal = rawNeto != null ? parseFloat(rawNeto) : total;
 
         // Para señas canceladas: el neto real es solo lo cobrado (monto_efectivo + monto_otro)
@@ -1361,7 +1363,7 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         // Para otros medios: usar monto_neto si está disponible, sino (total - efectivo).
         const other = s.medio_pago === 'DIVIDIR_PAGOS'
             ? (parseFloat(s.monto_otro) || 0)
-            : isSenaRecord
+            : (isSenaRecord || isPendingSena)
                 ? (parseFloat(s.monto_otro) || 0)
                 : (rawNeto != null ? parseFloat(rawNeto) : (total - efe));
         
@@ -3814,7 +3816,7 @@ export async function getPendingSenasList() {
                 variantes (color, modelos (descripcion))
             )
         `)
-        .eq('tipo', 'SENA')
+        .in('tipo', ['SENA', 'RESERVA'])
         .order('fecha', { ascending: false });
 
     if (!currentUser?.isAdmin && currentUser?.sucursal_id) {

@@ -632,7 +632,7 @@ export default function GestionPage() {
                                             <p style={{ color: '#eab308', fontWeight: 'bold', fontSize: '1.1rem', margin: 0 }}>
                                                 Faltan: $ {(sena.total - (Number(sena.monto_efectivo) + Number(sena.monto_otro))).toLocaleString()}
                                             </p>
-                                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Total: ${sena.total.toLocaleString()} • Seña: ${(Number(sena.monto_efectivo) + Number(sena.monto_otro)).toLocaleString()}</p>
+                                            <p style={{ fontSize: '0.7rem', opacity: 0.5 }}>Total: ${sena.total.toLocaleString()} • {sena.tipo === 'RESERVA' ? '📌 Reserva sin entrega' : `Seña: $${(Number(sena.monto_efectivo) + Number(sena.monto_otro)).toLocaleString()}`}</p>
                                             <div style={{ display: 'flex', gap: '6px', marginTop: '8px', justifyContent: 'flex-end' }}>
                                                 <button
                                                     className="btn-primary"
