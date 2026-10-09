@@ -1,13 +1,20 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { recordCashMovement, getRecentUnifiedCaja, getFinanceSummary } from '@/lib/actions'
+import { recordCashMovement, getRecentUnifiedCaja, getFinanceSummary, getCashBySucursal, getCurrentUser } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
+
+// Cash accounts are per sucursal: option value is "CAJA_LOCAL:<sucursal_id>"
+const parseCuenta = (value) => {
+    const [cuenta, sucursal_id] = value.split(':')
+    return { cuenta, sucursal_id: sucursal_id || null }
+}
 
 export default function CajaPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [movements, setMovements] = useState([])
     const [balances, setBalances] = useState(null)
+    const [cajas, setCajas] = useState([])
     const [suggestions, setSuggestions] = useState([])
     const [activeTab, setActiveTab] = useState('GASTO') // GASTO, INGRESO, TRASPASO, AJUSTE
 
@@ -15,7 +22,7 @@ export default function CajaPage() {
         monto: '',
         motivo: '',
         persona: '',
-        cuenta: 'CAJA_LOCAL',
+        cuenta: '',
         haciaCuenta: 'SOFI_MP',
         categoria: 'ALQUILER',
         origenDinero: 'NEGOCIO', // 'NEGOCIO' or 'BOLSILLO' (for GASTO)
@@ -27,16 +34,29 @@ export default function CajaPage() {
     }, [])
 
     async function loadData() {
-        const [movs, fSummary, { getRecentPersonas }] = await Promise.all([
+        const [movs, fSummary, cashBySucursal, user, { getRecentPersonas }] = await Promise.all([
             getRecentUnifiedCaja(),
             getFinanceSummary(),
+            getCashBySucursal(),
+            getCurrentUser(),
             import('@/lib/actions')
         ])
         setMovements(movs)
-        setBalances(fSummary.accounts)
+        // Vendedores only see their own sucursal's cash
+        const visibles = cashBySucursal
+            .filter(s => user?.isAdmin || !user?.sucursal_id || s.id === user.sucursal_id)
+            .map(s => ({ value: `CAJA_LOCAL:${s.id}`, label: `Caja ${s.nombre}`, cash: s.cash }))
+        setCajas(visibles)
+        const bal = { ...fSummary.accounts }
+        visibles.forEach(c => { bal[c.value] = c.cash })
+        setBalances(bal)
+        const defaultCaja = visibles.find(c => c.value === `CAJA_LOCAL:${user?.sucursal_id}`) || visibles[0]
+        setFormData(f => f.cuenta ? f : { ...f, cuenta: defaultCaja?.value || 'SOFI_MP' })
         const pers = await getRecentPersonas()
         setSuggestions(pers || [])
     }
+
+    const nombreCuenta = (value) => cajas.find(c => c.value === value)?.label || value
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -46,16 +66,20 @@ export default function CajaPage() {
         try {
             const { recordTransfer } = await import('@/lib/actions')
             const montoNum = parseFloat(formData.monto)
+            const origen = parseCuenta(formData.cuenta)
 
             if (activeTab === 'TRASPASO') {
                 if (formData.cuenta === formData.haciaCuenta) throw new Error("Las cuentas deben ser distintas")
                 // Check balance
                 if (montoNum > (balances[formData.cuenta] || 0)) {
-                    throw new Error(`Saldo insuficiente en ${formData.cuenta}. Disponible: $${balances[formData.cuenta]}`)
+                    throw new Error(`Saldo insuficiente en ${nombreCuenta(formData.cuenta)}. Disponible: $${balances[formData.cuenta]}`)
                 }
+                const destino = parseCuenta(formData.haciaCuenta)
                 await recordTransfer({
-                    from: formData.cuenta,
-                    to: formData.haciaCuenta,
+                    from: origen.cuenta,
+                    to: destino.cuenta,
+                    from_sucursal_id: origen.sucursal_id,
+                    to_sucursal_id: destino.sucursal_id,
                     amount: montoNum,
                     reason: formData.motivo,
                     person: formData.persona.trim().toUpperCase()
@@ -91,7 +115,8 @@ export default function CajaPage() {
                         tipo: 'EGRESO',
                         motivo: formData.motivo,
                         persona: formData.persona.trim().toUpperCase(),
-                        cuenta: formData.cuenta,
+                        cuenta: origen.cuenta,
+                        sucursal_id: origen.sucursal_id,
                         categoria: formData.categoria
                     })
                 }
@@ -101,7 +126,8 @@ export default function CajaPage() {
                     tipo: 'INGRESO',
                     motivo: formData.motivo,
                     persona: formData.persona.trim().toUpperCase(),
-                    cuenta: formData.cuenta,
+                    cuenta: origen.cuenta,
+                    sucursal_id: origen.sucursal_id,
                     categoria: formData.categoria // APORTE_CAPITAL, etc.
                 })
             } else if (activeTab === 'AJUSTE') {
@@ -110,14 +136,15 @@ export default function CajaPage() {
                     tipo: formData.tipoAjuste,
                     motivo: formData.motivo,
                     persona: formData.persona.trim().toUpperCase(),
-                    cuenta: formData.cuenta,
+                    cuenta: origen.cuenta,
+                    sucursal_id: origen.sucursal_id,
                     categoria: 'INTERESES'
                 })
             }
 
             setFormData({
                 monto: '', motivo: '', persona: '',
-                cuenta: 'CAJA_LOCAL', haciaCuenta: 'SOFI_MP',
+                cuenta: '', haciaCuenta: 'SOFI_MP',
                 categoria: 'ALQUILER', origenDinero: 'NEGOCIO',
                 tipoAjuste: 'INGRESO'
             })
@@ -143,10 +170,12 @@ export default function CajaPage() {
                 <section className="card mt-lg" style={{ border: '2px solid var(--primary)', background: 'rgba(59, 130, 246, 0.05)' }}>
                     <p style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 'bold' }}>💵 SALDOS EN CUENTAS DEL LOCAL:</p>
                     <div className="grid mt-md" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-                        <div className="card" style={{ padding: '10px', margin: 0, background: 'rgba(255,255,255,0.03)' }}>
-                            <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>CAJA LOCAL</p>
-                            <p style={{ fontWeight: 'bold', fontSize: '1rem', color: 'var(--accent)' }}>$ {balances.CAJA_LOCAL.toLocaleString()}</p>
-                        </div>
+                        {cajas.map(c => (
+                            <div key={c.value} className="card" style={{ padding: '10px', margin: 0, background: 'rgba(255,255,255,0.03)' }}>
+                                <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>{c.label.toUpperCase()}</p>
+                                <p style={{ fontWeight: 'bold', fontSize: '1rem', color: 'var(--accent)' }}>$ {c.cash.toLocaleString()}</p>
+                            </div>
+                        ))}
                         <div className="card" style={{ padding: '10px', margin: 0, background: 'rgba(255,255,255,0.03)' }}>
                             <p style={{ fontSize: '0.65rem', opacity: 0.5 }}>SOFI (MP)</p>
                             <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>$ {balances.SOFI_MP.toLocaleString()}</p>
@@ -224,7 +253,7 @@ export default function CajaPage() {
                                 <div className="mt-md">
                                     <label style={labelStyle}>Cuenta de Origen:</label>
                                     <select value={formData.cuenta} onChange={e => setFormData({ ...formData, cuenta: e.target.value })} style={inputStyle}>
-                                        <option value="CAJA_LOCAL">Caja Local (Efectivo)</option>
+                                        {cajas.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                         <option value="SOFI_MP">Cuenta Sofi (MP)</option>
                                         <option value="TOMI">Cuenta Tomi</option>
                                         <option value="LUCAS">Cuenta Lucas</option>
@@ -269,7 +298,7 @@ export default function CajaPage() {
                                 <div>
                                     <label style={labelStyle}>Cuenta Destino:</label>
                                     <select value={formData.cuenta} onChange={e => setFormData({ ...formData, cuenta: e.target.value })} style={inputStyle}>
-                                        <option value="CAJA_LOCAL">Caja Local</option>
+                                        {cajas.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                         <option value="SOFI_MP">Cuenta Sofi</option>
                                         <option value="TOMI">Cuenta Tomi</option>
                                         <option value="LUCAS">Cuenta Lucas</option>
@@ -292,7 +321,7 @@ export default function CajaPage() {
                             <div>
                                 <label style={labelStyle}>Desde:</label>
                                 <select value={formData.cuenta} onChange={e => setFormData({ ...formData, cuenta: e.target.value })} style={inputStyle}>
-                                    <option value="CAJA_LOCAL">Caja Local</option>
+                                    {cajas.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                     <option value="SOFI_MP">Cuenta Sofi</option>
                                     <option value="TOMI">Cuenta Tomi</option>
                                     <option value="LUCAS">Cuenta Lucas</option>
@@ -301,7 +330,7 @@ export default function CajaPage() {
                             <div>
                                 <label style={labelStyle}>Hacia:</label>
                                 <select value={formData.haciaCuenta} onChange={e => setFormData({ ...formData, haciaCuenta: e.target.value })} style={inputStyle}>
-                                    <option value="CAJA_LOCAL">Caja Local</option>
+                                    {cajas.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                     <option value="SOFI_MP">Cuenta Sofi</option>
                                     <option value="TOMI">Cuenta Tomi</option>
                                     <option value="LUCAS">Cuenta Lucas</option>
@@ -325,7 +354,7 @@ export default function CajaPage() {
                                     <option value="SOFI_MP">Cuenta Sofi</option>
                                     <option value="TOMI">Cuenta Tomi</option>
                                     <option value="LUCAS">Cuenta Lucas</option>
-                                    <option value="CAJA_LOCAL">Caja Local</option>
+                                    {cajas.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                 </select>
                             </div>
                         </div>

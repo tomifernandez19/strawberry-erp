@@ -390,8 +390,10 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     // 3. Create the sale record
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Resolve sucursal: use passed value or fallback to user's profile
-    let resolvedSucursalId = sucursal_id;
+    // Resolve sucursal: the units' own sucursal wins (the sale happens where the stock is),
+    // then the passed value, then the user's profile
+    const unitSucursales = [...new Set(units.map(u => u.sucursal_id).filter(Boolean))];
+    let resolvedSucursalId = unitSucursales.length === 1 ? unitSucursales[0] : sucursal_id;
     if (!resolvedSucursalId && user) {
         const { data: prof } = await supabase.from('profiles').select('sucursal_id').eq('id', user.id).maybeSingle();
         resolvedSucursalId = prof?.sucursal_id || null;
@@ -403,7 +405,6 @@ export async function recordSale(qrCodes, medio_pago, options = {}) {
     // For Split Payments, the 'other' part goes to the specific account
     const effectiveMP = medio_pago === 'DIVIDIR_PAGOS' ? otro_medio_pago : medio_pago;
 
-    const VA_SUCURSAL_ID = 'bccb08c9-1262-4019-9c60-f63fc03ab0c3';
     const isVillaAllende = resolvedSucursalId === VA_SUCURSAL_ID;
 
     if (['EFECTIVO', 'MAYORISTA_EFECTIVO'].includes(effectiveMP)) targetAccount = 'CAJA_LOCAL';
@@ -939,6 +940,46 @@ export async function getCashMovements() {
     return data;
 }
 
+const TREJO_SUCURSAL_ID = '3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb';
+const VA_SUCURSAL_ID = 'bccb08c9-1262-4019-9c60-f63fc03ab0c3';
+const SUCURSALES = [
+    { id: TREJO_SUCURSAL_ID, nombre: 'Trejo' },
+    { id: VA_SUCURSAL_ID, nombre: 'Villa Allende' },
+];
+
+// Perpetual CAJA_LOCAL balance for one sucursal (null = all).
+// For Trejo: include records with sucursal_id = Trejo OR sucursal_id IS NULL (historical data pre-migration)
+// For Villa Allende: only records with its explicit sucursal_id
+async function calcCashForSucursal(supabase, sucursal_id = null) {
+    let salesQuery = supabase.from('ventas').select('monto_efectivo, medio_pago');
+    let manualQuery = supabase.from('movimientos_caja').select('monto').eq('cuenta', 'CAJA_LOCAL');
+    if (sucursal_id) {
+        if (sucursal_id === TREJO_SUCURSAL_ID) {
+            salesQuery = salesQuery.or(`sucursal_id.eq.${sucursal_id},sucursal_id.is.null`);
+            manualQuery = manualQuery.or(`sucursal_id.eq.${sucursal_id},sucursal_id.is.null`);
+        } else {
+            salesQuery = salesQuery.eq('sucursal_id', sucursal_id);
+            manualQuery = manualQuery.eq('sucursal_id', sucursal_id);
+        }
+    }
+    const [{ data: salesData }, { data: manualData }] = await Promise.all([salesQuery, manualQuery]);
+    const fromSales = (salesData || []).reduce((acc, s) => {
+        if (['TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(s.medio_pago)) return acc;
+        return acc + (parseFloat(s.monto_efectivo) || 0);
+    }, 0);
+    const fromManual = (manualData || []).reduce((acc, m) => acc + (parseFloat(m.monto) || 0), 0);
+    return fromSales + fromManual;
+}
+
+/**
+ * Cash in hand per sucursal: [{ id, nombre, cash }]
+ */
+export async function getCashBySucursal() {
+    const supabase = createClient();
+    const cashValues = await Promise.all(SUCURSALES.map(s => calcCashForSucursal(supabase, s.id)));
+    return SUCURSALES.map((s, i) => ({ ...s, cash: cashValues[i] }));
+}
+
 export async function getDailySummary(onlyUserId = null, sucursal_id_filter = null) {
     const supabase = createClient();
     const todayIso = getTodayArgentinaStart();
@@ -986,48 +1027,18 @@ export async function getDailySummary(onlyUserId = null, sucursal_id_filter = nu
     // 3. CASH CALCULATION (Perpetual balance, scoped by role/sucursal)
     // sucursal_id_filter: null = admin (show all / by sucursal), string = vendedor (show only that sucursal)
 
-    const TREJO_ID = '3f5307a8-4e2d-4a3f-b92f-1e47fb9b57fb';
-
-    // For Trejo: include records with sucursal_id = Trejo OR sucursal_id IS NULL (historical data pre-migration)
-    // For Villa Allende: only records with its explicit sucursal_id
-    const calcCashForSucursal = async (sucursal_id = null) => {
-        let salesQuery = supabase.from('ventas').select('monto_efectivo, medio_pago');
-        let manualQuery = supabase.from('movimientos_caja').select('monto').eq('cuenta', 'CAJA_LOCAL');
-        if (sucursal_id) {
-            if (sucursal_id === TREJO_ID) {
-                salesQuery = salesQuery.or(`sucursal_id.eq.${sucursal_id},sucursal_id.is.null`);
-                manualQuery = manualQuery.or(`sucursal_id.eq.${sucursal_id},sucursal_id.is.null`);
-            } else {
-                salesQuery = salesQuery.eq('sucursal_id', sucursal_id);
-                manualQuery = manualQuery.eq('sucursal_id', sucursal_id);
-            }
-        }
-        const [{ data: salesData }, { data: manualData }] = await Promise.all([salesQuery, manualQuery]);
-        const fromSales = (salesData || []).reduce((acc, s) => {
-            if (['TRANSFERENCIA_LUCAS', 'TRANSFERENCIA_TOMI', 'TRANSFERENCIA_PROVEEDOR'].includes(s.medio_pago)) return acc;
-            return acc + (parseFloat(s.monto_efectivo) || 0);
-        }, 0);
-        const fromManual = (manualData || []).reduce((acc, m) => acc + (parseFloat(m.monto) || 0), 0);
-        return fromSales + fromManual;
-    };
-
     let globalCashInHand = 0;
     let cashBySucursal = null;
 
     if (sucursal_id_filter) {
         // Vendedor: show only their sucursal's cash (Trejo includes historical nulls)
-        globalCashInHand = await calcCashForSucursal(sucursal_id_filter);
+        globalCashInHand = await calcCashForSucursal(supabase, sucursal_id_filter);
     } else if (!onlyUserId) {
         // Admin: show both sucursales separately
-        const SUCURSALES = [
-            { id: TREJO_ID, nombre: 'Trejo' },
-            { id: 'bccb08c9-1262-4019-9c60-f63fc03ab0c3', nombre: 'Villa Allende' },
-        ];
-        const cashValues = await Promise.all(SUCURSALES.map(s => calcCashForSucursal(s.id)));
-        cashBySucursal = SUCURSALES.map((s, i) => ({ ...s, cash: cashValues[i] }));
-        globalCashInHand = cashValues.reduce((a, b) => a + b, 0);
+        cashBySucursal = await getCashBySucursal();
+        globalCashInHand = cashBySucursal.reduce((a, s) => a + s.cash, 0);
     } else {
-        globalCashInHand = await calcCashForSucursal(null);
+        globalCashInHand = await calcCashForSucursal(supabase, null);
     }
 
     const saleBaseTotals = {};
@@ -3636,11 +3647,13 @@ export async function updateSale(ventaId, { medio_pago, monto_neto, fecha_acredi
 /**
  * Records a transfer between two accounts.
  */
-export async function recordTransfer({ from, to, amount, reason, person }) {
+export async function recordTransfer({ from, to, amount, reason, person, from_sucursal_id = null, to_sucursal_id = null }) {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     const montoNum = Math.abs(parseFloat(amount));
+    const sucursalNombre = (id) => SUCURSALES.find(s => s.id === id)?.nombre;
+    const label = (cuenta, sucursal_id) => sucursal_id ? `${cuenta} ${sucursalNombre(sucursal_id) || ''}`.trim() : cuenta;
 
     // 1. Withdrawal (EGRESO) from Source
     const { error: outErr } = await supabase
@@ -3648,11 +3661,12 @@ export async function recordTransfer({ from, to, amount, reason, person }) {
         .insert([{
             monto: -montoNum,
             tipo: 'EGRESO',
-            motivo: `TRASPASO -> ${to}: ${reason}`,
+            motivo: `TRASPASO -> ${label(to, to_sucursal_id)}: ${reason}`,
             persona: person.trim().toUpperCase(),
             cuenta: from,
             categoria: 'TRASPASO',
-            user_id: user?.id || null
+            user_id: user?.id || null,
+            sucursal_id: from_sucursal_id
         }]);
 
     if (outErr) throw outErr;
@@ -3663,11 +3677,12 @@ export async function recordTransfer({ from, to, amount, reason, person }) {
         .insert([{
             monto: montoNum,
             tipo: 'INGRESO',
-            motivo: `TRASPASO <- ${from}: ${reason}`,
+            motivo: `TRASPASO <- ${label(from, from_sucursal_id)}: ${reason}`,
             persona: person.trim().toUpperCase(),
             cuenta: to,
             categoria: 'TRASPASO',
-            user_id: user?.id || null
+            user_id: user?.id || null,
+            sucursal_id: to_sucursal_id
         }]);
 
     if (inErr) throw inErr;

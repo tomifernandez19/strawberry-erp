@@ -110,6 +110,8 @@ export default function VenderPage() {
         try {
             const result = await getUnitForSale(cleanQr)
             if (result.success) {
+                // The sale belongs to the sucursal where the stock is
+                if (result.data.sucursal_id) setSucursalId(result.data.sucursal_id)
                 // Second check within the state update to be 100% thread-safe against rapid scans
                 setItems(prev => {
                     const alreadyIn = prev.some(it => it.codigo_qr === result.data.codigo_qr)
