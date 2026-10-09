@@ -37,7 +37,8 @@ export default function DashboardPage() {
         Number(accounts.SOFI_MP || 0) + 
         Number(accounts.TOMI || 0) + 
         Number(accounts.LUCAS || 0) + 
-        Number(accounts.SOFI_PENDING || 0) + 
+        Number(accounts.SOFI_PENDING || 0) +
+        Number(accounts.LUCAS_PENDING || 0) +
         Number(accounts.ONLINE_PENDING || 0);
 
     // Métricas del Mes (Financieras)

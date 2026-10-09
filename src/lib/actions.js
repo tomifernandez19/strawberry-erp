@@ -1323,6 +1323,8 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
         GOCUOTAS_NEXT_MONTH: 0,
         TOMI: 0,
         LUCAS: 0,
+        LUCAS_PENDING: 0,
+        LUCAS_NEXT_MONTH: 0,
         SOFI_NEXT_MONTH: 0,
         ONLINE_NEXT_MONTH: 0,
         CAROLINA: -13000000,
@@ -1400,10 +1402,13 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
             // Accreditation rules:
             // 1. Sofi account ALWAYS respects accreditation date.
             // 2. Tomi account respects accreditation ONLY for Online (Tiendanube) sales.
-            // 3. Lucas, Supplier and regular Tomi sales are always considered instant.
+            // 3. Lucas account respects accreditation ONLY for card/QR sales (posnet Villa Allende).
+            // 4. Transfers, Supplier and regular Tomi sales are always considered instant.
             const isOnline = s.tipo === 'VENTA_ONLINE' || (s.medio_pago && s.medio_pago.toUpperCase().includes('TIENDANUBE'));
             const isGoCuotas = (s.medio_pago || '').toUpperCase() === 'GOCUOTAS_TOMI';
-            const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && (isOnline || isGoCuotas));
+            const effectiveMp = ((s.medio_pago === 'DIVIDIR_PAGOS' ? s.otro_medio_pago : s.medio_pago) || '').toUpperCase();
+            const isCardOrQr = ['TARJETA_DEBITO', 'TARJETA_CREDITO', 'QR', 'QR_LISTA'].includes(effectiveMp);
+            const needsAccreditationCheck = (target === 'SOFI_MP') || (target === 'TOMI' && (isOnline || isGoCuotas)) || (target === 'LUCAS' && isCardOrQr);
             
             const hasAccDate = !!s.fecha_acreditacion;
             let isAcredited = false;
@@ -1432,6 +1437,9 @@ export async function getFinanceSummary(specificDate = null, isAnnual = false) {
                 if (target === 'SOFI_MP') {
                     if (isCurrentMonth) accounts.SOFI_PENDING += other;
                     else accounts.SOFI_NEXT_MONTH += other;
+                } else if (target === 'LUCAS') {
+                    if (isCurrentMonth) accounts.LUCAS_PENDING += other;
+                    else accounts.LUCAS_NEXT_MONTH += other;
                 } else if (isGoCuotas) {
                     if (isCurrentMonth) accounts.GOCUOTAS_PENDING += other;
                     else accounts.GOCUOTAS_NEXT_MONTH += other;
